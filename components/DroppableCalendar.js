@@ -10,12 +10,21 @@ moment.locale("he");
 moment.tz.setDefault("Asia/Jerusalem");
 const localizer = momentLocalizer(moment);
 
-// Define formats to force 24-hour time display.
-const formats = {
-  timeGutterFormat: (date, culture, localizer) => localizer.format(date, "HH:mm", culture),
-  eventTimeRangeFormat: ({ start, end }, culture, localizer) =>
-    `${localizer.format(start, "HH:mm", culture)} - ${localizer.format(end, "HH:mm", culture)}`,
-  agendaTimeFormat: (date, culture, localizer) => localizer.format(date, "HH:mm", culture),
+// Define Hebrew messages for the calendar.
+const messages = {
+  allDay: "כל היום",
+  previous: "הקודם",
+  next: "הבא",
+  today: "היום",
+  month: "חודש",
+  week: "שבוע",
+  day: "יום",
+  agenda: "סדר יום",
+  date: "תאריך",
+  time: "זמן",
+  event: "אירוע",
+  noEventsInRange: "אין אירועים בטווח זה",
+  showMore: (total) => `+ ${total} נוספים`,
 };
 
 export default function DroppableCalendar({ events, view, onView, selectedDate, setSelectedDate }) {
@@ -32,7 +41,7 @@ export default function DroppableCalendar({ events, view, onView, selectedDate, 
       const dayStart = new Date(selectedDate);
       dayStart.setHours(0, 0, 0, 0);
       if (now.toDateString() === selectedDate.toDateString()) {
-        // Assuming the container height is 500px as set in style.
+        // Container height assumed 500px.
         const containerHeight = 500;
         const diffMs = now - dayStart;
         const fraction = diffMs / (24 * 60 * 60 * 1000);
@@ -82,7 +91,7 @@ export default function DroppableCalendar({ events, view, onView, selectedDate, 
         onView={onView}
         date={selectedDate}
         onNavigate={setSelectedDate}
-        formats={formats}
+        messages={messages}
         style={{ height: "100%" }}
       />
       {indicatorTop !== null && (
