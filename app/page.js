@@ -2,6 +2,7 @@
 
 // React and Hooks
 import React, { useState, useEffect, useMemo, useCallback } from "react";
+import Image from 'next/image'; // Import Next.js Image component
 
 // UI Components (Shadcn/UI - ensure these are added to your project)
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -13,8 +14,8 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"; // Added Dropdown Menu
-import { Search, RotateCcw, Bell, ChevronDown } from 'lucide-react'; // Added Search, Reset, Bell, ChevronDown icons
+import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Search, RotateCcw, Bell, ChevronDown } from 'lucide-react'; // Icons
 
 // Drag and Drop (dnd-kit)
 import {
@@ -550,7 +551,7 @@ export default function Dashboard() {
 
   // (Task Manager, Leads, and Drag & Drop functions will go in the next section)
   // (Memoized calculations for filtered/sorted lists will also go there)
-  // ---------------------------\
+    // ---------------------------\
   // Task Manager Functions
   // ---------------------------
 
@@ -1271,10 +1272,11 @@ export default function Dashboard() {
         })
         .sort(compareLeads); // Apply sorting
   }, [
-      leads, leadSortBy, leadTimeFilter, leadFilterFrom, leadFilterTo,
-      leadSearchTerm, // Added search term dependency
-      isLeadInTimeRange, compareLeads
-  ]);
+      leads, // Removed leadTimeFilter, leadFilterFrom, leadFilterTo, leadSortBy as they are handled by callbacks
+      leadSearchTerm,
+      isLeadInTimeRange, // Keep callback ref
+      compareLeads // Keep callback ref
+  ]); // Dependency array updated to address exhaustive-deps warning
 
   // --- Analytics Calculations ---
   const calculatedAnalytics = useMemo(() => {
@@ -1549,7 +1551,7 @@ export default function Dashboard() {
   }, [tasks, selectedDate, isTMFullView]); // Dependencies: Added isTMFullView
 
   // (JSX Rendering will go in the final section)
-   // ---------------------------\
+  // ---------------------------\
   // JSX Rendering
   // ---------------------------
 
@@ -1605,10 +1607,12 @@ return (
            </div>
            {/* Center: Logo */}
            <div className="flex-grow text-center">
-               <img
+               <Image
                  src="/logo.png" // Use logo from public folder
                  alt="Logo"
-                 className="h-14 inline-block" // Increased size, inline-block for centering within div
+                 width={140} // Provide width
+                 height={56} // Provide height (aspect ratio 2.5:1 based on h-14)
+                 className="inline-block" // Removed fixed height, rely on width/height props
                  onError={(e) => { e.target.onerror = null; e.target.src='https://placehold.co/140x56/eeeeee/aaaaaa?text=Logo+Error'; }} // Basic error handling
                />
            </div>
@@ -1688,7 +1692,7 @@ return (
                                      {taskPriorities.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}
                                  </SelectContent>
                              </Select>
-                             {/* Category Multi-Select Dropdown */}
+                             {/* UPDATE: Category Multi-Select Dropdown */}
                              <DropdownMenu>
                                  <DropdownMenuTrigger asChild>
                                      <Button variant="outline" size="sm" className="h-8 text-sm w-[140px] justify-between">
