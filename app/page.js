@@ -1551,7 +1551,7 @@ export default function Dashboard() {
   }, [tasks, selectedDate, isTMFullView]); // Dependencies: Added isTMFullView
 
   // (JSX Rendering will go in the final section)
-  // ---------------------------\
+   // ---------------------------\
   // JSX Rendering
   // ---------------------------
 
@@ -1582,7 +1582,6 @@ export default function Dashboard() {
 
 // Avoid rendering until the component is mounted to prevent hydration mismatches, especially with localStorage
 if (!mounted) {
-  // Optional: Render a loading indicator here instead of null
   return null;
 }
 
@@ -1590,56 +1589,46 @@ if (!mounted) {
 const activeTaskForOverlay = activeId ? tasks.find(task => task.id === activeId) : null;
 
 return (
-  // Wrap with TooltipProvider for shadcn tooltips
   <TooltipProvider>
-      {/* DndContext wraps the entire draggable area */}
       <DndContext
         sensors={sensors}
         collisionDetection={closestCenter}
         onDragStart={handleDragStart}
         onDragEnd={handleDragEnd}
       >
-        {/* Header section with Date/Time, Centered Logo, Version */}
-        <header dir="rtl" className="flex items-center justify-between p-4 border-b bg-white shadow-sm sticky top-0 z-20 h-[73px]"> {/* Added fixed height */}
-           {/* Left Side: Date and Time */}
+        <header dir="rtl" className="flex items-center justify-between p-4 border-b bg-white shadow-sm sticky top-0 z-20 h-[73px]">
            <div className="text-sm text-gray-600 w-48 text-right">
-             {currentDateTime || 'טוען תאריך...'} {/* Display formatted date/time state */}
+             {currentDateTime || 'טוען תאריך...'}
            </div>
-           {/* Center: Logo */}
            <div className="flex-grow text-center">
                <Image
-                 src="/logo.png" // Use logo from public folder
+                 src="/logo.png"
                  alt="Logo"
-                 width={140} // Provide width
-                 height={56} // Provide height (aspect ratio 2.5:1 based on h-14)
-                 className="inline-block" // Removed fixed height, rely on width/height props
-                 onError={(e) => { e.target.onerror = null; e.target.src='https://placehold.co/140x56/eeeeee/aaaaaa?text=Logo+Error'; }} // Basic error handling
+                 width={140}
+                 height={56}
+                 className="inline-block"
+                 onError={(e) => { e.target.onerror = null; e.target.src='https://placehold.co/140x56/eeeeee/aaaaaa?text=Logo+Error'; }}
                />
            </div>
-           {/* Right Side: Version ID */}
            <div className="text-sm text-gray-500 w-48 text-left">
-             {'Version 4.5'} {/* Wrapped in braces just in case */}
+             {'Version 4.5'}
            </div>
          </header>
 
-        {/* Main container with RTL direction and grid layout - Adjusted min-height for sticky header */}
         <div dir="rtl" className="grid grid-cols-12 gap-4 p-4 bg-gray-50 min-h-[calc(100vh-73px)]">
 
-          {/* ========================== Task Manager Block ========================== */}
+          {/* Task Manager Block */}
           <div
-            style={{ order: blockOrder.TM }} // Dynamically set order based on state
-            // Adjusted column spans for default and expanded (full width) states
+            style={{ order: blockOrder.TM }}
             className={`col-span-12 transition-all duration-300 ease-in-out ${
-              isTMFullView ? "lg:col-span-12" : "lg:col-span-4" // Default: 4/12, Expanded: 12/12
+              isTMFullView ? "lg:col-span-12" : "lg:col-span-4"
             }`}
           >
-            <Card className="h-full flex flex-col"> {/* Ensure card takes full height */}
+            <Card className="h-full flex flex-col">
               <CardHeader>
-                {/* Header Row 1: Title & Layout Toggle */}
                 <div className="flex justify-between items-center mb-3">
                   <CardTitle>{'מנהל משימות'}</CardTitle>
                   <div className="flex items-center gap-2">
-                       {/* Updated button text based on state */}
                        <Tooltip><TooltipTrigger asChild>
                            <Button variant="outline" size="sm" onClick={() => setIsTMFullView(!isTMFullView)}>
                               {isTMFullView ? "תצוגה מוקטנת" : "תצוגה מלאה"}
@@ -1652,9 +1641,7 @@ return (
                        </TooltipTrigger><TooltipContent>{'שנה מיקום בלוק'}</TooltipContent></Tooltip>
                   </div>
                 </div>
-                {/* Header Row 2: Filters & Actions */}
-                <div className="flex flex-col gap-3"> {/* Changed to flex-col for better layout */}
-                    {/* Row for Assignee Filters & Show Done */}
+                <div className="flex flex-col gap-3">
                     <div className="flex flex-wrap justify-between items-center gap-2">
                        <div className="flex space-x-2 space-x-reverse">
                          <Button variant={taskFilter === 'הכל' ? 'default' : 'outline'} size="sm" onClick={() => setTaskFilter('הכל')}>{'הכל'}</Button>
@@ -1671,7 +1658,6 @@ return (
                           <Label htmlFor="show-done-tasks" className="text-sm cursor-pointer select-none">
                              {'הצג בוצעו'}
                           </Label>
-                          {/* Reset Sort Button - only shown in compact view if user has sorted */}
                           {!isTMFullView && userHasSortedTasks && (
                               <Tooltip><TooltipTrigger asChild>
                                   <Button variant="ghost" size="icon" className="w-8 h-8" onClick={() => setUserHasSortedTasks(false)}>
@@ -1681,10 +1667,8 @@ return (
                           )}
                        </div>
                      </div>
-                     {/* Row for Priority, Category Filters & Search */}
                      <div className="flex flex-wrap justify-between items-center gap-2 border-t pt-3">
                          <div className="flex flex-wrap items-center gap-2">
-                             {/* Priority Filter */}
                              <Select value={taskPriorityFilter} onValueChange={setTaskPriorityFilter}>
                                  <SelectTrigger className="h-8 text-sm w-[100px]"><SelectValue placeholder="סינון עדיפות..." /></SelectTrigger>
                                  <SelectContent>
@@ -1692,7 +1676,6 @@ return (
                                      {taskPriorities.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}
                                  </SelectContent>
                              </Select>
-                             {/* UPDATE: Category Multi-Select Dropdown */}
                              <DropdownMenu>
                                  <DropdownMenuTrigger asChild>
                                      <Button variant="outline" size="sm" className="h-8 text-sm w-[140px] justify-between">
@@ -1714,20 +1697,19 @@ return (
                                              key={category}
                                              checked={selectedTaskCategories.includes(category)}
                                              onCheckedChange={() => handleCategoryToggle(category)}
-                                             onSelect={(e) => e.preventDefault()} // Prevent menu closing on select
+                                             onSelect={(e) => e.preventDefault()}
                                          >
                                              {category}
                                          </DropdownMenuCheckboxItem>
                                      ))}
                                  </DropdownMenuContent>
                              </DropdownMenu>
-                             {/* Task Search Input */}
                              <div className="relative">
                                  <Search className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
                                  <Input
                                      type="search"
                                      placeholder="חפש משימות..."
-                                     className="h-8 text-sm pl-8 w-[180px]" // Added padding-left
+                                     className="h-8 text-sm pl-8 w-[180px]"
                                      value={taskSearchTerm}
                                      onChange={(e) => setTaskSearchTerm(e.target.value)}
                                  />
@@ -1755,19 +1737,14 @@ return (
                      </div>
                  </div>
               </CardHeader>
-              <CardContent className="flex-grow overflow-hidden"> {/* Allow content to grow and handle overflow */}
-                {/* Conditional Rendering: Kanban View or Compact List View */}
-                {/* Adjusted height calculation for sticky header */}
+              <CardContent className="flex-grow overflow-hidden">
                 {isTMFullView ? (
-                  // --- Kanban View ---
-                  <div className={`grid grid-cols-1 md:grid-cols-3 lg:grid-cols-${taskCategories.length} gap-3 h-[calc(100vh-340px)] overflow-x-auto`}> {/* Adjusted height */}
+                  <div className={`grid grid-cols-1 md:grid-cols-3 lg:grid-cols-${taskCategories.length} gap-3 h-[calc(100vh-340px)] overflow-x-auto`}>
                     {taskCategories.map((category) => {
-                      // Get tasks for the current category column
                       const categoryTasks = sortedAndFilteredTasks.filter(task => task.category === category);
                       return (
                         <div key={category} className="bg-gray-100 rounded-lg p-2 flex flex-col">
-                           {/* Added flex container and Add button */}
-                           <div className="flex justify-between items-center mb-2 sticky top-0 bg-gray-100 py-1 px-1 z-10"> {/* Added z-index */}
+                           <div className="flex justify-between items-center mb-2 sticky top-0 bg-gray-100 py-1 px-1 z-10">
                                <h3 className="font-semibold text-center flex-grow">{category} ({categoryTasks.length})</h3>
                                <Tooltip><TooltipTrigger asChild>
                                    <Button
@@ -1775,9 +1752,9 @@ return (
                                        size="icon"
                                        className="w-6 h-6 text-gray-500 hover:text-blue-600 shrink-0"
                                        onClick={() => {
-                                           setPrefillCategory(category); // Set category to prefill
-                                           setNlpInput(""); // Clear previous NLP input
-                                           setShowNLPModal(true);      // Open modal
+                                           setPrefillCategory(category);
+                                           setNlpInput("");
+                                           setShowNLPModal(true);
                                        }}
                                    >
                                        ➕
@@ -1785,30 +1762,24 @@ return (
                                </TooltipTrigger><TooltipContent>{`הוסף משימה ל${category}`}</TooltipContent></Tooltip>
                            </div>
                           <SortableContext
-                            items={categoryTasks.map(t => t.id)} // IDs for this specific column
+                            items={categoryTasks.map(t => t.id)}
                             strategy={verticalListSortingStrategy}
-                            id={category} // Use category name as the container ID for dnd logic
+                            id={category}
                           >
-                            <ul className="space-y-3 flex-grow overflow-y-auto pr-1"> {/* Scroll within column */}
+                            <ul className="space-y-3 flex-grow overflow-y-auto pr-1">
                               {categoryTasks.length === 0 && (
                                 <li className="text-center text-gray-400 text-sm pt-4">{'אין משימות'}</li>
                               )}
                               {categoryTasks.map((task) => {
                                 const overdue = isTaskOverdue(task);
                                 const overdue12h = isTaskOverdue12h(task);
-                                return ( // Added return here
-                                // Render Edit Form or Task Item
+                                return (
                                 editingTaskId === task.id ? (
                                   <li key={`edit-${task.id}`} className="p-3 border rounded bg-blue-50 shadow-md">
-                                    {/* --- Task Editing Form --- */}
                                     <form onSubmit={handleSaveTask} className="space-y-2">
-                                       {/* Assign To */}
                                       <div><Label className="text-xs">{'מוקצה ל:'}</Label><Input type="text" value={editingAssignTo} onChange={(e) => setEditingAssignTo(e.target.value)} className="h-8 text-sm" required /></div>
-                                      {/* Title */}
                                       <div><Label className="text-xs">{'כותרת:'}</Label><Input type="text" value={editingTitle} onChange={(e) => setEditingTitle(e.target.value)} className="h-8 text-sm" required /></div>
-                                      {/* Subtitle */}
                                       <div><Label className="text-xs">{'תיאור:'}</Label><Textarea value={editingSubtitle} onChange={(e) => setEditingSubtitle(e.target.value)} rows={2} className="text-sm" /></div>
-                                      {/* Priority & Category */}
                                       <div className="flex gap-2">
                                         <div className="flex-1"><Label className="text-xs">{'עדיפות:'}</Label>
                                           <Select value={editingPriority} onValueChange={setEditingPriority}>
@@ -1818,12 +1789,10 @@ return (
                                         </div>
                                          <div className="flex-1"><Label className="text-xs">{'קטגוריה:'}</Label><Input type="text" value={editingCategory} readOnly disabled className="h-8 text-sm bg-gray-100"/></div>
                                       </div>
-                                      {/* Due Date & Time */}
                                       <div className="flex gap-2">
                                         <div className="flex-1"><Label className="text-xs">{'תאריך:'}</Label><Input type="date" value={editingDueDate} onChange={(e) => setEditingDueDate(e.target.value)} className="h-8 text-sm" required /></div>
                                         <div className="flex-1"><Label className="text-xs">{'שעה:'}</Label><Input type="time" value={editingDueTime} onChange={(e) => setEditingDueTime(e.target.value)} className="h-8 text-sm" /></div>
                                       </div>
-                                      {/* Action Buttons */}
                                       <div className="flex justify-end space-x-2 space-x-reverse pt-1">
                                         <Button type="submit" size="sm">{'שמור'}</Button>
                                         <Button type="button" variant="outline" size="sm" onClick={handleCancelEdit}>{'ביטול'}</Button>
@@ -1831,19 +1800,16 @@ return (
                                     </form>
                                   </li>
                                 ) : (
-                                  // --- Normal Task Item Display (Sortable) ---
                                   <SortableItem key={task.id} id={task.id}>
-                                    {/* Added overdue highlight and >12h pulse */}
                                     <div className={`p-2 border rounded shadow-sm cursor-grab active:cursor-grabbing ${task.done ? 'bg-gray-200 opacity-75' : 'bg-white'} ${overdue ? 'border-l-4 border-red-500' : 'border-l-4 border-transparent'} ${overdue12h ? 'animate-pulse bg-yellow-50' : ''}`}>
                                       <div className="flex items-start space-x-3 space-x-reverse">
-                                        {/* Checkbox with corrected handler (no 'e' or stopPropagation) */}
                                         <Checkbox
                                           checked={!!task.done}
                                           onCheckedChange={() => {
-                                            console.log(`Checkbox clicked for task (Kanban): ${task.id}`); // Log that handler fired
+                                            console.log(`Checkbox clicked for task (Kanban): ${task.id}`);
                                             toggleTaskDone(task.id);
                                           }}
-                                          id={`task-kanban-${task.id}`} // Unique ID per view
+                                          id={`task-kanban-${task.id}`}
                                           className="mt-1 shrink-0"
                                           aria-label={`Mark task ${task.title} as ${task.done ? 'not done' : 'done'}`}
                                         />
@@ -1853,18 +1819,15 @@ return (
                                           <div className={`text-xs mt-1 space-x-2 space-x-reverse ${task.done ? 'text-gray-400' : overdue ? 'text-red-600 font-medium' : 'text-gray-500'}`}>
                                             <span>🗓️ {formatDateTime(task.dueDate)}</span>
                                             <span>👤 {task.assignTo}</span>
-                                            {/* <span>🏷️ {task.category}</span> */} {/* Category is implied by column */}
                                             <span>{task.priority === 'דחוף' ? '🔥' : task.priority === 'נמוך' ? '⬇️' : '➖'} {task.priority}</span>
                                             {task.done && task.completedAt && (<span className="text-green-600">✅ {formatDateTime(task.completedAt)}</span>)}
                                           </div>
-                                           {/* Pending Time Display */}
                                            {!task.done && task.createdAt && (
                                                <span className="text-xs text-gray-500 mt-1 block">
                                                    {'ממתין: '}{formatDuration(new Date() - new Date(task.createdAt))}
                                                </span>
                                            )}
                                         </div>
-                                        {/* Reminder Button (Admin Only - visual only for now) */}
                                         {!task.done && (
                                             <Tooltip><TooltipTrigger asChild>
                                                 <Button
@@ -1905,19 +1868,12 @@ return (
                         const overdue = isTaskOverdue(task);
                         const overdue12h = isTaskOverdue12h(task);
                         return ( // Added return here
-                        // Render Edit Form or Task Item (Similar to Kanban but includes Category display)
                         editingTaskId === task.id ? (
                           <li key={`edit-${task.id}`} className="p-3 border rounded bg-blue-50 shadow-md">
-                            {/* --- Task Editing Form (Compact View) --- */}
                              <form onSubmit={handleSaveTask} className="space-y-2">
-                               {/* ... (Editing form fields remain the same) ... */}
-                               {/* Assign To */}
                                <div><Label className="text-xs">{'מוקצה ל:'}</Label><Input type="text" value={editingAssignTo} onChange={(e) => setEditingAssignTo(e.target.value)} className="h-8 text-sm" required /></div>
-                               {/* Title */}
                                <div><Label className="text-xs">{'כותרת:'}</Label><Input type="text" value={editingTitle} onChange={(e) => setEditingTitle(e.target.value)} className="h-8 text-sm" required /></div>
-                               {/* Subtitle */}
                                <div><Label className="text-xs">{'תיאור:'}</Label><Textarea value={editingSubtitle} onChange={(e) => setEditingSubtitle(e.target.value)} rows={2} className="text-sm" /></div>
-                               {/* Priority & Category */}
                                <div className="flex gap-2">
                                  <div className="flex-1"><Label className="text-xs">{'עדיפות:'}</Label>
                                    <Select value={editingPriority} onValueChange={setEditingPriority}>
@@ -1932,12 +1888,10 @@ return (
                                    </Select>
                                  </div>
                                </div>
-                               {/* Due Date & Time */}
                                <div className="flex gap-2">
                                  <div className="flex-1"><Label className="text-xs">{'תאריך:'}</Label><Input type="date" value={editingDueDate} onChange={(e) => setEditingDueDate(e.target.value)} className="h-8 text-sm" required /></div>
                                  <div className="flex-1"><Label className="text-xs">{'שעה:'}</Label><Input type="time" value={editingDueTime} onChange={(e) => setEditingDueTime(e.target.value)} className="h-8 text-sm" /></div>
                                </div>
-                               {/* Action Buttons */}
                                <div className="flex justify-end space-x-2 space-x-reverse pt-1">
                                  <Button type="submit" size="sm">{'שמור'}</Button>
                                  <Button type="button" variant="outline" size="sm" onClick={handleCancelEdit}>{'ביטול'}</Button>
@@ -1945,18 +1899,15 @@ return (
                              </form>
                           </li>
                         ) : (
-                          // --- Normal Task Item Display (Compact View - Sortable) ---
                           <SortableItem key={task.id} id={task.id}>
-                            {/* Added overdue highlight and >12h pulse */}
                             <div className={`flex items-start space-x-3 space-x-reverse p-2 border rounded shadow-sm cursor-grab active:cursor-grabbing ${task.done ? 'bg-gray-100 opacity-70' : 'bg-white'} ${overdue ? 'border-l-4 border-red-500' : 'border-l-4 border-transparent'} ${overdue12h ? 'animate-pulse bg-yellow-50' : ''}`}>
-                              {/* Checkbox with corrected handler (no 'e' or stopPropagation) */}
                               <Checkbox
                                   checked={!!task.done}
                                   onCheckedChange={() => {
-                                    console.log(`Checkbox clicked for task (Compact): ${task.id}`); // Log that handler fired
+                                    console.log(`Checkbox clicked for task (Compact): ${task.id}`);
                                     toggleTaskDone(task.id);
                                   }}
-                                  id={`task-compact-${task.id}`} // Unique ID per view
+                                  id={`task-compact-${task.id}`}
                                   className="mt-1 shrink-0"
                                   aria-label={`Mark task ${task.title} as ${task.done ? 'not done' : 'done'}`}
                               />
@@ -1966,18 +1917,16 @@ return (
                                 <div className={`text-xs mt-1 space-x-2 space-x-reverse flex flex-wrap gap-x-2 ${task.done ? 'text-gray-400' : overdue ? 'text-red-600 font-medium' : 'text-gray-500'}`}>
                                   <span>🗓️ {formatDateTime(task.dueDate)}</span>
                                   <span>👤 {task.assignTo}</span>
-                                  <span>🏷️ {task.category}</span> {/* Show category in list view */}
+                                  <span>🏷️ {task.category}</span>
                                   <span>{task.priority === 'דחוף' ? '🔥' : task.priority === 'נמוך' ? '⬇️' : '➖'} {task.priority}</span>
                                   {task.done && task.completedAt && (<span className="text-green-600">✅ {formatDateTime(task.completedAt)}</span>)}
                                 </div>
-                                 {/* Pending Time Display */}
                                  {!task.done && task.createdAt && (
                                      <span className="text-xs text-gray-500 mt-1 block">
                                          {'ממתין: '}{formatDuration(new Date() - new Date(task.createdAt))}
                                      </span>
                                  )}
                               </div>
-                              {/* Reminder Button (Admin Only - visual only for now) */}
                               {!task.done && (
                                   <Tooltip><TooltipTrigger asChild>
                                       <Button
@@ -2004,13 +1953,12 @@ return (
             </Card>
           </div>
 
-          {/* ========================== Calendar Block ========================== */}
+          {/* Calendar Block */}
           <div
-            style={{ order: blockOrder.Calendar }} // Dynamic order
-             // Adjusted column span
-             className="col-span-12 lg:col-span-4" // Default: 4/12
+            style={{ order: blockOrder.Calendar }}
+             className="col-span-12 lg:col-span-4"
           >
-            <Card className="h-full flex flex-col"> {/* Ensure card takes full height */}
+            <Card className="h-full flex flex-col">
               <CardHeader>
                 <div className="flex justify-between items-center">
                   <CardTitle>{'לוח שנה'}</CardTitle>
@@ -2020,7 +1968,6 @@ return (
                       </Button>
                   </TooltipTrigger><TooltipContent>{'שנה מיקום בלוק'}</TooltipContent></Tooltip>
                 </div>
-                 {/* Calendar Toolbar */}
                  <div className="flex justify-between items-center mt-2 border-t pt-2">
                      <div className="flex gap-1">
                           <Tooltip><TooltipTrigger asChild>
@@ -2034,7 +1981,7 @@ return (
                          </TooltipTrigger><TooltipContent>{'תקופה באה'}</TooltipContent></Tooltip>
                      </div>
                      <span className="font-semibold text-sm">
-                         {moment(selectedDate).format(view === 'month' ? 'MMMM D, YYYY' : 'D MMMM YYYY')} {/* Adjusted format slightly */}
+                         {moment(selectedDate).format(view === 'month' ? 'MMMM D, YYYY' : 'D MMMM YYYY')}
                      </span>
                      <div className="flex gap-1">
                          <Button variant={view === 'month' ? 'default' : 'outline'} size="sm" onClick={() => setView('month')}>{'חודש'}</Button>
@@ -2043,61 +1990,51 @@ return (
                      </div>
                  </div>
               </CardHeader>
-              <CardContent className="flex-grow relative"> {/* Relative positioning for potential absolute elements inside calendar */}
-                {/* Ensure DroppableCalendar takes available space */}
-                {/* Adjusted height calculation slightly */}
-                <div className="h-[calc(100vh-300px)] min-h-[400px]"> {/* Adjusted height for header */}
+              <CardContent className="flex-grow relative">
+                <div className="h-[calc(100vh-300px)] min-h-[400px]">
                     <DroppableCalendar
-                      id="calendar-dropzone" // Crucial ID for dnd-kit drop detection
-                      localizer={localizer} // Pass the moment localizer
-                      events={events} // Pass the memoized events array
-                      view={view} // Controlled view state
-                      date={selectedDate} // Controlled date state
-                      onNavigate={setSelectedDate} // Update date on calendar navigation
-                      onView={setView} // Update view on calendar view change
-                      onSelectEvent={event => handleEditTask(tasks.find(t => t.id === event.id))} // Edit task on event click
-                      formats={{ // Use 24-hour format
+                      id="calendar-dropzone"
+                      localizer={localizer}
+                      events={events}
+                      view={view}
+                      date={selectedDate}
+                      onNavigate={setSelectedDate}
+                      onView={setView}
+                      onSelectEvent={event => handleEditTask(tasks.find(t => t.id === event.id))}
+                      formats={{
                         timeGutterFormat: 'HH:mm',
                         eventTimeRangeFormat: ({ start, end }, culture, localizer) =>
                           localizer.format(start, 'HH:mm', culture) + ' - ' + localizer.format(end, 'HH:mm', culture),
-                         agendaTimeRangeFormat: ({ start, end }, culture, localizer) => // Format for Agenda view
+                         agendaTimeRangeFormat: ({ start, end }, culture, localizer) =>
                           localizer.format(start, 'HH:mm', culture) + ' - ' + localizer.format(end, 'HH:mm', culture),
-                         selectRangeFormat: ({ start, end }, culture, localizer) => // Format for selecting range
+                         selectRangeFormat: ({ start, end }, culture, localizer) =>
                           localizer.format(start, 'HH:mm', culture) + ' - ' + localizer.format(end, 'HH:mm', culture)
                       }}
-                      messages={messages} // Hebrew messages
-                      style={{ height: '100%' }} // Make calendar fill its container
-                      className="rbc-calendar-rtl" // Add a class for potential RTL specific CSS overrides
-                      // Add other necessary props for react-big-calendar
-                      selectable={true} // Allow selecting time slots
-                      // onSelectSlot={(slotInfo) => console.log('Selected slot:', slotInfo)} // Handle slot selection
+                      messages={messages}
+                      style={{ height: '100%' }}
+                      className="rbc-calendar-rtl"
+                      selectable={true}
                     />
                 </div>
               </CardContent>
             </Card>
           </div>
 
-          {/* ========================== Leads Manager Block ========================== */}
+          {/* Leads Manager Block */}
           <div
-            style={{ order: blockOrder.Leads }} // Dynamic order
-             // Adjusted column spans for default and expanded states
+            style={{ order: blockOrder.Leads }}
              className={`col-span-12 transition-all duration-300 ease-in-out ${
-               isFullView ? "lg:col-span-8" : "lg:col-span-4" // Default: 4/12, Expanded: 8/12
+               isFullView ? "lg:col-span-8" : "lg:col-span-4"
              }`}
           >
-            {/* Leads Card */}
-            <Card className="h-full flex flex-col"> {/* Removed mb-4 as Analytics is now separate */}
+            <Card className="h-full flex flex-col">
               <CardHeader>
-                {/* Conditional Header for Leads */}
                 {isFullView ? (
-                  // --- Header for Full View ---
                   <div className="flex flex-col gap-2">
                     <div className="flex justify-between items-center">
                       <CardTitle>{'ניהול לידים (תצוגה מלאה)'}</CardTitle>
-                      {/* Add Lead Button */}
                       <Button size="sm" onClick={() => setShowAddLeadModal(true)}>{'+ הוסף ליד'}</Button>
                     </div>
-                    {/* Filters/Sort/Search for Full View */}
                     <div className="flex flex-wrap items-center gap-x-4 gap-y-2 mt-2 border-t pt-2">
                       <div>
                         <Label className="ml-1 text-sm font-medium">{'סדר לפי:'}</Label>
@@ -2124,43 +2061,36 @@ return (
                           <Input type="date" value={leadFilterTo} onChange={(e) => setLeadFilterTo(e.target.value)} className="h-8 text-sm w-[140px]" />
                         </div>
                       )}
-                       {/* Lead Search Input */}
                        <div className="relative">
                            <Search className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
                            <Input
                                type="search"
                                placeholder="חפש לידים..."
-                               className="h-8 text-sm pl-8 w-[180px]" // Added padding-left
+                               className="h-8 text-sm pl-8 w-[180px]"
                                value={leadSearchTerm}
                                onChange={(e) => setLeadSearchTerm(e.target.value)}
                            />
                        </div>
                     </div>
-                     {/* Original Button to switch view - moved below filters */}
                      <div className="mt-2">
                          <Button onClick={() => setIsFullView(false)} size="sm" variant="outline">{'תצוגה מקוצרת'}</Button>
                      </div>
                   </div>
                 ) : (
-                  // --- Header for Compact View ---
                   <div className="flex justify-between items-center">
                     <CardTitle>{'ניהול לידים'}</CardTitle>
                     <Button onClick={() => setIsFullView(true)} size="sm">{'תצוגה מלאה'}</Button>
                   </div>
                 )}
-                 {/* Button to toggle analytics - Placed in Leads Header */}
                  <div className="mt-2 pt-2 border-t">
                      <Button variant="secondary" size="sm" onClick={() => setShowAnalytics(!showAnalytics)}>
                          {showAnalytics ? 'הסתר ניתוח לידים' : 'הצג ניתוח לידים'}
                      </Button>
                  </div>
               </CardHeader>
-              <CardContent className="flex-grow overflow-hidden"> {/* Allow content to grow */}
-                {/* Conditional Content for Leads */}
+              <CardContent className="flex-grow overflow-hidden">
                 {isFullView ? (
-                  // --- Full View: Table ---
-                  // Adjusted height calculation slightly
-                  <div className="overflow-auto h-[calc(100vh-400px)] min-h-[300px]"> {/* Adjusted height for header+filters+toggle+analytics toggle */}
+                  <div className="overflow-auto h-[calc(100vh-400px)] min-h-[300px]">
                       <table className="w-full table-fixed text-sm border-collapse">
                       <thead className="sticky top-0 bg-gray-100 z-10">
                           <tr>
@@ -2182,7 +2112,6 @@ return (
                           const isEditingThis = editingLeadId === lead.id;
                           return (
                               <React.Fragment key={`lead-rows-${lead.id}`}>
-                              {/* Main Lead Row */}
                               <tr className="border-b hover:bg-gray-50 group">
                                   <td className="px-2 py-2 align-top"><div className={`w-3 h-6 ${colorTab} rounded mx-auto`} /></td>
                                   <td className="px-2 py-2 align-top whitespace-nowrap">{formatDateTime(lead.createdAt)}</td>
@@ -2192,11 +2121,9 @@ return (
                                   <td className="px-2 py-2 align-top">{lead.status}</td>
                                   <td className="px-2 py-2 align-top">
                                   <div className="flex items-center justify-start gap-1">
-                                      {/* Edit Button - always visible */}
                                       <Tooltip><TooltipTrigger asChild>
                                           <Button size="icon" variant="ghost" className="w-7 h-7 text-gray-500 hover:text-blue-600" onClick={() => handleEditLead(lead)}>✎</Button>
                                       </TooltipTrigger><TooltipContent>{'פתח/ערוך ליד'}</TooltipContent></Tooltip>
-                                      {/* WhatsApp and Call Buttons */}
                                       <Tooltip><TooltipTrigger asChild>
                                           <a href={`https://wa.me/${lead.phoneNumber}`} target="_blank" rel="noopener noreferrer"><Button size="icon" variant="ghost" className="w-7 h-7 text-green-600 hover:text-green-700">💬</Button></a>
                                       </TooltipTrigger><TooltipContent>{'שלח וואטסאפ'}</TooltipContent></Tooltip>
@@ -2206,13 +2133,10 @@ return (
                                   </div>
                                   </td>
                               </tr>
-                              {/* Expanded Row for Editing/Details */}
                               {lead.expanded && (
                                   <tr key={`expanded-${lead.id}`} className="border-b bg-blue-50">
                                   <td colSpan={7} className="p-4">
-                                      {/* --- Lead Editing Form / Details --- */}
                                       <form onSubmit={(e) => handleSaveLead(e, lead.id)} className="space-y-4">
-                                          {/* Form Fields */}
                                           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                                               <Label className="block"><span className="text-gray-700 text-sm font-medium">{'שם מלא:'}</span><Input type="text" className="mt-1 h-8 text-sm" value={editLeadFullName} onChange={(ev) => setEditLeadFullName(ev.target.value)} required /></Label>
                                               <Label className="block"><span className="text-gray-700 text-sm font-medium">{'טלפון:'}</span><Input type="tel" className="mt-1 h-8 text-sm" value={editLeadPhone} onChange={(ev) => setEditLeadPhone(ev.target.value)} required /></Label>
@@ -2220,12 +2144,10 @@ return (
                                               <Label className="block"><span className="text-gray-700 text-sm font-medium">{'סטטוס:'}</span>
                                                   <Select value={editLeadStatus} onValueChange={setEditLeadStatus}>
                                                       <SelectTrigger className="mt-1 h-8 text-sm"><SelectValue placeholder="בחר..." /></SelectTrigger>
-                                                      {/* Updated: Include new status */}
                                                       <SelectContent>{Object.keys(leadStatusConfig).filter(k => k !== 'Default').map(status => <SelectItem key={status} value={status}>{status}</SelectItem>)}</SelectContent>
                                                   </Select>
                                               </Label>
                                               <Label className="block"><span className="text-gray-700 text-sm font-medium">{'מקור:'}</span><Input type="text" className="mt-1 h-8 text-sm" value={editLeadSource} onChange={(ev) => setEditLeadSource(ev.target.value)} /></Label>
-                                              {/* Conditional Appointment Date Input */}
                                               {editLeadStatus === 'תור נקבע' && (
                                                   <Label className="block"><span className="text-gray-700 text-sm font-medium">{'תאריך ושעת פגישה:'}</span>
                                                       <Input
@@ -2233,12 +2155,11 @@ return (
                                                           className="mt-1 h-8 text-sm"
                                                           value={editLeadAppointmentDateTime}
                                                           onChange={(ev) => setEditLeadAppointmentDateTime(ev.target.value)}
-                                                          required // Make required if status is 'Appointment Set'
+                                                          required
                                                       />
                                                   </Label>
                                               )}
                                           </div>
-                                          {/* Conversation History */}
                                           <div className="border-t pt-3">
                                               <div className="flex justify-between items-center mb-2">
                                                   <div className="font-semibold text-sm">{'היסטוריית שיחה:'}</div>
@@ -2260,7 +2181,6 @@ return (
                                                   ))}
                                               </ul>
                                           </div>
-                                          {/* NLP Task Adder */}
                                           <div className="border-t pt-3">
                                               <Label className="font-semibold text-sm block mb-1">{'הוסף משימת המשך (NLP):'}</Label>
                                               <div className="flex gap-2">
@@ -2268,7 +2188,6 @@ return (
                                                   <Button type="button" size="sm" onClick={() => handleLeadNLPSubmit(lead.id)} className="shrink-0">{'➕ משימה'}</Button>
                                               </div>
                                           </div>
-                                          {/* Action Buttons */}
                                           <div className="flex gap-2 justify-end border-t pt-3 mt-4">
                                               <Button type="submit" size="sm">{'שמור שינויים'}</Button>
                                               <Button type="button" variant="outline" size="sm" onClick={() => handleCollapseLead(lead.id)}>{'סגור'}</Button>
@@ -2284,9 +2203,7 @@ return (
                       </table>
                   </div>
                 ) : (
-                  // --- Compact View: List ---
-                   // Adjusted height calculation slightly
-                  <ul className="space-y-2 h-[calc(100vh-280px)] min-h-[400px] overflow-y-auto pr-1"> {/* Adjusted height for header */}
+                  <ul className="space-y-2 h-[calc(100vh-280px)] min-h-[400px] overflow-y-auto pr-1">
                     {leadsSorted.length === 0 && (
                       <li className="text-center text-gray-500 py-6">{'אין לידים להצגה'}</li>
                     )}
@@ -2322,19 +2239,14 @@ return (
 
          {/* --- Analytics Section (Moved outside Leads column, full width when shown) --- */}
          {showAnalytics && (
-           <div className="col-span-12 mt-4"> {/* Takes full width, added margin-top */}
+           <div className="col-span-12 mt-4">
                <Card>
                    <CardHeader>
                        <div className="flex justify-between items-center">
                            <CardTitle>{'ניתוח לידים'}</CardTitle>
-                           {/* Toggle button moved inside CardHeader */}
-                           {/* <Button variant="outline" size="sm" onClick={() => setShowAnalytics(!showAnalytics)}>
-                               {showAnalytics ? 'הסתר ניתוח' : 'הצג ניתוח'}
-                           </Button> */}
                        </div>
                    </CardHeader>
                    <CardContent>
-                       {/* Analytics Filters */}
                        <div className="flex flex-wrap items-center gap-4 mb-4 pb-4 border-b">
                            <span className="font-medium text-sm">{'תקופת זמן:'}</span>
                            <div className="flex gap-2 flex-wrap">
@@ -2353,12 +2265,10 @@ return (
                            )}
                        </div>
 
-                       {/* Analytics Data Display */}
                        {!calculatedAnalytics ? (
                            <p className="text-center text-gray-500">{'טוען נתונים...'}</p>
                        ) : (
                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                               {/* Table Data */}
                                <div>
                                    <h4 className="font-semibold mb-2 text-center">{'סיכום נתונים ('}{calculatedAnalytics.range.start} - {calculatedAnalytics.range.end}{')'}</h4>
                                    <table className="w-full text-sm text-right border">
@@ -2367,12 +2277,10 @@ return (
                                            <tr className="border-b"><td className="p-2 font-medium">{'ממוצע לידים ליום:'}</td><td className="p-2">{calculatedAnalytics.leadsPerDay}</td></tr>
                                            <tr className="border-b"><td className="p-2 font-medium">{'שיעור המרה (חדש -> תור נקבע/בסדרה):'}</td><td className="p-2">{calculatedAnalytics.conversionRate}%</td></tr>
                                            <tr className="border-b"><td className="p-2 font-medium">{'זמן ממוצע למענה ראשוני:'}</td><td className="p-2">{calculatedAnalytics.avgAnswerTimeHours}</td></tr>
-                                           {/* Status Breakdown */}
                                            <tr className="bg-gray-100 font-medium border-b"><td className="p-2" colSpan={2}>{'התפלגות סטטוסים:'}</td></tr>
                                            {Object.entries(calculatedAnalytics.statusCounts).map(([status, count]) => (
                                                <tr key={status} className="border-b"><td className="p-2 pl-4">{status}</td><td className="p-2">{count}</td></tr>
                                            ))}
-                                           {/* Source Breakdown */}
                                            <tr className="bg-gray-100 font-medium border-b"><td className="p-2" colSpan={2}>{'התפלגות מקורות:'}</td></tr>
                                            {Object.entries(calculatedAnalytics.sourceCounts).map(([source, count]) => (
                                                <tr key={source} className="border-b"><td className="p-2 pl-4">{source}</td><td className="p-2">{count} ({calculatedAnalytics.totalLeads > 0 ? ((count / calculatedAnalytics.totalLeads) * 100).toFixed(1) : 0}%)</td></tr>
@@ -2380,7 +2288,6 @@ return (
                                        </tbody>
                                    </table>
                                </div>
-                               {/* Graph Area */}
                                <div className="min-h-[300px]">
                                     <h4 className="font-semibold mb-2 text-center">{'לידים נכנסים לפי יום'}</h4>
                                     <ResponsiveContainer width="100%" height={300}>
@@ -2388,10 +2295,9 @@ return (
                                             <CartesianGrid strokeDasharray="3 3" />
                                             <XAxis dataKey="name" style={{ fontSize: '0.75rem' }} />
                                             <YAxis allowDecimals={false} style={{ fontSize: '0.75rem' }}/>
-                                            <RechartsTooltip /> {/* Use aliased import */}
+                                            <RechartsTooltip />
                                             <Legend />
                                             <Line type="monotone" dataKey="received" name="לידים נכנסים" stroke="#8884d8" strokeWidth={2} activeDot={{ r: 6 }}/>
-                                            {/* Add other lines here later if data becomes available */}
                                         </LineChart>
                                     </ResponsiveContainer>
                                </div>
@@ -2405,19 +2311,14 @@ return (
 
         </div> {/* End Main Grid Layout */}
 
-        {/* ========================== Modals ========================== */}
-
-        {/* --- NLP Task Modal --- */}
+        {/* Modals */}
         {showNLPModal && (
-          <div className="fixed inset-0 flex items-center justify-center bg-black/60 z-50 p-4" onClick={() => { setShowNLPModal(false); setPrefillCategory(null); }}> {/* Also reset prefill on background click */}
-            <div className="bg-white p-6 rounded-lg shadow-xl w-full max-w-md" onClick={(e) => e.stopPropagation()}> {/* Prevent closing on modal click */}
-               {/* Updated Modal title changes based on prefillCategory */}
+          <div className="fixed inset-0 flex items-center justify-center bg-black/60 z-50 p-4" onClick={() => { setShowNLPModal(false); setPrefillCategory(null); }}>
+            <div className="bg-white p-6 rounded-lg shadow-xl w-full max-w-md" onClick={(e) => e.stopPropagation()}>
                <h2 className="text-lg font-semibold mb-4 text-right">
                    {'הוסף משימה '}{prefillCategory ? `לקטגוריה: ${prefillCategory}` : 'בשפה טבעית'}
                </h2>
               <form onSubmit={handleNLPSubmit}>
-                {/* Optionally show prefilled category */}
-                {/* {prefillCategory && <p className="text-sm text-gray-600 mb-2 text-right">קטגוריה: {prefillCategory}</p>} */}
                 <Input
                   type="text"
                   value={nlpInput}
@@ -2437,7 +2338,6 @@ return (
           </div>
         )}
 
-        {/* --- Return Task Modal --- */}
         {showReturnModal && (
           <div className="fixed inset-0 flex items-center justify-center bg-black/60 z-50 p-4" onClick={() => setShowReturnModal(false)}>
             <div className="bg-white p-6 rounded-lg shadow-xl w-full max-w-md" onClick={(e) => e.stopPropagation()}>
@@ -2474,7 +2374,6 @@ return (
           </div>
         )}
 
-         {/* --- Task History Modal --- */}
          {showHistoryModal && (
            <div className="fixed inset-0 flex items-center justify-center bg-black/60 z-50 p-4" onClick={() => setShowHistoryModal(false)}>
              <div className="bg-white p-6 rounded-lg shadow-xl w-full max-w-lg max-h-[80vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
@@ -2482,15 +2381,14 @@ return (
                <div className="overflow-y-auto flex-grow mb-4 border rounded p-2 bg-gray-50">
                  <ul className="space-y-2">
                    {tasks
-                     .filter(task => task.done && task.completedAt) // Filter for completed tasks
-                     .sort((a, b) => new Date(b.completedAt).getTime() - new Date(a.completedAt).getTime()) // Sort by completion date desc
+                     .filter(task => task.done && task.completedAt)
+                     .sort((a, b) => new Date(b.completedAt).getTime() - new Date(a.completedAt).getTime())
                      .map(task => {
-                      // Calculate duration if possible
                       let duration = "";
                       if (task.completedAt && task.createdAt) {
                           try {
                               const durationMs = new Date(task.completedAt).getTime() - new Date(task.createdAt).getTime();
-                              duration = formatDuration(durationMs); // Use the helper function
+                              duration = formatDuration(durationMs);
                           } catch { duration = "N/A"; }
                       }
                        return (
@@ -2498,7 +2396,7 @@ return (
                            <p className="font-medium">{task.title}</p>
                            <p className="text-xs text-gray-600">
                              {'בוצע על ידי: '}<span className="font-semibold">{task.completedBy || 'לא ידוע'}</span>{' בתאריך: '}<span className="font-semibold">{formatDateTime(task.completedAt)}</span>
-                             {duration && <span className="ml-2 mr-2 pl-2 border-l">{'זמן ביצוע: '}<span className="font-semibold">{duration}</span></span>} {/* Added margin/padding */}
+                             {duration && <span className="ml-2 mr-2 pl-2 border-l">{'זמן ביצוע: '}<span className="font-semibold">{duration}</span></span>}
                            </p>
                            {task.subtitle && <p className="text-xs text-gray-500 pt-1 mt-1 border-t">{task.subtitle}</p>}
                          </li>
@@ -2517,13 +2415,11 @@ return (
            </div>
          )}
 
-        {/* --- Add Lead Modal --- */}
         {showAddLeadModal && (
           <div className="fixed inset-0 flex items-center justify-center bg-black/60 z-50 p-4" onClick={() => setShowAddLeadModal(false)}>
             <div className="bg-white p-6 rounded-lg shadow-xl w-full max-w-lg" onClick={(e) => e.stopPropagation()}>
               <h2 className="text-lg font-semibold mb-4 text-right">{'הוספת ליד חדש'}</h2>
               <form onSubmit={handleAddNewLead} className="space-y-4 text-right" dir="rtl">
-                {/* Full Name */}
                 <div>
                   <Label htmlFor="new-lead-name" className="block text-sm font-medium mb-1">{'שם מלא '}<span className="text-red-500">*</span></Label>
                   <Input
@@ -2534,18 +2430,16 @@ return (
                     required
                   />
                 </div>
-                {/* Phone Number */}
                 <div>
                   <Label htmlFor="new-lead-phone" className="block text-sm font-medium mb-1">{'מספר טלפון '}<span className="text-red-500">*</span></Label>
                   <Input
                     id="new-lead-phone"
-                    type="tel" // Use tel type for phone numbers
+                    type="tel"
                     value={newLeadPhone}
                     onChange={(e) => setNewLeadPhone(e.target.value)}
                     required
                   />
                 </div>
-                {/* Message */}
                 <div>
                   <Label htmlFor="new-lead-message" className="block text-sm font-medium mb-1">{'הודעה / הערה'}</Label>
                   <Textarea
@@ -2556,14 +2450,12 @@ return (
                     placeholder="פרטים ראשוניים, סיבת פניה..."
                   />
                 </div>
-                {/* Status and Source */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <Label htmlFor="new-lead-status" className="block text-sm font-medium mb-1">{'סטטוס'}</Label>
                      <Select value={newLeadStatus} onValueChange={setNewLeadStatus}>
                          <SelectTrigger id="new-lead-status"><SelectValue placeholder="בחר סטטוס..." /></SelectTrigger>
                          <SelectContent>
-                             {/* Include new status */}
                              {Object.keys(leadStatusConfig).filter(k => k !== 'Default').map(status => (
                                  <SelectItem key={status} value={status}>{status}</SelectItem>
                              ))}
@@ -2581,7 +2473,6 @@ return (
                     />
                   </div>
                 </div>
-                {/* Action Buttons */}
                 <div className="mt-6 flex justify-end gap-3">
                   <Button type="submit">{'הוסף ליד'}</Button>
                   <Button type="button" variant="outline" onClick={() => setShowAddLeadModal(false)}>{'ביטול'}</Button>
@@ -2592,11 +2483,8 @@ return (
         )}
 
 
-          {/* --- Drag Overlay --- */}
-          {/* Renders a custom preview of the item being dragged */}
           <DragOverlay dropAnimation={null}>
               {activeId && activeTaskForOverlay ? (
-                   // Render a simplified version of the task item for the overlay
                    <div className="p-2 border rounded shadow-xl bg-white opacity-90">
                        <div className="flex items-start space-x-3 space-x-reverse">
                          <Checkbox checked={!!activeTaskForOverlay.done} readOnly id={`drag-${activeTaskForOverlay.id}`} className="mt-1 shrink-0"/>
@@ -2615,7 +2503,7 @@ return (
               ) : null}
           </DragOverlay>
 
-      </DndContext> // End DndContext
-  </TooltipProvider> // End TooltipProvider
+      </DndContext>
+  </TooltipProvider>
 ); // End Main Return
 } // End Dashboard Component Function
