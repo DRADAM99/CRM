@@ -2060,4 +2060,4 @@ const calculatedAnalytics = useMemo(() => {
     </TooltipProvider> 
   ); 
 
-} // End Dashboard Component Function - FINAL CLOSING BRACE
+} 
