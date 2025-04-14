@@ -1,0 +1,6 @@
+{
+    "rules": {
+      "react/jsx-no-comment-textnodes": "off"
+    }
+  }
+  
