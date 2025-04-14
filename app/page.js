@@ -2057,7 +2057,7 @@ const calculatedAnalytics = useMemo(() => {
         </DragOverlay>
 
       </DndContext> 
-    </TooltipProvider> // End TooltipProvider
-  ); // End Main Return
+    </TooltipProvider> 
+  ); 
 
 } // End Dashboard Component Function - FINAL CLOSING BRACE
