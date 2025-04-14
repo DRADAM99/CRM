@@ -1,6 +1,6 @@
 import * as React from "react"
 import { Slot } from "@radix-ui/react-slot"
-import { cva } from "class-variance-authority";
+import { cva } from "class-variance-authority"; // Removed 'type VariantProps' import
 
 import { cn } from "@/lib/utils"
 
@@ -35,21 +35,21 @@ const buttonVariants = cva(
   }
 )
 
-function Button({
-  className,
-  variant,
-  size,
-  asChild = false,
-  ...props
-}) {
-  const Comp = asChild ? Slot : "button"
+// Removed TypeScript interface 'ButtonProps'
 
-  return (
-    <Comp
-      data-slot="button"
-      className={cn(buttonVariants({ variant, size, className }))}
-      {...props} />
-  );
-}
+// --- CORRECTED: Use React.forwardRef (without TS types) ---
+const Button = React.forwardRef(
+  ({ className, variant, size, asChild = false, ...props }, ref) => { // Removed TS types from parameters/ref
+    const Comp = asChild ? Slot : "button"
+    return (
+      <Comp
+        className={cn(buttonVariants({ variant, size, className }))}
+        ref={ref} // Pass the ref here
+        {...props}
+      />
+    )
+  }
+)
+Button.displayName = "Button" // Add display name
 
 export { Button, buttonVariants }
