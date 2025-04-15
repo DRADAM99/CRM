@@ -1,6 +1,6 @@
 {
-    "rules": {
-      "react/jsx-no-comment-textnodes": "off"
-    }
+  "extends": "next/core-web-vitals",
+  "rules": {
+    "react/jsx-no-comment-textnodes": "off"
   }
-  
+}

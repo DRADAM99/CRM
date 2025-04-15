@@ -2056,7 +2056,7 @@ const calculatedAnalytics = useMemo(() => {
             ) : null}
         </DragOverlay>
 
-      </DndContext> // End DndContext
+      </DndContext> 
     </TooltipProvider> 
   ); 
 
