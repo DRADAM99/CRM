@@ -1239,7 +1239,7 @@ const calculatedAnalytics = useMemo(() => {
                    alt="Logo"
                  width={140} height={56}
                    className="h-14 inline-block"
-                   onError={(e) => { e.target.onerror = null; e.target.src='https://placehold.co/140x56/eeeeee/aaaaaa?text=Logo+Error'; }}
+                   onError={(e) => { e.target.onerror = null; e.target.src = 'https://placehold.co/140x56/eeeeee/aaaaaa?text=Logo+Error'; }}
                  />
             </div>
             <div className="text-sm text-gray-500 w-48 text-left flex items-center justify-end gap-4">
@@ -1683,7 +1683,7 @@ const calculatedAnalytics = useMemo(() => {
                                                    <div className="flex items-center justify-start gap-1">
                                                         {/* Tooltips outside list */}
                                                        <Tooltip><TooltipTrigger asChild><Button size="icon" variant="ghost" className="w-7 h-7 text-gray-500 hover:text-blue-600" onClick={() => handleEditLead(lead)}><span role="img" aria-label="Edit">✎</span></Button></TooltipTrigger><TooltipContent>{'פתח/ערוך ליד'}</TooltipContent></Tooltip>
-                                                       <Tooltip><TooltipTrigger asChild><a href={`https://wa.me/${lead.phoneNumber}`} target="_blank" rel="noopener noreferrer"><Button size="icon" variant="ghost" className="w-7 h-7 text-green-600 hover:text-green-700"><span role="img" aria-label="WhatsApp">💬</span></Button></a></TooltipTrigger><TooltipContent>{'שלח וואטסאפ'}</TooltipContent></Tooltip>
+                                                       <Tooltip><TooltipTrigger asChild><a href={`https:{/* wa.me/${lead.phoneNumber}`} target="_blank" rel="noopener noreferrer"><Button size="icon" variant="ghost" className="w-7 h-7 text-green-600 hover:text-green-700"><span role="img" aria-label="WhatsApp">💬</span></Button></a></TooltipTrigger><TooltipContent>{'שלח וואטסאפ'}</TooltipContent></Tooltip> */{"}"}
                                                        <Tooltip><TooltipTrigger asChild><a href={`tel:${lead.phoneNumber}`}><Button size="icon" variant="ghost" className="w-7 h-7 text-blue-600 hover:text-blue-700"><span role="img" aria-label="Call">📞</span></Button></a></TooltipTrigger><TooltipContent>{'התקשר'}</TooltipContent></Tooltip>
                                                    </div>
                                                </td>
@@ -1773,7 +1773,7 @@ const calculatedAnalytics = useMemo(() => {
                                     <div className="flex items-center gap-0.5 shrink-0">
                                          {/* Removed Tooltips, added titles */}
                                         <Button size="icon" variant="ghost" className="w-7 h-7 text-gray-500 hover:text-blue-600" title="פתח לעריכה" onClick={() => handleEditLead(lead)}><span role="img" aria-label="Edit">✎</span></Button>
-                                        <a href={`https://wa.me/${lead.phoneNumber}`} target="_blank" rel="noopener noreferrer"><Button size="icon" variant="ghost" className="w-7 h-7 text-green-600 hover:text-green-700" title="שלח וואטסאפ"><span role="img" aria-label="WhatsApp">💬</span></Button></a>
+                                        <a href={`https:{/* wa.me/${lead.phoneNumber}`} target="_blank" rel="noopener noreferrer"><Button size="icon" variant="ghost" className="w-7 h-7 text-green-600 hover:text-green-700" title="שלח וואטסאפ"><span role="img" aria-label="WhatsApp">💬</span></Button></a> */{"}"}
                                         <a href={`tel:${lead.phoneNumber}`}><Button size="icon" variant="ghost" className="w-7 h-7 text-blue-600 hover:text-blue-700" title="התקשר"><span role="img" aria-label="Call">📞</span></Button></a>
                                     </div>
                                 </li>
