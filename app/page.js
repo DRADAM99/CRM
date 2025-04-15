@@ -1578,16 +1578,6 @@ const calculatedAnalytics = useMemo(() => {
                        style={{ height: '100%' }}
                        className="rbc-calendar-rtl"
                        selectable={true}
-                       eventPropGetter={(event) => ({
-                           style: {
-                            textAlign: "right",
-                            direction: "rtl",
-                              backgroundColor: event.resource?.type === 'task' ? (event.isDone ? '#a1a1aa' : '#3b82f6') : '#10b981',
-                               opacity: event.resource?.type === 'task' && event.isDone ? 0.7 : 1,
-                               borderRadius: '5px',
-                               color: 'white', border: '0px', display: 'block'
-                           }
-                       })}
                    />
                  </div>
               </CardContent>
