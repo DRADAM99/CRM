@@ -1773,7 +1773,7 @@ const calculatedAnalytics = useMemo(() => {
                                     <div className="flex items-center gap-0.5 shrink-0">
                                          {/* Removed Tooltips, added titles */}
                                         <Button size="icon" variant="ghost" className="w-7 h-7 text-gray-500 hover:text-blue-600" title="פתח לעריכה" onClick={() => handleEditLead(lead)}><span role="img" aria-label="Edit">✎</span></Button>
-                                        <a href={`https:{/* wa.me/${lead.phoneNumber}`} target="_blank" rel="noopener noreferrer"><Button size="icon" variant="ghost" className="w-7 h-7 text-green-600 hover:text-green-700" title="שלח וואטסאפ"><span role="img" aria-label="WhatsApp">💬</span></Button></a> */{"}"}
+                                        <Tooltip><TooltipTrigger asChild><a href={`https:{/* wa.me/${lead.phoneNumber}`} target="_blank" rel="noopener noreferrer"><Button size="icon" variant="ghost" className="w-7 h-7 text-green-600 hover:text-green-700"><span role="img" aria-label="WhatsApp">💬</span></Button></a></TooltipTrigger><TooltipContent>{'שלח וואטסאפ'}</TooltipContent></Tooltip> */{"}"}
                                         <a href={`tel:${lead.phoneNumber}`}><Button size="icon" variant="ghost" className="w-7 h-7 text-blue-600 hover:text-blue-700" title="התקשר"><span role="img" aria-label="Call">📞</span></Button></a>
                                     </div>
                                 </li>
