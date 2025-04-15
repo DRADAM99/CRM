@@ -1,14 +1,14 @@
 "use client";
 
-// ========================================================================
-// SECTION 1: Imports, Helper Functions & Constants
-// ========================================================================
 
-// React and Hooks
+
+
+
+
 import React, { useState, useEffect, useMemo, useCallback } from "react";
-import Image from 'next/image'; // Use next/image
+import Image from 'next/image';
 
-// UI Components (Shadcn/UI)
+
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -19,9 +19,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Search, RotateCcw, Bell, ChevronDown } from 'lucide-react'; // Icons
+import { Search, RotateCcw, Bell, ChevronDown } from 'lucide-react';
 
-// Drag and Drop (dnd-kit)
+
 import {
   DndContext,
   closestCenter,
@@ -35,22 +35,22 @@ import {
   SortableContext,
   verticalListSortingStrategy,
   sortableKeyboardCoordinates,
-  arrayMove, // Make sure arrayMove is imported correctly
+  arrayMove,
 } from "@dnd-kit/sortable";
 
-// Custom Components (Ensure these exist at the correct paths)
-import SortableItem from "../components/ui/sortable-item"; // Adjust path if needed
-// Assuming DroppableCalendar wraps BigCalendar and handles drop logic
-import DroppableCalendar from "../components/DroppableCalendar"; // Adjust path if needed
 
-// Calendar (react-big-calendar and moment)
+import SortableItem from "../components/ui/sortable-item";
+
+import DroppableCalendar from "../components/DroppableCalendar";
+
+
 import moment from 'moment-timezone';
-import 'moment/locale/he'; // Import Hebrew locale for moment
-// Alias Calendar to avoid naming conflict with HTML element
-import { Calendar as BigCalendar, momentLocalizer } from 'react-big-calendar';
-import 'react-big-calendar/lib/css/react-big-calendar.css'; // Import calendar CSS
+import 'moment/locale/he';
 
-// Charting Library (Recharts)
+import { Calendar as BigCalendar, momentLocalizer } from 'react-big-calendar';
+import 'react-big-calendar/lib/css/react-big-calendar.css';
+
+
 import {
     ResponsiveContainer,
     LineChart,
@@ -58,18 +58,18 @@ import {
     XAxis,
     YAxis,
     CartesianGrid,
-    Tooltip as RechartsTooltip, // Alias Recharts Tooltip
+    Tooltip as RechartsTooltip,
     Legend,
 } from 'recharts';
 
-// NOTE: Firebase Imports are commented out for V4.6 baseline
+
 /*
 import { initializeApp, getApps, getApp } from "firebase/app";
 import { getFirestore, collection, query, where, orderBy, onSnapshot, doc, getDoc, getDocs, setDoc, addDoc, updateDoc, deleteDoc, Timestamp, arrayUnion } from "firebase/firestore";
 import { getAuth, GoogleAuthProvider, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut } from "firebase/auth";
 */
 
-// --- Firebase Initialization (Commented out for V4.6 baseline) ---
+
 /*
 const firebaseConfig = {
   apiKey: "AIzaSyBVIjO_f5GKTal8xpG-QA7aLtWX2A9skoI",
@@ -86,7 +86,7 @@ const auth = getAuth(app);
 const googleProvider = new GoogleAuthProvider();
 */
 
-// --- Helper Functions ---
+
 function isTaskOverdue(task) {
   if (task.done) return false;
   const now = new Date();
@@ -100,16 +100,16 @@ function isTaskOverdue12h(task) {
   const twelveHours = 12 * 60 * 60 * 1000;
   return now - due > 0 && now - due <= twelveHours;
 }
- 
+
 const formatDateTime = (date) => {
   if (!date) return "";
   try {
-    // Assume date is already a JS Date object in V4.6 local state
+
     const d = new Date(date);
     if (isNaN(d.getTime())) return "";
     return `${d.toLocaleDateString("he-IL")} ${d.toLocaleTimeString("he-IL", { hour: "2-digit", minute: "2-digit", hour12: false })}`;
   } catch (error) { console.error("Error formatting date:", date, error); return ""; }
-   
+
 };
 
 const formatDuration = (ms) => {
@@ -124,35 +124,35 @@ const formatDuration = (ms) => {
   return "< דקה";
 };
 
-// --- Calendar Setup ---
+
 moment.locale('he');
 moment.tz.setDefault("Asia/Jerusalem");
 const localizer = momentLocalizer(moment);
 const messages = { allDay: "כל היום", previous: "הקודם", next: "הבא", today: "היום", month: "חודש", week: "שבוע", day: "יום", agenda: "סדר יום", date: "תאריך", time: "זמן", event: "אירוע", noEventsInRange: "אין אירועים בטווח זה", showMore: (total) => `+ ${total} נוספים`, };
 
-// --- Lead Status Config ---
+
 const leadStatusConfig = { "חדש": { color: "bg-red-500", priority: 1 }, "מעקב": { color: "bg-orange-500", priority: 2 }, "ממתין ליעוץ עם אדם": { color: "bg-purple-500", priority: 3 }, "תור נקבע": { color: "bg-green-500", priority: 4 }, "בסדרת טיפולים": { color: "bg-emerald-400", priority: 6 }, "באג": { color: "bg-yellow-900", priority: 5 }, "לא מתאים": { color: "bg-gray-400", priority: 7 }, "אין מענה": { color: "bg-yellow-500", priority: 5 }, "Default": { color: "bg-gray-300", priority: 99 } };
 const leadColorTab = (status) => leadStatusConfig[status]?.color || leadStatusConfig.Default.color;
 const leadPriorityValue = (status) => leadStatusConfig[status]?.priority || leadStatusConfig.Default.priority;
 
-// --- Task Config ---
+
 const taskCategories = ["לקבוע סדרה", "דוחות", "תשלומים", "להתקשר", "אדם", "אחר"];
 const taskPriorities = ["דחוף", "רגיל", "נמוך"];
 
-// ========================================================================
-// SECTION 2: Dashboard Component Definition & State Hooks
-// ========================================================================
+
+
+
 export default function Dashboard() {
-  // General & Layout State
+
   const [selectedDate, setSelectedDate] = useState(new Date());
-  const [view, setView] = useState("month"); // Renamed from calendarView
-  const [isFullView, setIsFullView] = useState(false); // Leads view toggle
+  const [view, setView] = useState("month");
+  const [isFullView, setIsFullView] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [currentDateTime, setCurrentDateTime] = useState('');
   const defaultBlockOrder = { TM: 1, Calendar: 2, Leads: 3 };
   const [blockOrder, setBlockOrder] = useState(defaultBlockOrder);
 
-  // Modals State
+
   const [showNLPModal, setShowNLPModal] = useState(false);
   const [nlpInput, setNlpInput] = useState("");
   const [showReturnModal, setShowReturnModal] = useState(false);
@@ -167,9 +167,9 @@ export default function Dashboard() {
   const [newLeadStatus, setNewLeadStatus] = useState("חדש");
   const [newLeadSource, setNewLeadSource] = useState("");
 
-  // Task Manager State
+
   const [tasks, setTasks] = useState([
-    // Sample tasks - Added creatorId field
+
     { id: 'task-1', assignTo: "עצמי", title: "משימה 1 - לקבוע סדרה", subtitle: "תיאור משימה 1", priority: "רגיל", category: "לקבוע סדרה", dueDate: new Date(new Date().setDate(new Date().getDate() + 1)), done: false, completedBy: null, completedAt: null, createdAt: new Date(new Date().setDate(new Date().getDate() - 1)), creatorId: "creator-A", },
     { id: 'task-2', assignTo: "עצמי", title: "משימה 2 - דוחות (בוצעה)", subtitle: "תיאור משימה 2", priority: "רגיל", category: "דוחות", dueDate: new Date(new Date().setDate(new Date().getDate() - 1)), done: true, completedBy: "creator-B", completedAt: new Date(new Date().setDate(new Date().getDate() - 1)), createdAt: new Date(new Date().setDate(new Date().getDate() - 2)), creatorId: "creator-B", },
     { id: 'task-3', assignTo: "משתמש אחר", title: "משימה 3 - תשלומים (דחופה)", subtitle: "תיאור משימה 3", priority: "דחוף", category: "תשלומים", dueDate: new Date(), done: false, completedBy: null, completedAt: null, createdAt: new Date(new Date().setHours(new Date().getHours() - 5)), creatorId: "creator-A", },
@@ -192,11 +192,11 @@ export default function Dashboard() {
   const [editingCategory, setEditingCategory] = useState(taskCategories[0] || "");
   const [editingDueDate, setEditingDueDate] = useState("");
   const [editingDueTime, setEditingDueTime] = useState("");
-  // No editingTargetUserId state needed in V4.6 yet
 
-  // Leads State
+
+
   const [leads, setLeads] = useState([
-    // Sample leads (Unchanged from V4.5)
+
     { id: 'lead-1', createdAt: new Date(new Date().setDate(new Date().getDate() - 10)), fullName: "יוסי כהן", phoneNumber: "0501234567", message: "פולו-אפ על פגישה", status: "מעקב", source: "פייסבוק", conversationSummary: [ { text: "יצירת קשר ראשונית.", timestamp: new Date(new Date().setDate(new Date().getDate() - 10)) }, { text: "תיאום פגישה.", timestamp: new Date(new Date().setDate(new Date().getDate() - 9)) }, ], expanded: false, appointmentDateTime: null, },
     { id: 'lead-2', createdAt: new Date(new Date().setDate(new Date().getDate() - 5)), fullName: "שרה מזרחי", phoneNumber: "0527654321", message: "שיחת בירור מצב", status: "תור נקבע", source: "מבצע טלמרקטינג", conversationSummary: [ { text: "שוחחנו על המצב, תיאום שיחה נוספת.", timestamp: new Date(new Date().setDate(new Date().getDate() - 5)) }, ], expanded: false, appointmentDateTime: new Date(new Date().setDate(new Date().getDate() + 7)).toISOString(), },
     { id: 'lead-3', createdAt: new Date(new Date().setDate(new Date().getDate() - 2)), fullName: "בני גנץ", phoneNumber: "0509876543", message: "לא היה מענה", status: "חדש", source: "אתר אינטרנט", conversationSummary: [], expanded: false, appointmentDateTime: null, },
@@ -218,36 +218,36 @@ export default function Dashboard() {
   const [leadFilterTo, setLeadFilterTo] = useState("");
   const [leadSearchTerm, setLeadSearchTerm] = useState("");
 
-  // Analytics State
+
   const [showAnalytics, setShowAnalytics] = useState(false);
   const [analyticsTimeFilter, setAnalyticsTimeFilter] = useState("month");
   const [analyticsFilterFrom, setAnalyticsFilterFrom] = useState("");
   const [analyticsFilterTo, setAnalyticsFilterTo] = useState("");
-  // No analyticsData state needed, useMemo calculates directly
 
-  // Drag & Drop State
+
+
   const [activeId, setActiveId] = useState(null);
   const [prefillCategory, setPrefillCategory] = useState(null);
 
-  // State for Assignable Users List (Placeholder for V4.6 - will be empty until Firebase)
+
   const [assignableUsers, setAssignableUsers] = useState([]);
 
-  // dnd-kit Sensors
+
   const sensors = useSensors(
     useSensor(PointerSensor, {
-      activationConstraint: { distance: 8 }, // Use distance constraint
+      activationConstraint: { distance: 8 },
     }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates, })
   );
-  // --- End of Section 2 ---
 
-// ========================================================================
-// SECTION 3: Effects and Layout Functions
-// ========================================================================
 
-  // --- Effects ---
 
-  // Effect runs once after initial render for general setup (localStorage for block order)
+
+
+
+
+
+
   useEffect(() => {
     setMounted(true);
     const savedOrder = localStorage.getItem("dashboardBlockOrder");
@@ -258,33 +258,33 @@ export default function Dashboard() {
           setBlockOrder(parsedOrder);
         } else {
            console.warn("Invalid block order found in localStorage, using default.");
-           localStorage.removeItem("dashboardBlockOrder"); // Clear invalid data
-           setBlockOrder(defaultBlockOrder); // Reset to default
+           localStorage.removeItem("dashboardBlockOrder");
+           setBlockOrder(defaultBlockOrder);
         }
       } catch (error) {
         console.error("Failed to parse dashboard block order from localStorage:", error);
-        localStorage.removeItem("dashboardBlockOrder"); // Clear corrupted data
-        setBlockOrder(defaultBlockOrder); // Reset to default
+        localStorage.removeItem("dashboardBlockOrder");
+        setBlockOrder(defaultBlockOrder);
       }
     } else {
-        setBlockOrder(defaultBlockOrder); // Set default if nothing saved
+        setBlockOrder(defaultBlockOrder);
     }
-  }, []); // Empty dependency array ensures this runs only once on mount
+  }, []);
 
-  // Effect for updating the current date and time display in the header
+
   useEffect(() => {
     const updateTime = () => {
       const formattedDateTime = moment().format('dddd, D MMMM YYYY HH:mm');
       setCurrentDateTime(formattedDateTime);
     };
-    updateTime(); // Initial call
-    const intervalId = setInterval(updateTime, 60000); // Update every minute
-    return () => clearInterval(intervalId); // Cleanup interval on unmount
-  }, []); // Empty dependency array
+    updateTime();
+    const intervalId = setInterval(updateTime, 60000);
+    return () => clearInterval(intervalId);
+  }, []);
 
-  // NOTE: Firebase Auth / Data fetching useEffects are removed in V4.6 baseline
 
-  // --- Layout Functions ---
+
+
 
   /**
    * Cycles the display order position of a dashboard block (TM, Calendar, Leads)
@@ -306,16 +306,16 @@ export default function Dashboard() {
       }
       return newOrder;
     });
-  }, [mounted]); // Dependency: mounted state
-  // --- End of Section 3 ---
+  }, [mounted]);
 
-  // ========================================================================
-  // SECTION 4: Handler Functions - COMPLETE IMPLEMENTATIONS (V4.6 - creatorId added)
-  // ========================================================================
 
-  // ---------------------------\
-  // Task Manager Functions
-  // ---------------------------
+
+
+
+
+
+
+
 
   /**
   * Toggles a category in the selectedTaskCategories filter state.
@@ -325,16 +325,16 @@ export default function Dashboard() {
     setSelectedTaskCategories((prevSelected) => {
       const isSelected = prevSelected.includes(category);
       if (isSelected) {
-        // Remove the category
+
         return prevSelected.filter(c => c !== category);
       } else {
-        // Add the category
+
         return [...prevSelected, category];
       }
     });
-     // Reset manual sort when filters change? Optional.
-     // setUserHasSortedTasks(false);
-  }, [setSelectedTaskCategories]); // Dependency: setSelectedTaskCategories
+
+
+  }, [setSelectedTaskCategories]);
 
 
   /**
@@ -343,26 +343,26 @@ export default function Dashboard() {
   * @returns {object} - A partial task object with extracted details.
   */
   const parseTaskFromText = useCallback((text) => {
-    // Attempt to find a category keyword first
-    let category = taskCategories.find(cat => text.toLowerCase().includes(cat.toLowerCase())) || "אחר"; // Find category or default to 'Other'
-    let dueDate = new Date(); // Default due date (today)
-    let dueTime = "13:00"; // Default time
 
-    // Basic date parsing (add more sophisticated logic if needed)
+    let category = taskCategories.find(cat => text.toLowerCase().includes(cat.toLowerCase())) || "אחר";
+    let dueDate = new Date();
+    let dueTime = "13:00";
+
+
     if (text.includes("מחר")) {
       dueDate.setDate(dueDate.getDate() + 1);
     } else if (text.includes("מחרתיים")) {
         dueDate.setDate(dueDate.getDate() + 2);
     }
-    // Look for specific dates like DD/MM or DD.MM
+
      const dateMatch = text.match(/(\d{1,2})[./](\d{1,2})/);
      if (dateMatch) {
         const day = parseInt(dateMatch[1], 10);
-        const month = parseInt(dateMatch[2], 10) - 1; // Month is 0-indexed
+        const month = parseInt(dateMatch[2], 10) - 1;
         const currentYear = new Date().getFullYear();
-        // Handle year rollover if the date is in the past relative to today
+
         const potentialDate = new Date(currentYear, month, day);
-        // Check if potential date is significantly in the past (e.g., more than a month) without a year specified
+
         if (potentialDate < new Date(Date.now() - 30*24*60*60*1000) && !text.match(/(\d{4})/)) {
           dueDate.setFullYear(currentYear + 1, month, day);
         } else {
@@ -371,12 +371,12 @@ export default function Dashboard() {
      }
 
 
-    // Basic time parsing
-    const timeMatch = text.match(/(?:בשעה|ב)\s*(\d{1,2}):(\d{2})/); // Matches "בשעה HH:MM" or "בHH:MM"
+
+    const timeMatch = text.match(/(?:בשעה|ב)\s*(\d{1,2}):(\d{2})/);
     if (timeMatch) {
       dueTime = `${timeMatch[1].padStart(2, '0')}:${timeMatch[2]}`;
     } else {
-        const singleHourMatch = text.match(/(?:בשעה|ב)\s*(\d{1,2})(?!\d|:)/); // Matches "בשעה H" or "בH" (no minutes)
+        const singleHourMatch = text.match(/(?:בשעה|ב)\s*(\d{1,2})(?!\d|:)/);
         if (singleHourMatch) {
             dueTime = `${singleHourMatch[1].padStart(2, '0')}:00`;
         }
@@ -386,34 +386,34 @@ export default function Dashboard() {
     const [hours, minutes] = dueTime.split(":").map(Number);
     dueDate.setHours(hours, minutes, 0, 0);
 
-    // Extract title by removing date/time/category keywords (simple approach)
+
     let title = text
         .replace(/מחרתיים|מחר/g, '')
         .replace(/(?:בשעה|ב)\s*(\d{1,2}):?(\d{2})?/g, '')
         .replace(/(\d{1,2})[./](\d{1,2})(?:[./](\d{4}|\d{2}))?/g,'')
-        // Avoid removing category if it's the only word
+
         .replace(new RegExp(`\\b(${taskCategories.join('|')})\\b`, 'gi'), (match, p1, offset, string) => string.trim() === match ? match : '')
         .trim();
-    // If title is empty after replacements, use original text
+
     if (!title) {
         title = text;
     }
 
 
     return {
-      // id will be generated when adding
-      assignTo: "עצמי", // Default assignee
+
+      assignTo: "עצמי",
       title: title,
-      subtitle: "", // Empty subtitle initially
-      priority: "רגיל", // Default priority
+      subtitle: "",
+      priority: "רגיל",
       category,
       dueDate,
       done: false,
       completedBy: null,
       completedAt: null
-      // createdAt & creatorId will be added when task is actually added to state
+
     };
-  }, []); // No dependencies, function is pure based on input text
+  }, []);
 
   /**
   * Handles submission of the NLP task form.
@@ -423,7 +423,7 @@ export default function Dashboard() {
   */
   const handleNLPSubmit = useCallback((e) => {
     e.preventDefault();
-    if (!nlpInput.trim()) return; // Ignore empty input
+    if (!nlpInput.trim()) return;
 
     const parsedDetails = parseTaskFromText(nlpInput);
     const finalCategory = prefillCategory || parsedDetails.category;
@@ -431,16 +431,16 @@ export default function Dashboard() {
     const newTask = {
       ...parsedDetails,
       category: finalCategory,
-      id: `task-${Date.now()}`, // Generate unique ID
-      createdAt: new Date(), // Add creation timestamp
-      // --- ADDED creatorId ---
-      creatorId: "current-user-placeholder" // Replace with actual authUser.uid later
+      id: `task-${Date.now()}`,
+      createdAt: new Date(),
+
+      creatorId: "current-user-placeholder"
     };
-    setTasks((prevTasks) => [newTask, ...prevTasks]); // Add to beginning of list
-    setNlpInput(""); // Clear input
-    setShowNLPModal(false); // Close modal
-    setPrefillCategory(null); // Reset prefill category
-  }, [nlpInput, parseTaskFromText, prefillCategory, setTasks, setNlpInput, setShowNLPModal, setPrefillCategory]); // Added state setters
+    setTasks((prevTasks) => [newTask, ...prevTasks]);
+    setNlpInput("");
+    setShowNLPModal(false);
+    setPrefillCategory(null);
+  }, [nlpInput, parseTaskFromText, prefillCategory, setTasks, setNlpInput, setShowNLPModal, setPrefillCategory]);
 
   /**
   * Toggles the completion status of a task and records completion info.
@@ -451,11 +451,11 @@ export default function Dashboard() {
       prevTasks.map((task) => {
         if (task.id === id) {
           const isNowDone = !task.done;
-          console.log(`Toggling task ${id} to done=${isNowDone}`); // Debug log
+          console.log(`Toggling task ${id} to done=${isNowDone}`);
           return {
             ...task,
             done: isNowDone,
-            // --- Use placeholder for completedBy ---
+
             completedBy: isNowDone ? "current-user-placeholder" : null,
             completedAt: isNowDone ? new Date() : null,
           };
@@ -463,7 +463,7 @@ export default function Dashboard() {
         return task;
       })
     );
-  }, [setTasks]); // Dependency: setTasks
+  }, [setTasks]);
 
   /**
   * Populates the editing form state when the user clicks the edit button on a task.
@@ -472,30 +472,30 @@ export default function Dashboard() {
   const handleEditTask = useCallback((task) => {
     if (!task) {
         console.error("handleEditTask called with null task");
-        setEditingTaskId(null); // Ensure editing mode is exited if task is invalid
+        setEditingTaskId(null);
         return;
     }
-    console.log(`Editing task: ${task.id}`); // Debug log
+    console.log(`Editing task: ${task.id}`);
     setEditingTaskId(task.id);
     setEditingAssignTo(task.assignTo);
     setEditingTitle(task.title);
-    setEditingSubtitle(task.subtitle || ""); // Handle potential null/undefined subtitle
+    setEditingSubtitle(task.subtitle || "");
     setEditingPriority(task.priority);
     setEditingCategory(task.category);
 
     try {
         const due = new Date(task.dueDate);
          if (isNaN(due.getTime())) throw new Error("Invalid date object");
-        // Format date and time for input fields (YYYY-MM-DD and HH:MM)
+
         setEditingDueDate(due.toISOString().split("T")[0]);
         setEditingDueTime(due.toTimeString().split(" ")[0].slice(0, 5));
     } catch (error) {
         console.error("Error processing task due date for editing:", task.dueDate, error);
-        // Set defaults or handle error state appropriately
+
         setEditingDueDate("");
         setEditingDueTime("");
     }
-  }, [setEditingTaskId, setEditingAssignTo, setEditingTitle, setEditingSubtitle, setEditingPriority, setEditingCategory, setEditingDueDate, setEditingDueTime]); // Dependency: setEditing... state setters
+  }, [setEditingTaskId, setEditingAssignTo, setEditingTitle, setEditingSubtitle, setEditingPriority, setEditingCategory, setEditingDueDate, setEditingDueTime]);
 
   /**
   * Saves the edited task details back to the main tasks state.
@@ -504,16 +504,16 @@ export default function Dashboard() {
   */
   const handleSaveTask = useCallback((e) => {
     e.preventDefault();
-    if (!editingTaskId) return; // Should not happen if form is visible, but good practice
+    if (!editingTaskId) return;
 
     let dueDateTime;
     try {
-        // Combine date and time strings into a Date object
-        // Default time to 00:00 if time input is empty
+
+
         const timeString = editingDueTime || "00:00";
-        // Ensure date string is valid before creating Date
+
         if (!editingDueDate || typeof editingDueDate !== 'string' || !editingDueDate.match(/^\d{4}-\d{2}-\d{2}$/)) {
-            // If no valid date, set to null or handle as needed
+
             dueDateTime = null;
             console.log("No valid due date provided for saving task.");
         } else {
@@ -522,9 +522,9 @@ export default function Dashboard() {
         }
     } catch (error) {
         console.error("Error creating due date from inputs:", editingDueDate, editingDueTime, error);
-        // Optionally: show an error to the user, prevent saving, or use a default date
-        // For now, we'll proceed but the date might be invalid or null
-        dueDateTime = null; // Fallback to null on error
+
+
+        dueDateTime = null;
     }
 
 
@@ -538,79 +538,79 @@ export default function Dashboard() {
               subtitle: editingSubtitle,
               priority: editingPriority,
               category: editingCategory,
-              dueDate: dueDateTime, // Use the processed Date object or null
-              // creatorId and createdAt remain unchanged
+              dueDate: dueDateTime,
+
             }
           : task
       )
     );
-    setEditingTaskId(null); // Exit editing mode
-     // Clear editing form fields (optional, good practice)
+    setEditingTaskId(null);
+
      setEditingAssignTo("");
      setEditingTitle("");
      setEditingSubtitle("");
      setEditingPriority("רגיל");
-     setEditingCategory(taskCategories[0] || ""); // Use first category or empty string
+     setEditingCategory(taskCategories[0] || "");
      setEditingDueDate("");
      setEditingDueTime("");
   }, [
       editingTaskId, editingAssignTo, editingTitle, editingSubtitle,
       editingPriority, editingCategory, editingDueDate, editingDueTime,
       setTasks, setEditingTaskId, setEditingAssignTo, setEditingTitle, setEditingSubtitle,
-      setEditingPriority, setEditingCategory, setEditingDueDate, setEditingDueTime // Added state setters
+      setEditingPriority, setEditingCategory, setEditingDueDate, setEditingDueTime
   ]);
 
   /**
   * Cancels the task editing process and clears the editing form state.
   */
   const handleCancelEdit = useCallback(() => {
-    setEditingTaskId(null); // Exit editing mode
-     // Clear editing form fields
+    setEditingTaskId(null);
+
      setEditingAssignTo("");
      setEditingTitle("");
      setEditingSubtitle("");
      setEditingPriority("רגיל");
-     setEditingCategory(taskCategories[0] || ""); // Use first category or empty string
+     setEditingCategory(taskCategories[0] || "");
      setEditingDueDate("");
      setEditingDueTime("");
-  }, [setEditingTaskId, setEditingAssignTo, setEditingTitle, setEditingSubtitle, setEditingPriority, setEditingCategory, setEditingDueDate, setEditingDueTime]); // Added state setters
+  }, [setEditingTaskId, setEditingAssignTo, setEditingTitle, setEditingSubtitle, setEditingPriority, setEditingCategory, setEditingDueDate, setEditingDueTime]);
 
   /** --- NEW: Handler for Complete & Reply --- */
   const handleCompleteAndReply = useCallback(async (taskId) => {
     console.log(`Complete & Reply action initiated for task: ${taskId}`);
-    const task = tasks.find(t => t.id === taskId); // Find task locally first
+    const task = tasks.find(t => t.id === taskId);
     if (!task) {
         console.error("Cannot reply: Task not found locally.");
         alert("שגיאה: המשימה לא נמצאה.");
         return;
     }
-    // Ensure there's a creator and it's not the current user (using placeholder for now)
-    if (!task.creatorId || task.creatorId === "current-user-placeholder") { // Adjust check based on placeholder/auth logic later
+
+    if (!task.creatorId || task.creatorId === "current-user-placeholder") {
         alert("לא ניתן לשלוח תגובה למשימה זו (אין יוצר או שאתה היוצר).");
         return;
     }
 
-    // TODO: Implement modal to get reply message
+
     console.log(`Placeholder: Would open reply modal for task ${taskId} (creator: ${task.creatorId})`);
-    const replyMessage = prompt(`הזן תגובה עבור המשימה "${task.title}":`); // Simple prompt for now
+    const replyMessage = prompt(`הזן תגובה עבור המשימה "${task.title}":`);
 
     if (replyMessage === null || !replyMessage.trim()) {
         console.log("Reply cancelled or empty.");
-        return; // User cancelled or entered empty message
+        return;
     }
 
-    // TODO: Implement actual logic (update original task state, create new reply task state)
+
     console.log(`Placeholder: Would mark task ${taskId} done and create reply task for ${task.creatorId} with message: ${replyMessage}`);
     alert('פונקציונליות השלמה ותגובה עדיין בפיתוח.');
 
-    // Example local state update (will need Firestore later):
-    // 1. Mark original done
-    // setTasks(prev => prev.map(t => t.id === taskId ? {...t, done: true, completedAt: new Date(), completedBy: "current-user-placeholder"} : t));
-    // 2. Create reply task
-    // const replyTask = { id: `task-reply-${Date.now()}`, userId: task.creatorId, creatorId: "current-user-placeholder", assignTo: "Placeholder User", title: `תגובה: ${task.title}`, subtitle: replyMessage.trim(), ... };
-    // setTasks(prev => [replyTask, ...prev]);
 
-  }, [tasks, setTasks]); // Dependencies: tasks, setTasks
+
+
+
+
+
+
+  }, [tasks, setTasks]);
 
 
   /**
@@ -621,37 +621,37 @@ export default function Dashboard() {
     e.preventDefault();
     if (!returnTaskId) return;
     console.log("Returning task:", returnTaskId, "to:", returnNewAssignee, "Comment:", returnComment);
-    // TODO: Implement actual logic: Update task state
+
     alert("פונקציונליות החזרת משימה עדיין בפיתוח.");
-    // Close modal and clear state
+
     setShowReturnModal(false);
     setReturnComment("");
     setReturnNewAssignee("");
     setReturnTaskId(null);
-  }, [returnTaskId, returnNewAssignee, returnComment, setShowReturnModal, setReturnComment, setReturnNewAssignee, setReturnTaskId]); // Dependencies: modal state variables & setters
+  }, [returnTaskId, returnNewAssignee, returnComment, setShowReturnModal, setReturnComment, setReturnNewAssignee, setReturnTaskId]);
 
   /**
   * Removes all tasks marked as 'done' from the tasks state after confirmation.
   */
   const handleClearDoneTasks = useCallback(() => {
-    // Confirmation dialog before deleting
+
     if (window.confirm("האם אתה בטוח שברצונך למחוק את כל המשימות שבוצעו? לא ניתן לשחזר פעולה זו.")) {
       setTasks((prevTasks) => prevTasks.filter(task => !task.done));
-      // Optionally reset user sort preference if clearing affects order significantly
-      // setUserHasSortedTasks(false);
+
+
     }
-  }, [setTasks]); // Dependency: setTasks
+  }, [setTasks]);
 
 
-  // ---------------------------\
-  // Leads Functions
-  // ---------------------------
+
+
+
 
   /** Checks if a lead's creation date falls within the selected time filter range. */
   const isLeadInTimeRange = useCallback((lead) => {
     try {
         const created = new Date(lead.createdAt);
-        if (isNaN(created.getTime())) return false; // Invalid date check
+        if (isNaN(created.getTime())) return false;
 
         const now = new Date();
         const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -668,52 +668,52 @@ export default function Dashboard() {
         let inRange = true;
         if (leadFilterFrom) {
             const fromDate = new Date(leadFilterFrom);
-            fromDate.setHours(0, 0, 0, 0); // Start of the 'from' day
+            fromDate.setHours(0, 0, 0, 0);
              if (isNaN(fromDate.getTime())) { /* handle invalid date */ }
              else if (created < fromDate) inRange = false;
         }
         if (leadFilterTo) {
             const toDate = new Date(leadFilterTo);
-            toDate.setHours(23, 59, 59, 999); // End of the 'to' day
+            toDate.setHours(23, 59, 59, 999);
              if (isNaN(toDate.getTime())) { /* handle invalid date */ }
              else if (created > toDate) inRange = false;
         }
         return inRange;
         } else {
-        // "all"
+
         return true;
         }
     } catch (error) {
         console.error("Error checking lead time range:", lead, error);
-        return false; // Exclude lead if error occurs
+        return false;
     }
-  }, [leadTimeFilter, leadFilterFrom, leadFilterTo]); // Dependencies: filter state
+  }, [leadTimeFilter, leadFilterFrom, leadFilterTo]);
 
   /** Comparison function for sorting leads based on selected criteria */
   const compareLeads = useCallback((a, b) => {
     if (leadSortBy === "priority") {
-      // Sort by priority value (ascending, lower number = higher priority)
-      // Then by date ascending as a tie-breaker
+
+
       const priorityDiff = leadPriorityValue(a.status) - leadPriorityValue(b.status);
       if (priorityDiff !== 0) return priorityDiff;
       try {
-          // Ensure valid dates before comparing
+
           const dateA = new Date(a.createdAt);
           const dateB = new Date(b.createdAt);
           if (isNaN(dateA.getTime()) || isNaN(dateB.getTime())) return 0;
           return dateA.getTime() - dateB.getTime();
       } catch(e) { return 0; }
     } else {
-      // Sort by creation date ascending (oldest first)
+
       try {
-          // Ensure valid dates before comparing
+
           const dateA = new Date(a.createdAt);
           const dateB = new Date(b.createdAt);
           if (isNaN(dateA.getTime()) || isNaN(dateB.getTime())) return 0;
           return dateA.getTime() - dateB.getTime();
       } catch(e) { return 0; }
     }
-  }, [leadSortBy]); // Dependency: sort criteria state
+  }, [leadSortBy]);
 
   /** Populates the editing form state for a lead. */
   const handleEditLead = useCallback((lead) => {
@@ -724,10 +724,10 @@ export default function Dashboard() {
     setEditLeadMessage(lead.message);
     setEditLeadStatus(lead.status);
     setEditLeadSource(lead.source || "");
-    setEditLeadNLP(""); // Clear NLP field when starting edit
-    setNewConversationText(""); // Clear conversation field
+    setEditLeadNLP("");
+    setNewConversationText("");
 
-    // Format appointmentDateTime for the datetime-local input if it exists
+
     if (lead.appointmentDateTime) {
         try {
             const apptDate = new Date(lead.appointmentDateTime);
@@ -739,20 +739,20 @@ export default function Dashboard() {
                 const minutes = apptDate.getMinutes().toString().padStart(2, '0');
                 setEditLeadAppointmentDateTime(`${year}-${month}-${day}T${hours}:${minutes}`);
             } else {
-                 setEditLeadAppointmentDateTime(""); // Clear if date is invalid
+                 setEditLeadAppointmentDateTime("");
             }
         } catch {
-            setEditLeadAppointmentDateTime(""); // Clear on error
+            setEditLeadAppointmentDateTime("");
         }
     } else {
-        setEditLeadAppointmentDateTime(""); // Clear if no appointment date
+        setEditLeadAppointmentDateTime("");
     }
 
-    // Expand the lead being edited and collapse others
+
     setLeads((prevLeads) =>
       prevLeads.map((l) => ({ ...l, expanded: l.id === lead.id }))
     );
-  }, [setEditingLeadId, setEditLeadFullName, setEditLeadPhone, setEditLeadMessage, setEditLeadStatus, setEditLeadSource, setEditLeadNLP, setNewConversationText, setEditLeadAppointmentDateTime, setLeads]); // Dependencies: all relevant state setters
+  }, [setEditingLeadId, setEditLeadFullName, setEditLeadPhone, setEditLeadMessage, setEditLeadStatus, setEditLeadSource, setEditLeadNLP, setNewConversationText, setEditLeadAppointmentDateTime, setLeads]);
 
   /** Creates a follow-up task from lead edit form. Adds task to state. */
   const handleLeadNLPSubmit = useCallback((leadId) => {
@@ -767,12 +767,12 @@ export default function Dashboard() {
       title: `מעקב ${lead.fullName}: ${parsedDetails.title}`,
       subtitle: editLeadNLP,
       createdAt: new Date(),
-      // --- ADDED creatorId ---
-      creatorId: "current-user-placeholder" // Replace later
+
+      creatorId: "current-user-placeholder"
     };
     setTasks((prevTasks) => [...prevTasks, newTask]);
     setEditLeadNLP("");
-  }, [editLeadNLP, leads, parseTaskFromText, setTasks, setEditLeadNLP]); // Added state setters
+  }, [editLeadNLP, leads, parseTaskFromText, setTasks, setEditLeadNLP]);
 
   /** Saves the edited lead details back to the main leads state. Creates task if needed. */
   const handleSaveLead = useCallback((e, leadId) => {
@@ -793,33 +793,33 @@ export default function Dashboard() {
           expanded: false,
       } : l))
     );
-    // Auto-create task
+
     if (originalLead?.status !== 'תור נקבע' && editLeadStatus === 'תור נקבע' && appointmentDate) {
         const newTask = {
             id: `task-appt-${leadId}-${Date.now()}`, assignTo: "עצמי", title: `פגישת ייעוץ - ${editLeadFullName}`,
             subtitle: `נקבעה פגישה מליד ${leadId}`, priority: "רגיל", category: "לקבוע סדרה",
             dueDate: appointmentDate, done: false, completedBy: null, completedAt: null, createdAt: new Date(),
-            // --- ADDED creatorId ---
-            creatorId: "current-user-placeholder" // Replace later
+
+            creatorId: "current-user-placeholder"
         };
         setTasks((prevTasks) => [...prevTasks, newTask]);
         console.log("Auto-created task for appointment:", newTask);
     }
     setEditingLeadId(null);
     setEditLeadAppointmentDateTime("");
-  }, [ leads, editLeadFullName, editLeadPhone, editLeadMessage, editLeadStatus, editLeadSource, editLeadAppointmentDateTime, setTasks, setLeads, setEditingLeadId, setEditLeadAppointmentDateTime ]); // Added state setters
+  }, [ leads, editLeadFullName, editLeadPhone, editLeadMessage, editLeadStatus, editLeadSource, editLeadAppointmentDateTime, setTasks, setLeads, setEditingLeadId, setEditLeadAppointmentDateTime ]);
 
   /** Collapses a lead's detailed/editing view. */
   const handleCollapseLead = useCallback((leadId) => {
     setLeads((prevLeads) =>
       prevLeads.map((l) => (l.id === leadId ? { ...l, expanded: false } : l))
     );
-    // If this was the lead being edited, exit editing mode
+
     if (editingLeadId === leadId) {
       setEditingLeadId(null);
-      setEditLeadAppointmentDateTime(""); // Clear appointment date form state
+      setEditLeadAppointmentDateTime("");
     }
-  }, [editingLeadId, setLeads, setEditingLeadId, setEditLeadAppointmentDateTime]); // Added dependencies
+  }, [editingLeadId, setLeads, setEditingLeadId, setEditLeadAppointmentDateTime]);
 
   /** Adds a new entry to a lead's conversation summary. */
   const handleAddConversation = useCallback((leadId) => {
@@ -831,45 +831,45 @@ export default function Dashboard() {
             text: newConversationText,
             timestamp: new Date(),
           };
-          // Add new entry to the beginning of the summary array
+
           const updatedSummaries = [newEntry, ...(l.conversationSummary || [])];
           return { ...l, conversationSummary: updatedSummaries };
         }
         return l;
       })
     );
-    setNewConversationText(""); // Clear input field
-    // Keep the conversation input area visible after adding
+    setNewConversationText("");
+
     setShowConvUpdate(leadId);
-  }, [newConversationText, setLeads, setNewConversationText, setShowConvUpdate]); // Added dependencies
+  }, [newConversationText, setLeads, setNewConversationText, setShowConvUpdate]);
 
   /** Handles submission of the Add New Lead modal form. */
   const handleAddNewLead = useCallback((e) => {
       e.preventDefault();
-      // Basic validation
+
       if (!newLeadFullName.trim() || !newLeadPhone.trim()) {
-          alert("אנא מלא שם מלא ומספר טלפון."); // Replace alert with a better notification later
+          alert("אנא מלא שם מלא ומספר טלפון.");
           return;
       }
 
-      // Create new lead object
+
       const newLead = {
-          id: `lead-${Date.now()}`, // Simple unique ID
+          id: `lead-${Date.now()}`,
           createdAt: new Date(),
           fullName: newLeadFullName.trim(),
           phoneNumber: newLeadPhone.trim(),
           message: newLeadMessage.trim(),
           status: newLeadStatus,
           source: newLeadSource.trim(),
-          conversationSummary: [], // Start with empty history
+          conversationSummary: [],
           expanded: false,
-          appointmentDateTime: null, // Initialize appointment date as null
+          appointmentDateTime: null,
       };
 
-      // Add lead to the beginning of the list
+
       setLeads(prevLeads => [newLead, ...prevLeads]);
 
-      // Reset form fields and close modal
+
       setNewLeadFullName("");
       setNewLeadPhone("");
       setNewLeadMessage("");
@@ -880,22 +880,22 @@ export default function Dashboard() {
   }, [
       newLeadFullName, newLeadPhone, newLeadMessage,
       newLeadStatus, newLeadSource,
-      setLeads, setNewLeadFullName, setNewLeadPhone, setNewLeadMessage, setNewLeadStatus, setNewLeadSource, setShowAddLeadModal // Added dependencies
+      setLeads, setNewLeadFullName, setNewLeadPhone, setNewLeadMessage, setNewLeadStatus, setNewLeadSource, setShowAddLeadModal
   ]);
 
 
-  // ---------------------------\
-  // Drag & Drop Handlers
-  // ---------------------------
+
+
+
   const handleDragStart = useCallback((event) => { setActiveId(event.active.id); }, [setActiveId]);
   const handleDragEnd = useCallback((event) => {
     const { active, over } = event;
     setActiveId(null);
     if (!over || !active || active.id === over.id) { return; }
-    const activeId = active.id; // This is the ID from SortableItem (e.g., 'task-task-1')
+    const activeId = active.id;
     const overId = over.id;
 
-    // --- FIX: Strip prefix before finding task ---
+
     const activeTaskId = typeof activeId === 'string' && activeId.startsWith('task-') ? activeId.replace('task-', '') : null;
     if (!activeTaskId) {
       console.error("Dragged item ID is not a valid task ID:", activeId);
@@ -907,7 +907,7 @@ export default function Dashboard() {
         return;
     }
 
-    // Case 1: Dropping onto Calendar
+
     if (overId === "calendar-dropzone") {
       console.log(`Task ${activeId} dropped on Calendar`);
       const currentDueDate = new Date(activeTask.dueDate);
@@ -918,18 +918,18 @@ export default function Dashboard() {
       return;
     }
 
-    // Case 2: Moving Task Between/Within Columns
+
     const overContainerId = over.data?.current?.sortable?.containerId;
     const activeContainerId = active.data?.current?.sortable?.containerId;
     if (activeContainerId && overContainerId && activeContainerId !== overContainerId) {
-        // Moving task to a different category column (Kanban View)
+
         console.log(`Moving task ${activeId} to category ${overContainerId}`);
         if (taskCategories.includes(overContainerId)) {
             setTasks((prevTasks) => prevTasks.map((task) => task.id === activeTask.id ? { ...task, category: overContainerId } : task ));
         }
     } else if (activeId !== overId) {
-        // Reordering task within the same column/list
-        // --- FIX: Strip prefix before finding index ---
+
+
         const overTaskId = typeof overId === 'string' && overId.startsWith('task-') ? overId.replace('task-', '') : null;
         const oldIndex = tasks.findIndex((t) => t.id === activeTaskId);
         const newIndex = tasks.findIndex((t) => t.id === overTaskId);
@@ -942,68 +942,68 @@ export default function Dashboard() {
              console.warn("Could not find indices for reordering:", activeId, overId);
         }
     }
-  }, [tasks, selectedDate, isTMFullView, setTasks, setUserHasSortedTasks, setActiveId]); // Added dependencies
+  }, [tasks, selectedDate, isTMFullView, setTasks, setUserHasSortedTasks, setActiveId]);
 
-  // --- End of Section 4 ---
 
-// ========================================================================
-// SECTION 4.5: Memoized Calculations (Derived State) - COMPLETE
-// ========================================================================
-// Note: Place this section AFTER Section 4 (Handlers) and BEFORE Section 5 (JSX Return)
 
-// Memoize the filtered and potentially sorted tasks list
+
+
+
+
+
+
 const sortedAndFilteredTasks = useMemo(() => {
   const lowerSearchTerm = taskSearchTerm.toLowerCase();
-  // Start with the raw tasks from state
+
   let filtered = tasks.filter((task) => {
-      // Apply assignee filter
+
       const assigneeMatch = taskFilter === "הכל" ||
-                            (taskFilter === "שלי" && task.assignTo === "עצמי") || // Assuming "עצמי" means "Mine"
+                            (taskFilter === "שלי" && task.assignTo === "עצמי") ||
                             (taskFilter === "אחרים" && task.assignTo !== "עצמי");
-      // Apply done status filter
+
       const doneMatch = showDoneTasks || !task.done;
-      // Apply priority filter
+
       const priorityMatch = taskPriorityFilter === 'all' || task.priority === taskPriorityFilter;
-      // Apply category filter (if any categories are selected)
+
       const categoryMatch = selectedTaskCategories.length === 0 || selectedTaskCategories.includes(task.category);
-      // Apply search term filter (check title and subtitle)
+
       const searchTermMatch = !lowerSearchTerm ||
                               task.title.toLowerCase().includes(lowerSearchTerm) ||
                               (task.subtitle && task.subtitle.toLowerCase().includes(lowerSearchTerm));
 
-      // Task must match all filters
+
       return assigneeMatch && doneMatch && priorityMatch && categoryMatch && searchTermMatch;
   });
 
-  // Apply sorting:
-  // - Default sort (by due date, done tasks last) unless user has manually sorted the compact list
-  // - Always sort Kanban view by due date
+
+
+
   if (!userHasSortedTasks || isTMFullView) {
       filtered = filtered.sort((a, b) => {
-          // Sort done tasks to the bottom
-          // Ensure 'done' field exists and is boolean, default to false if missing/invalid
+
+
           const aIsDone = typeof a.done === 'boolean' ? a.done : false;
           const bIsDone = typeof b.done === 'boolean' ? b.done : false;
           if (aIsDone !== bIsDone) return aIsDone ? 1 : -1;
 
-          // Then sort by due date (ascending, nulls/invalid dates last)
+
           try {
-              // Handle potential null/undefined or invalid dates gracefully
+
               const dateA = a.dueDate instanceof Date && !isNaN(a.dueDate) ? a.dueDate.getTime() : Infinity;
               const dateB = b.dueDate instanceof Date && !isNaN(b.dueDate) ? b.dueDate.getTime() : Infinity;
 
-              if (dateA === Infinity && dateB === Infinity) return 0; // Both invalid/null
-              if (dateA === Infinity) return 1; // Put tasks without valid date last
+              if (dateA === Infinity && dateB === Infinity) return 0;
+              if (dateA === Infinity) return 1;
               if (dateB === Infinity) return -1;
-              return dateA - dateB; // Sort valid dates ascending
+              return dateA - dateB;
           } catch(e) {
-              console.error("Error during task date sort:", e); // Log error if date comparison fails
-              return 0; // Fallback sort
+              console.error("Error during task date sort:", e);
+              return 0;
           }
       });
   }
-  // If userHasSortedTasks is true and it's compact view, 'filtered' remains in the manually dragged order
-  // (assuming setTasks in handleDragEnd uses arrayMove correctly)
+
+
 
   return filtered;
 }, [
@@ -1011,76 +1011,76 @@ const sortedAndFilteredTasks = useMemo(() => {
     taskPriorityFilter, selectedTaskCategories, taskSearchTerm
 ]);
 
-// Memoize the events array for the calendar component
+
 const events = useMemo(() => {
-  // Map valid tasks to calendar event objects
+
   const taskEvents = tasks
-      .filter(t => t.dueDate instanceof Date && !isNaN(t.dueDate)) // Ensure dueDate is a valid Date
+      .filter(t => t.dueDate instanceof Date && !isNaN(t.dueDate))
       .map((t) => {
           let start = t.dueDate;
-          // Set a default duration (e.g., 1 hour) for tasks on the calendar
+
           let end = new Date(start.getTime() + 60 * 60 * 1000);
           return {
-              id: `task-${t.id}`, // Prefix ID to avoid collisions with leads
+              id: `task-${t.id}`,
               title: `משימה: ${t.title}`,
               start,
               end,
-              resource: { type: 'task', data: t }, // Store original task data
-              // Pass done status for potential styling in eventPropGetter if needed
+              resource: { type: 'task', data: t },
+
               isDone: typeof t.done === 'boolean' ? t.done : false
           };
       });
 
-  // Map valid lead appointments to calendar event objects
+
   const leadAppointmentEvents = leads
-      .filter(l => l.status === 'תור נקבע' && l.appointmentDateTime) // Check if date exists
+      .filter(l => l.status === 'תור נקבע' && l.appointmentDateTime)
       .map(l => {
             let start, end;
             try {
-                start = new Date(l.appointmentDateTime); // Try parsing ISO string
+                start = new Date(l.appointmentDateTime);
                 if (isNaN(start.getTime())) throw new Error("Invalid start date");
-                end = new Date(start.getTime() + 60 * 60 * 1000); // Assume 1 hour appointment
-            } catch (error) { return null; } // Skip invalid leads
+                end = new Date(start.getTime() + 60 * 60 * 1000);
+            } catch (error) { return null; }
 
             return {
-                id: `lead-${l.id}`, // Prefix ID
+                id: `lead-${l.id}`,
                 title: `פגישה: ${l.fullName}`,
                 start,
                 end,
-                resource: { type: 'lead', data: l } // Store original lead data
+                resource: { type: 'lead', data: l }
             };
         })
-      .filter(event => event !== null); // Filter out nulls from invalid dates
+      .filter(event => event !== null);
 
-  // Combine and return events
+
   return [...taskEvents, ...leadAppointmentEvents];
-}, [tasks, leads]); // Dependencies: tasks and leads arrays
+}, [tasks, leads]);
 
-// Memoize the filtered and sorted leads list including search
+
 const leadsSorted = useMemo(() => {
     const lowerSearchTerm = leadSearchTerm.toLowerCase();
     return leads
-        .filter(isLeadInTimeRange) // Apply time filter first
-        .filter(lead => { // Then apply search term filter
-            if (!lowerSearchTerm) return true; // No search term means match all
-            // Check various fields for the search term
+        .filter(isLeadInTimeRange)
+        .filter(lead => {
+            if (!lowerSearchTerm) return true;
+
             return (
                 lead.fullName?.toLowerCase().includes(lowerSearchTerm) ||
-                lead.phoneNumber?.includes(lowerSearchTerm) || // Phone number might not need lowercasing
+                lead.phoneNumber?.includes(lowerSearchTerm) ||
                 lead.message?.toLowerCase().includes(lowerSearchTerm) ||
                 lead.source?.toLowerCase().includes(lowerSearchTerm) ||
                 lead.status?.toLowerCase().includes(lowerSearchTerm)
             );
         })
-        .sort(compareLeads); // Finally, sort the filtered results
-}, [ leads, leadSearchTerm, isLeadInTimeRange, compareLeads ]); // Dependencies
+        .sort(compareLeads);
+}, [ leads, leadSearchTerm, isLeadInTimeRange, compareLeads ]);
 
-// --- Analytics Calculations ---
+
 const calculatedAnalytics = useMemo(() => {
     const now = moment();
     let startDate, endDate = now.clone().endOf('day');
 
-    // Determine date range based on filter
+
     switch(analyticsTimeFilter) {
         case 'week': startDate = now.clone().subtract(6, 'days').startOf('day'); break;
         case 'month': startDate = now.clone().startOf('month').startOf('day'); break;
@@ -1092,23 +1092,23 @@ const calculatedAnalytics = useMemo(() => {
             try {
                 startDate = analyticsFilterFrom ? moment(analyticsFilterFrom).startOf('day') : null;
                 endDate = analyticsFilterTo ? moment(analyticsFilterTo).endOf('day') : now.clone().endOf('day');
-                // Validate and potentially swap dates
+
                 if (startDate && !startDate.isValid()) startDate = null;
                 if (endDate && !endDate.isValid()) endDate = now.clone().endOf('day');
                 if (startDate && endDate && startDate.isAfter(endDate)) [startDate, endDate] = [endDate, startDate];
             } catch (e) { console.error("Error parsing custom dates for analytics", e); return null; }
             break;
-        default: // Default to 'month' if filter is invalid
+        default:
              startDate = now.clone().startOf('month').startOf('day');
     }
 
-    // Filter leads based on the determined date range
+
     const filteredLeads = leads.filter(lead => {
         try {
-            // Ensure createdAt is a valid JS Date
+
             const createdAt = lead.createdAt instanceof Date && !isNaN(lead.createdAt) ? lead.createdAt : null;
             if (!createdAt) return false;
-            // Use moment for reliable date comparisons
+
             const leadMoment = moment(createdAt);
             const startCheck = startDate ? leadMoment.isSameOrAfter(startDate) : true;
             const endCheck = endDate ? leadMoment.isSameOrBefore(endDate) : true;
@@ -1117,39 +1117,39 @@ const calculatedAnalytics = useMemo(() => {
     });
 
     const totalLeads = filteredLeads.length;
-    // Basic structure for analytics data
+
     const baseAnalytics = {
          totalLeads: 0, statusCounts: {}, sourceCounts: {}, leadsPerDay: 0, conversionRate: 0, avgAnswerTimeHours: 'N/A', graphData: [], range: { start: startDate?.format('DD/MM/YY'), end: endDate?.format('DD/MM/YY') }
     };
 
     if (totalLeads === 0) {
-        return baseAnalytics; // Return default structure if no leads match
+        return baseAnalytics;
     }
 
-    // Calculate metrics
+
     const statusCounts = filteredLeads.reduce((acc, lead) => { acc[lead.status] = (acc[lead.status] || 0) + 1; return acc; }, {});
     const sourceCounts = filteredLeads.reduce((acc, lead) => { const source = lead.source || "לא ידוע"; acc[source] = (acc[source] || 0) + 1; return acc; }, {});
-    const daysInRange = startDate ? Math.max(1, endDate.diff(startDate, 'days') + 1) : 1; // Avoid division by zero
+    const daysInRange = startDate ? Math.max(1, endDate.diff(startDate, 'days') + 1) : 1;
     const leadsPerDay = totalLeads / daysInRange;
     const convertedCount = filteredLeads.filter(l => l.status === 'תור נקבע' || l.status === 'בסדרת טיפולים').length;
     const conversionRate = (convertedCount / totalLeads) * 100;
 
-    // Calculate average answer time (first conversation entry - lead creation)
+
     let totalAnswerTimeMs = 0, leadsWithAnswer = 0, avgAnswerTimeString = 'N/A';
     filteredLeads.forEach(lead => {
-        // Ensure conversationSummary exists and has entries, and createdAt is valid
+
         if (Array.isArray(lead.conversationSummary) && lead.conversationSummary.length > 0 && lead.createdAt instanceof Date && !isNaN(lead.createdAt)) {
             try {
-                // Find the timestamp of the *earliest* interaction (assuming sorted chronologically or finding min)
-                // Let's assume the array is sorted newest first as per handleAddConversation logic (using arrayUnion appends)
-                // So the *last* element is the first interaction.
+
+
+
                 const firstInteractionEntry = lead.conversationSummary[lead.conversationSummary.length - 1];
-                // Ensure timestamp is a valid JS Date
+
                 const firstInteractionTime = firstInteractionEntry.timestamp instanceof Date && !isNaN(firstInteractionEntry.timestamp) ? firstInteractionEntry.timestamp : null;
 
                 if (firstInteractionTime) {
                     const diffMs = firstInteractionTime.getTime() - lead.createdAt.getTime();
-                    if (diffMs >= 0) { // Ensure interaction is not before creation
+                    if (diffMs >= 0) {
                          totalAnswerTimeMs += diffMs;
                          leadsWithAnswer++;
                     }
@@ -1163,11 +1163,11 @@ const calculatedAnalytics = useMemo(() => {
         avgAnswerTimeString = hours < 48 ? `${hours.toFixed(1)} שעות` : `${(hours / 24).toFixed(1)} ימים`;
     }
 
-    // Prepare data for the graph (Leads Received per Day)
+
     const graphDataMap = new Map();
     if (startDate && endDate) {
         let currentDate = startDate.clone();
-        while(currentDate.isSameOrBefore(endDate, 'day')) { // Iterate through each day in the range
+        while(currentDate.isSameOrBefore(endDate, 'day')) {
              graphDataMap.set(currentDate.format('YYYY-MM-DD'), 0);
              currentDate.add(1, 'day');
         }
@@ -1184,10 +1184,10 @@ const calculatedAnalytics = useMemo(() => {
         } catch(e) { /* ignore errors during graph data mapping */ }
     });
     const graphData = Array.from(graphDataMap.entries())
-        .map(([name, received]) => ({ name: moment(name).format('MMM D'), received })) // Format date for X-axis
-        .sort((a, b) => moment(a.name, 'MMM D').valueOf() - moment(b.name, 'MMM D').valueOf()); // Sort by date
+        .map(([name, received]) => ({ name: moment(name).format('MMM D'), received }))
+        .sort((a, b) => moment(a.name, 'MMM D').valueOf() - moment(b.name, 'MMM D').valueOf());
 
-    // Return the final calculated data
+
     return {
         totalLeads, statusCounts, sourceCounts,
         leadsPerDay: leadsPerDay.toFixed(1),
@@ -1197,36 +1197,36 @@ const calculatedAnalytics = useMemo(() => {
         range: { start: startDate?.format('DD/MM/YY'), end: endDate?.format('DD/MM/YY') }
     };
 
-}, [leads, analyticsTimeFilter, analyticsFilterFrom, analyticsFilterTo]); // Dependencies
-
-  // ========================================================================
-  // SECTION 5: JSX Rendering - COMPLETE (V4.6.2 - Calendar Syntax REALLY FIXED)
-  // ========================================================================
-
-  // Helper functions defined in Section 1 or globally
-  // Note: Removing duplicate definitions that were in V4.5 JSX
-  // const isTaskOverdue = (task) => { ... };
-  // const isTaskOverdue12h = (task) => { ... };
+}, [leads, analyticsTimeFilter, analyticsFilterFrom, analyticsFilterTo]);
 
 
-  // Avoid rendering until the component is mounted to prevent hydration mismatches
+
+
+
+
+
+
+
+
+
+
   if (!mounted) {
     return ( <div className="flex items-center justify-center min-h-screen">טוען...</div> );
   }
 
-  // NOTE: V4.5 code doesn't have Auth state, so no Auth/Pending checks here.
-  // We will add those back when integrating Firebase later.
 
 
-  // --- Main Dashboard Content ---
-  // Find the task object currently being dragged (for DragOverlay visual)
-  // Ensure the ID format matches how it's set in SortableItem ('task-${task.id}')
+
+
+
+
+
   const activeTaskForOverlay = activeId && typeof activeId === 'string' && activeId.startsWith('task-')
-     ? tasks.find(task => `task-${task.id}` === activeId) // Match prefixed ID
+     ? tasks.find(task => `task-${task.id}` === activeId)
      : null;
 
   return (
-    // Use TooltipProvider for tooltips used outside the lists
+
     <TooltipProvider>
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={handleDragStart} onDragEnd={handleDragEnd} >
         {/* Header */}
@@ -1235,15 +1235,15 @@ const calculatedAnalytics = useMemo(() => {
             <div className="flex-grow text-center">
                  {/* Using next/image */}
                  <Image
-                   src="/logo.png" // Use logo from public folder
+                   src="/logo.png"
                    alt="Logo"
-                 width={140} height={56} // Added width/height
-                   className="h-14 inline-block" // Size from V4.5
+                 width={140} height={56}
+                   className="h-14 inline-block"
                    onError={(e) => { e.target.onerror = null; e.target.src='https://placehold.co/140x56/eeeeee/aaaaaa?text=Logo+Error'; }}
                  />
             </div>
             <div className="text-sm text-gray-500 w-48 text-left flex items-center justify-end gap-4">
-                <span>{'Version 4.6.2'}</span> {/* Updated Version */}
+                <span>{'Version 4.6.4'}</span> {/* Updated Version */}
                  {/* No Logout Button in V4.5 */}
             </div>
         </header>
@@ -1327,7 +1327,7 @@ const calculatedAnalytics = useMemo(() => {
               </CardHeader>
               <CardContent className="flex-grow overflow-hidden">
                 {isTMFullView ? (
-                  // --- Kanban View ---
+
                   <div className={`grid grid-cols-1 md:grid-cols-3 lg:grid-cols-${Math.max(1, taskCategories.length)} gap-3 h-[calc(100vh-340px)] overflow-x-auto`}>
                     {taskCategories.map((category) => {
                       const categoryTasks = sortedAndFilteredTasks.filter(task => task.category === category);
@@ -1346,13 +1346,13 @@ const calculatedAnalytics = useMemo(() => {
                               {categoryTasks.map((task) => {
                                 const overdue = isTaskOverdue(task);
                                 const overdue12h = isTaskOverdue12h(task);
-                                // Condition for showing reply button (using placeholder logic for V4.6)
-                                const canReply = !task.done && task.creatorId && task.creatorId !== "current-user-placeholder"; // Adjust when auth is added
-                                // Debug log for edit form rendering
+
+                                const canReply = !task.done && task.creatorId && task.creatorId !== "current-user-placeholder";
+
                                 if (editingTaskId === task.id) { console.log('Rendering EDIT form for task (Kanban):', task.id); }
                                 return (
                                   editingTaskId === task.id ? (
-                                    // --- Task Edit Form (Kanban - V4.5 structure) ---
+
                                     <li key={`edit-${task.id}`} className="p-3 border rounded bg-blue-50 shadow-md">
                                        <form onSubmit={handleSaveTask} className="space-y-2">
                                            {/* V4.5 Edit Form Fields (No Assignee Dropdown Yet) */}
@@ -1380,7 +1380,7 @@ const calculatedAnalytics = useMemo(() => {
                                        </form>
                                     </li>
                                   ) : (
-                                    // --- Regular Task Item Display (Kanban - V4.6) ---
+
                                     <SortableItem key={task.id} id={`task-${task.id}`}>
                                       <div className={`p-2 border rounded shadow-sm cursor-grab active:cursor-grabbing ${task.done ? 'bg-gray-200 opacity-75' : 'bg-white'} ${overdue ? 'border-l-4 border-red-500' : 'border-l-4 border-transparent'} ${overdue12h ? 'animate-pulse bg-yellow-50' : ''}`}>
                                         <div className="flex items-start space-x-3 space-x-reverse">
@@ -1422,20 +1422,20 @@ const calculatedAnalytics = useMemo(() => {
                     })}
                   </div>
                 ) : (
-                  // --- Compact List View ---
+
                   <SortableContext items={sortedAndFilteredTasks.map((t) => `task-${t.id}`)} strategy={verticalListSortingStrategy}>
                     <ul className="space-y-3 h-[calc(100vh-340px)] overflow-y-auto pr-2">
                       {sortedAndFilteredTasks.length === 0 && (<li className="text-center text-gray-500 py-4">{'אין משימות להצגה'}</li>)}
                       {sortedAndFilteredTasks.map((task) => {
                         const overdue = isTaskOverdue(task);
                         const overdue12h = isTaskOverdue12h(task);
-                         // Condition for showing reply button (using placeholder logic for V4.6)
-                         const canReply = !task.done && task.creatorId && task.creatorId !== "current-user-placeholder"; // Adjust when auth is added
-                         // Debug log for edit form rendering
+
+                         const canReply = !task.done && task.creatorId && task.creatorId !== "current-user-placeholder";
+
                          if (editingTaskId === task.id) { console.log('Rendering EDIT form for task (Compact):', task.id); }
                         return (
                           editingTaskId === task.id ? (
-                             // --- Task Edit Form (Compact List - V4.5 structure) ---
+
                             <li key={`edit-${task.id}`} className="p-3 border rounded bg-blue-50 shadow-md">
                                <form onSubmit={handleSaveTask} className="space-y-2">
                                    {/* V4.5 Edit Form Fields (No Assignee Dropdown Yet) */}
@@ -1468,7 +1468,7 @@ const calculatedAnalytics = useMemo(() => {
                                </form>
                             </li>
                           ) : (
-                            // --- Normal Task Item Display (Compact View - V4.6) ---
+
                             <SortableItem key={task.id} id={`task-${task.id}`}>
                                <div className={`flex items-start space-x-3 space-x-reverse p-2 border rounded shadow-sm cursor-grab active:cursor-grabbing ${task.done ? 'bg-gray-100 opacity-70' : 'bg-white'} ${overdue ? 'border-l-4 border-red-500' : 'border-l-4 border-transparent'} ${overdue12h ? 'animate-pulse bg-yellow-50' : ''}`}>
                                 <Checkbox checked={!!task.done} onCheckedChange={() => toggleTaskDone(task.id)} id={`task-compact-${task.id}`} className="mt-1 shrink-0" aria-label={`Mark task ${task.title}`} />
@@ -1544,15 +1544,22 @@ const calculatedAnalytics = useMemo(() => {
                  <div className="h-[calc(100vh-300px)] min-h-[400px]">
                    {/* Assuming DroppableCalendar wraps BigCalendar */}
                    <DroppableCalendar
+                scrollToTime={new Date()}
+                eventPropGetter={() => ({
+                  style: { textAlign: "right" }
+                })}
                        id="calendar-dropzone"
                        localizer={localizer}
                        events={events}
                        view={view}
                        date={selectedDate}
                        onNavigate={setSelectedDate}
-                       onView={setView}
+                       onView={(newView) => {
+                  setView(newView);
+                  localStorage.setItem("calendarView", newView);
+                }}
                        onSelectEvent={event => {
-                           // Find the original task data from the resource
+
                            const taskId = event.id.startsWith('task-') ? event.id.replace('task-', '') : null;
                            const taskData = taskId ? tasks.find(t => t.id === taskId) : null;
                            if (taskData) {
@@ -1571,9 +1578,11 @@ const calculatedAnalytics = useMemo(() => {
                        style={{ height: '100%' }}
                        className="rbc-calendar-rtl"
                        selectable={true}
-                       eventPropGetter={(event) => ({ // Style events based on done status
+                       eventPropGetter={(event) => ({
                            style: {
-                               backgroundColor: event.resource?.type === 'task' ? (event.isDone ? '#a1a1aa' : '#3b82f6') : '#10b981', // Gray for done tasks, blue for pending, green for leads
+                            textAlign: "right",
+                            direction: "rtl",
+                              backgroundColor: event.resource?.type === 'task' ? (event.isDone ? '#a1a1aa' : '#3b82f6') : '#10b981',
                                opacity: event.resource?.type === 'task' && event.isDone ? 0.7 : 1,
                                borderRadius: '5px',
                                color: 'white', border: '0px', display: 'block'
@@ -1652,7 +1661,7 @@ const calculatedAnalytics = useMemo(() => {
                <CardContent className="flex-grow overflow-hidden">
                  {/* Leads Content: Table View or Compact List View */}
                  {isFullView ? (
-                    // Full Table View
+
                     <div className="overflow-auto h-[calc(100vh-400px)] min-h-[300px]">
                         <table className="w-full table-fixed text-sm border-collapse">
                            <thead className="sticky top-0 bg-gray-100 z-10">
@@ -1758,7 +1767,7 @@ const calculatedAnalytics = useMemo(() => {
                         </table>
                     </div>
                  ) : (
-                    // Compact List View
+
                     <ul className="space-y-2 h-[calc(100vh-280px)] min-h-[400px] overflow-y-auto pr-1">
                         {leadsSorted.length === 0 && (<li className="text-center text-gray-500 py-6">{'אין לידים להצגה'}</li>)}
                         {leadsSorted.map((lead) => {
@@ -1932,15 +1941,15 @@ const calculatedAnalytics = useMemo(() => {
                  <div className="overflow-y-auto flex-grow mb-4 border rounded p-2 bg-gray-50">
                      <ul className="space-y-2">
                          {tasks
-                           .filter(task => task.done && task.completedAt) // Filter for completed tasks
-                           .sort((a, b) => new Date(b.completedAt).getTime() - new Date(a.completedAt).getTime()) // Sort by completion date desc
+                           .filter(task => task.done && task.completedAt)
+                           .sort((a, b) => new Date(b.completedAt).getTime() - new Date(a.completedAt).getTime())
                            .map(task => {
-                             // Calculate duration if possible
+
                              let duration = "";
                              if (task.completedAt && task.createdAt) {
                                  try {
                                      const durationMs = new Date(task.completedAt).getTime() - new Date(task.createdAt).getTime();
-                                     duration = formatDuration(durationMs); // Use the helper function
+                                     duration = formatDuration(durationMs);
                                  } catch { duration = "N/A"; }
                              }
                              return (
@@ -2036,7 +2045,7 @@ const calculatedAnalytics = useMemo(() => {
         {/* Renders a custom preview of the item being dragged */}
         <DragOverlay dropAnimation={null}>
             {activeId && activeTaskForOverlay ? (
-                // Render a simplified version of the task item for the overlay
+
                 <div className="p-2 border rounded shadow-xl bg-white opacity-90">
                    {/* Simplified Task Item structure for overlay */}
                    <div className="flex items-start space-x-3 space-x-reverse">
@@ -2056,8 +2065,8 @@ const calculatedAnalytics = useMemo(() => {
             ) : null}
         </DragOverlay>
 
-      </DndContext> 
-    </TooltipProvider> 
-  ); 
+      </DndContext>
+    </TooltipProvider>
+  );
 
-} 
+}
