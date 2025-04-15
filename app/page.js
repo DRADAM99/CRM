@@ -1243,7 +1243,7 @@ const calculatedAnalytics = useMemo(() => {
                  />
             </div>
             <div className="text-sm text-gray-500 w-48 text-left flex items-center justify-end gap-4">
-                <span>{'Version 4.6.2'}</span> {/* Updated Version */}
+                <span>{'Version 4.6.4'}</span> {/* Updated Version */}
                  {/* No Logout Button in V4.5 */}
             </div>
         </header>
@@ -1544,13 +1544,20 @@ const calculatedAnalytics = useMemo(() => {
                  <div className="h-[calc(100vh-300px)] min-h-[400px]">
                    {/* Assuming DroppableCalendar wraps BigCalendar */}
                    <DroppableCalendar
+                scrollToTime={new Date()}
+                eventPropGetter={() => ({
+                  style: { textAlign: "right" }
+                })}
                        id="calendar-dropzone"
                        localizer={localizer}
                        events={events}
                        view={view}
                        date={selectedDate}
                        onNavigate={setSelectedDate}
-                       onView={setView}
+                       onView={(newView) => {
+                  setView(newView);
+                  localStorage.setItem("calendarView", newView);
+                }}
                        onSelectEvent={event => {
                            // Find the original task data from the resource
                            const taskId = event.id.startsWith('task-') ? event.id.replace('task-', '') : null;
@@ -1573,7 +1580,9 @@ const calculatedAnalytics = useMemo(() => {
                        selectable={true}
                        eventPropGetter={(event) => ({ // Style events based on done status
                            style: {
-                               backgroundColor: event.resource?.type === 'task' ? (event.isDone ? '#a1a1aa' : '#3b82f6') : '#10b981', // Gray for done tasks, blue for pending, green for leads
+                            textAlign: "right",
+                            direction: "rtl", 
+                              backgroundColor: event.resource?.type === 'task' ? (event.isDone ? '#a1a1aa' : '#3b82f6') : '#10b981', // Gray for done tasks, blue for pending, green for leads
                                opacity: event.resource?.type === 'task' && event.isDone ? 0.7 : 1,
                                borderRadius: '5px',
                                color: 'white', border: '0px', display: 'block'
