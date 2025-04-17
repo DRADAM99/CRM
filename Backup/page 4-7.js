@@ -20,15 +20,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Search, RotateCcw, Bell, ChevronDown } from 'lucide-react';
-import NotesAndLinks from "@/components/NotesAndLinks";
-import {
-  collection,
-  getDocs,
-  getDoc,
-  updateDoc,
-  setDoc,
-  doc
-} from "firebase/firestore";
+
 
 import {
   DndContext,
@@ -57,7 +49,6 @@ import 'moment/locale/he';
 
 import { momentLocalizer } from 'react-big-calendar';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
-import { db } from "../firebase";
 
 
 import {
@@ -109,11 +100,7 @@ function isTaskOverdue12h(task) {
   const twelveHours = 12 * 60 * 60 * 1000;
   return now - due > 0 && now - due <= twelveHours;
 }
-const todayAt = (h, m) => {
-  const d = new Date();
-  d.setHours(h, m, 0, 0);
-  return d;
-};
+
 const formatDateTime = (date) => {
   if (!date) return "";
   try {
@@ -157,33 +144,7 @@ const taskPriorities = ["דחוף", "רגיל", "נמוך"];
 
 export default function Dashboard() {
 
-  
-  const [currentUser, setCurrentUser] = useState(null);
-  const [alias, setAlias] = useState("");
-  const [role, setRole] = useState("");
-
-  const handleAliasUpdate = async () => {
-    console.log("Clicked save alias. Current alias:", alias);
-    if (!currentUser) return;
-    const ref = doc(db, "users", currentUser.uid);
-    const snap = await getDoc(ref);
-  
-    if (!snap.exists()) {
-      await setDoc(ref, {
-        email: currentUser.email,
-        alias,
-        role: "staff", // or "pending", if you want approval later
-        createdAt: serverTimestamp(),
-      });
-      console.log("New user doc created with alias:", alias);
-    } else {
-      await updateDoc(ref, { alias });
-      console.log("Alias updated to:", alias);
-    }
-  };
-  
-
-const [selectedDate, setSelectedDate] = useState(new Date());
+  const [selectedDate, setSelectedDate] = useState(new Date());
   const [view, setView] = useState("month");
   const [isFullView, setIsFullView] = useState(false);
   const [mounted, setMounted] = useState(false);
@@ -211,7 +172,7 @@ const [selectedDate, setSelectedDate] = useState(new Date());
 
     { id: 'task-1', assignTo: "עצמי", title: "משימה 1 - לקבוע סדרה", subtitle: "תיאור משימה 1", priority: "רגיל", category: "לקבוע סדרה", dueDate: new Date(new Date().setDate(new Date().getDate() + 1)), done: false, completedBy: null, completedAt: null, createdAt: new Date(new Date().setDate(new Date().getDate() - 1)), creatorId: "creator-A", },
     { id: 'task-2', assignTo: "עצמי", title: "משימה 2 - דוחות (בוצעה)", subtitle: "תיאור משימה 2", priority: "רגיל", category: "דוחות", dueDate: new Date(new Date().setDate(new Date().getDate() - 1)), done: true, completedBy: "creator-B", completedAt: new Date(new Date().setDate(new Date().getDate() - 1)), createdAt: new Date(new Date().setDate(new Date().getDate() - 2)), creatorId: "creator-B", },
-    { id: 'task-3', assignTo: "משתמש אחר", title: "משימה 3 - תשלומים (דחופה)", subtitle: "תיאור משימה 3", priority: "דחוף", category: "תשלומים", dueDate: todayAt(10, 0), done: false, completedBy: null, completedAt: null, createdAt: new Date(new Date().setHours(new Date().getHours() - 5)), creatorId: "creator-A", },
+    { id: 'task-3', assignTo: "משתמש אחר", title: "משימה 3 - תשלומים (דחופה)", subtitle: "תיאור משימה 3", priority: "דחוף", category: "תשלומים", dueDate: new Date(), done: false, completedBy: null, completedAt: null, createdAt: new Date(new Date().setHours(new Date().getHours() - 5)), creatorId: "creator-A", },
     { id: 'task-4', assignTo: "אדם", title: "משימה 4 - להתקשר", subtitle: "משימה עבור אדם", priority: "רגיל", category: "להתקשר", dueDate: new Date(new Date().setDate(new Date().getDate() + 2)), done: false, completedBy: null, completedAt: null, createdAt: new Date(new Date().setDate(new Date().getDate() - 3)), creatorId: "creator-B", },
     { id: 'task-5', assignTo: "עצמי", title: "משימה 5 - אדם", subtitle: "תיאור משימה 5 לאדם", priority: "נמוך", category: "אדם", dueDate: new Date(new Date().setDate(new Date().getDate() + 5)), done: false, completedBy: null, completedAt: null, createdAt: new Date(new Date().setDate(new Date().getDate() - 7)), creatorId: "creator-A", },
     { id: 'task-6', assignTo: "עצמי", title: "משימה 6 - אחר", subtitle: "תיאור משימה 6", priority: "רגיל", category: "אחר", dueDate: new Date(new Date().setDate(new Date().getDate() + 3)), done: false, completedBy: null, completedAt: null, createdAt: new Date(), creatorId: "creator-B", },
@@ -269,20 +230,7 @@ const [selectedDate, setSelectedDate] = useState(new Date());
   const [prefillCategory, setPrefillCategory] = useState(null);
 
 
-  
   const [assignableUsers, setAssignableUsers] = useState([]);
-
-  useEffect(() => {
-    const fetchAssignableUsers = async () => {
-      const snap = await getDocs(collection(db, "users"));
-      setAssignableUsers(snap.docs.map(doc => {
-        const data = doc.data();
-        return { email: data.email || "", alias: data.alias || "", id: doc.id };
-      }));
-    };
-    fetchAssignableUsers();
-  }, []);
-
 
 
   const sensors = useSensors(
@@ -1282,48 +1230,23 @@ const calculatedAnalytics = useMemo(() => {
     <TooltipProvider>
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={handleDragStart} onDragEnd={handleDragEnd} >
         
-      <header dir="rtl" className="flex items-center justify-between p-4 border-b bg-white shadow-sm sticky top-0 z-20 h-[90px]">
-  <div className="w-48 text-right text-sm text-gray-600">{currentDateTime || 'טוען תאריך...'}</div>
-
-  <div className="flex-1 flex items-center justify-center relative">
-    {/* Favorite Links - left of logo */}
-    <div className="absolute right-2 flex gap-2">
-      <NotesAndLinks section="links" />
-    </div>
-
-    <Image
-      src="/logo.png"
-      alt="Logo"
-      width={140}
-      height={56}
-      className="h-14 inline-block"
-    />
-
-    {/* Sticky Notes - right of logo */}
-    <div className="absolute left-0 flex gap-2">
-      <NotesAndLinks section="notes" />
-    </div>
-  </div>
-
-  
-  <div className="w-48 text-left text-sm text-gray-500 flex flex-col justify-end gap-1">
-    <span>{'Version 4.8'}</span>
-    {false && (
-      <div className="text-xs">
-        <input
-          type="text"
-          value={alias}
-          onChange={(e) => setAlias(e.target.value)}
-          placeholder="הכינוי שלך"
-          className="border px-1 py-0.5 w-full rounded text-xs"
-        />
-        <button onClick={handleAliasUpdate} className="text-blue-600 text-xs mt-1">שמור כינוי</button>
-      </div>
-    )}
-  </div>
-
-</header>
-
+        <header dir="rtl" className="flex items-center justify-between p-4 border-b bg-white shadow-sm sticky top-0 z-20 h-[73px]">
+            <div className="text-sm text-gray-600 w-48 text-right"> {currentDateTime || 'טוען תאריך...'} </div>
+            <div className="flex-grow text-center">
+                 
+                 <Image
+                   src="/logo.png"
+                   alt="Logo"
+                 width={140} height={56}
+                   className="h-14 inline-block"
+                   onError={(e) => { e.target.onerror = null; e.target.src = 'https://placehold.co/140x56/eeeeee/aaaaaa?text=Logo+Error'; }}
+                 />
+            </div>
+            <div className="text-sm text-gray-500 w-48 text-left flex items-center justify-end gap-4">
+                <span>{'Version 4.7'}</span> 
+                 
+            </div>
+        </header>
 
         
         <div dir="rtl" className="grid grid-cols-12 gap-4 p-4 bg-gray-50 min-h-[calc(100vh-73px)]">
@@ -1433,19 +1356,7 @@ const calculatedAnalytics = useMemo(() => {
                                     <li key={`edit-${task.id}`} className="p-3 border rounded bg-blue-50 shadow-md">
                                        <form onSubmit={handleSaveTask} className="space-y-2">
                                            
-                                           
-<div>
-  <Label className="text-xs">מוקצה ל:</Label>
-  <select value={editingAssignTo} onChange={(e) => setEditingAssignTo(e.target.value)} className="h-8 text-sm w-full border rounded">
-    <option value="">בחר משתמש</option>
-    {assignableUsers.map((user) => (
-      <option key={user.id} value={user.alias || user.email}>
-        {user.alias || user.email}
-      </option>
-    ))}
-  </select>
-</div>
-
+                                           <div><Label className="text-xs">מוקצה ל:</Label><Input type="text" value={editingAssignTo} onChange={(e) => setEditingAssignTo(e.target.value)} className="h-8 text-sm" required /></div>
                                            <div><Label className="text-xs">כותרת:</Label><Input type="text" value={editingTitle} onChange={(e) => setEditingTitle(e.target.value)} className="h-8 text-sm" required /></div>
                                            <div><Label className="text-xs">תיאור:</Label><Textarea value={editingSubtitle} onChange={(e) => setEditingSubtitle(e.target.value)} rows={2} className="text-sm" /></div>
                                            <div className="flex gap-2">
@@ -1479,7 +1390,7 @@ const calculatedAnalytics = useMemo(() => {
                                               {task.subtitle && (<p className={`text-xs mt-0.5 ${task.done ? "line-through text-gray-400" : "text-gray-600"}`}>{task.subtitle}</p>)}
                                               <div className={`text-xs mt-1 space-x-2 space-x-reverse ${task.done ? 'text-gray-400' : overdue ? 'text-red-600 font-medium' : 'text-gray-500'}`}>
                                                   <span><span role="img" aria-label="Due">🗓️</span> {formatDateTime(task.dueDate)}</span>
-                                                  <span><span role="img" aria-label="Assignee">👤</span> {assignableUsers.find(u => u.email === task.assignTo)?.alias || task.assignTo}</span>
+                                                  <span><span role="img" aria-label="Assignee">👤</span> {task.assignTo}</span>
                                                   <span>{task.priority === 'דחוף' ? '🔥' : task.priority === 'נמוך' ? '⬇️' : '➖'} {task.priority}</span>
                                                   {task.done && task.completedAt && (<span className="text-green-600"><span role="img" aria-label="Done">✅</span> {formatDateTime(task.completedAt)}</span>)}
                                               </div>
@@ -1528,19 +1439,7 @@ const calculatedAnalytics = useMemo(() => {
                             <li key={`edit-${task.id}`} className="p-3 border rounded bg-blue-50 shadow-md">
                                <form onSubmit={handleSaveTask} className="space-y-2">
                                    
-                                   
-<div>
-  <Label className="text-xs">מוקצה ל:</Label>
-  <select value={editingAssignTo} onChange={(e) => setEditingAssignTo(e.target.value)} className="h-8 text-sm w-full border rounded">
-    <option value="">בחר משתמש</option>
-    {assignableUsers.map((user) => (
-      <option key={user.id} value={user.alias || user.email}>
-        {user.alias || user.email}
-      </option>
-    ))}
-  </select>
-</div>
-
+                                   <div><Label className="text-xs">מוקצה ל:</Label><Input type="text" value={editingAssignTo} onChange={(e) => setEditingAssignTo(e.target.value)} className="h-8 text-sm" required /></div>
                                    <div><Label className="text-xs">כותרת:</Label><Input type="text" value={editingTitle} onChange={(e) => setEditingTitle(e.target.value)} className="h-8 text-sm" required /></div>
                                    <div><Label className="text-xs">תיאור:</Label><Textarea value={editingSubtitle} onChange={(e) => setEditingSubtitle(e.target.value)} rows={2} className="text-sm" /></div>
                                    <div className="flex gap-2">
@@ -1578,7 +1477,7 @@ const calculatedAnalytics = useMemo(() => {
                                     {task.subtitle && (<p className={`text-xs mt-0.5 ${task.done ? "line-through text-gray-400" : "text-gray-600"}`}>{task.subtitle}</p>)}
                                     <div className={`text-xs mt-1 space-x-2 space-x-reverse flex flex-wrap gap-x-2 ${task.done ? 'text-gray-400' : overdue ? 'text-red-600 font-medium' : 'text-gray-500'}`}>
                                         <span><span role="img" aria-label="Due">🗓️</span> {formatDateTime(task.dueDate)}</span>
-                                        <span><span role="img" aria-label="Assignee">👤</span> {assignableUsers.find(u => u.email === task.assignTo)?.alias || task.assignTo}</span>
+                                        <span><span role="img" aria-label="Assignee">👤</span> {task.assignTo}</span>
                                         <span><span role="img" aria-label="Category">🏷️</span> {task.category}</span>
                                         <span>{task.priority === 'דחוף' ? '🔥' : task.priority === 'נמוך' ? '⬇️' : '➖'} {task.priority}</span>
                                         {task.done && task.completedAt && (<span className="text-green-600"><span role="img" aria-label="Done">✅</span> {formatDateTime(task.completedAt)}</span>)}
