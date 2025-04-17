@@ -47,7 +47,7 @@ import DroppableCalendar from "../components/DroppableCalendar";
 import moment from 'moment-timezone';
 import 'moment/locale/he';
 
-import { momentLocalizer } from 'react-big-calendar';
+import { Calendar as BigCalendar, momentLocalizer } from 'react-big-calendar';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 
 
@@ -1022,7 +1022,7 @@ const events = useMemo(() => {
           let end = new Date(start.getTime() + 60 * 60 * 1000);
           return {
               id: `task-${t.id}`,
-              title: t.title,
+              title: `משימה: ${t.title}`,
               start,
               end,
               resource: { type: 'task', data: t },
@@ -1243,7 +1243,7 @@ const calculatedAnalytics = useMemo(() => {
                  />
             </div>
             <div className="text-sm text-gray-500 w-48 text-left flex items-center justify-end gap-4">
-                <span>{'Version 4.7'}</span> 
+                <span>{'Version 4.6.4'}</span> 
                  
             </div>
         </header>
@@ -1544,8 +1544,6 @@ const calculatedAnalytics = useMemo(() => {
                  <div className="h-[calc(100vh-300px)] min-h-[400px]">
                    
                    <DroppableCalendar
-          selectedDate={selectedDate}
-          setSelectedDate={setSelectedDate}
                 scrollToTime={new Date()}
                 eventPropGetter={() => ({
                   style: { textAlign: "right" }

@@ -111,7 +111,10 @@
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.553 0.013 58.071);
 }
-
+/* 👇 Hide the default time range injected by react-big-calendar */
+.rbc-event-label {
+  display: none !important;
+}
 @layer base {
   * {
     @apply border-border outline-ring/50;

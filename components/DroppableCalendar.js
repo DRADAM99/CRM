@@ -1,165 +1,123 @@
 "use client";
 
-import { useDroppable } from "@dnd-kit/core";
-import { Calendar as RBCalendar, momentLocalizer } from "react-big-calendar";
+import React, { useEffect, useRef, useState } from "react";
 import moment from "moment-timezone";
+import { momentLocalizer } from "react-big-calendar";
 import "react-big-calendar/lib/css/react-big-calendar.css";
-import { useEffect, useState, useCallback, useRef } from "react"; // Added useRef
+import dynamic from "next/dynamic";
 
-// Set locale to Hebrew and default time zone to Israel.
+const Calendar = dynamic(() => import("react-big-calendar").then(mod => mod.Calendar), {
+  ssr: false
+});
+
+
 moment.locale("he");
 moment.tz.setDefault("Asia/Jerusalem");
 const localizer = momentLocalizer(moment);
 
-// Define Hebrew messages for the calendar (can be overridden by prop)
-const defaultMessages = {
-  allDay: "כל היום",
-  previous: "הקודם",
-  next: "הבא",
-  today: "היום",
-  month: "חודש",
-  week: "שבוע",
-  day: "יום",
-  agenda: "סדר יום",
-  date: "תאריך",
-  time: "זמן",
-  event: "אירוע",
-  noEventsInRange: "אין אירועים בטווח זה",
-  showMore: (total) => `+ ${total} נוספים`,
-};
+// ✅ Define your custom event layout
+const CustomEvent = ({ event }) => (
+  <div style={{
+    direction: "rtl",
+    textAlign: "right",
+    padding: "4px",
+    margin: 0,
+    lineHeight: "1.3",
+    whiteSpace: "normal",
+    height: "auto"
+  }}>
+    <div style={{ fontSize: "10px", color: "#E5E7EB" }}>
+      {moment(event.start).format("HH:mm")}
+    </div>
+    <div style={{ fontSize: "12px", fontWeight: "600", color: "white" }}>
+      {event.resource?.data?.category ? `${event.resource.data.category}: ` : ""}
+      {event.resource?.data?.title || event.title}
+    </div>
+  </div>
+);
+const CustomEventWrapper = ({ children }) => (
+  <div style={{ overflow: "hidden", height: "100%" }}>
+    {children}
+  </div>
+);
 
-// Accept 'messages' prop and use default if not provided
 export default function DroppableCalendar({
   events,
   view,
   onView,
   selectedDate,
   setSelectedDate,
-  onSelectEvent,
-  messages = defaultMessages // Use passed messages or fallback to default
+  onEventDrop,
 }) {
-  const { setNodeRef } = useDroppable({
-    id: "calendar-dropzone",
-  });
+  const calendarRef = useRef(null);
+  const [currentView, setCurrentView] = useState(view || "week");
 
-  // Ref for the calendar container div to get its height
-  const calendarContainerRef = useRef(null);
-
-  // State for current time indicator position
-  const [indicatorTop, setIndicatorTop] = useState(null);
-
-  // --- Refactored useEffect for Time Indicator ---
   useEffect(() => {
-    let intervalId = null;
-
-    // Function to calculate and set the indicator position
-    const updateIndicatorPosition = () => {
-      const now = new Date();
-      // Get height from the ref'd container
-      const containerHeight = calendarContainerRef.current?.getBoundingClientRect().height;
-
-      // Only proceed if view is 'day', selectedDate is valid, AND we have container height
-      if (view === "day" && selectedDate instanceof Date && !isNaN(selectedDate.getTime()) && containerHeight > 0) {
-        // Check if the selected date is today
-        if (now.toDateString() === selectedDate.toDateString()) {
-          // --- Calculate indicator position ---
-          try {
-            const dayStart = new Date(selectedDate);
-            dayStart.setHours(0, 0, 0, 0);
-
-            const diffMs = now.getTime() - dayStart.getTime();
-            const fraction = diffMs / (24 * 60 * 60 * 1000); // Fraction of the day passed
-            const top = Math.max(0, Math.min(containerHeight, fraction * containerHeight)); // Clamp value
-
-            setIndicatorTop(top);
-
-          } catch (error) {
-            console.error("Error calculating time indicator position:", error);
-            setIndicatorTop(null); // Hide indicator on calculation error
-          }
-        } else {
-          // It's 'day' view, but not today - hide indicator
-          setIndicatorTop(null);
-        }
-      } else {
-        // View is not 'day' or selectedDate is invalid or height unknown - hide indicator
-        if (view === "day" && !(selectedDate instanceof Date && !isNaN(selectedDate.getTime()))) {
-             console.warn("DroppableCalendar useEffect: selectedDate is invalid.", selectedDate);
-        }
-        setIndicatorTop(null);
-      }
-    };
-
-    // Run the calculation immediately when effect runs
-    updateIndicatorPosition();
-
-    // Set up the interval to update every minute ONLY if indicator might be visible
-    // (Today in day view)
-    if (view === "day" && selectedDate instanceof Date && !isNaN(selectedDate.getTime()) && new Date().toDateString() === selectedDate.toDateString()) {
-        intervalId = setInterval(updateIndicatorPosition, 60000); // Update every 60 seconds
+    const savedView = localStorage.getItem("calendarView");
+    if (savedView) {
+      setCurrentView(savedView);
+      onView(savedView);
     }
+  }, [onView]);
 
-    // Cleanup function: clear interval when effect re-runs or component unmounts
-    return () => {
-      if (intervalId) {
-        clearInterval(intervalId);
-      }
-    };
+  const handleViewChange = (newView) => {
+    setCurrentView(newView);
+    localStorage.setItem("calendarView", newView);
+    onView(newView);
+  };
 
-    // Dependencies: Effect should re-run if view or selected date changes
-  }, [view, selectedDate]); // Dependency array
+  useEffect(() => {
+    if (currentView === "day" && calendarRef.current) {
+      const now = new Date();
+      const calendarEl = calendarRef.current;
+      const hourHeight = 40;
+      const scrollTop = now.getHours() * hourHeight - calendarEl.clientHeight / 2;
+      calendarEl.scrollTop = scrollTop > 0 ? scrollTop : 0;
+    }
+  }, [currentView, events]);
 
-  // Memoize event prop getter
-  const eventPropGetter = useCallback(
-    (event, start, end, isSelected) => ({
-      // Add styles or classes based on event properties (e.g., event.isDone)
-      className: `${event.isDone ? 'opacity-50 bg-gray-300' : ''}`,
-      style: {
-        // Add specific styles if needed
-      },
-    }),
-    [] // No dependencies needed if styling is static based on event props
-  );
-
+  const handleEventDrop = ({ event, start }) => {
+    if (onEventDrop && typeof onEventDrop === "function") {
+      onEventDrop(event, start);
+    }
+  };
 
   return (
-    // Assign the ref to the container div
-    <div
-      ref={(node) => {
-        setNodeRef(node); // From useDroppable
-        calendarContainerRef.current = node; // Assign ref for height calculation
-      }}
-      id="calendar-dropzone"
-      className="calendar-wrapper relative border-2 border-dashed border-gray-300 h-full" // Added h-full
-      // Relies on parent setting a height via className (e.g., h-[calc(...)])
-    >
-      <RBCalendar
+    <div ref={calendarRef} style={{ height: "100%", maxHeight: "100%", overflowY: "auto" }}>
+      <Calendar
         localizer={localizer}
         events={events}
         startAccessor="start"
         endAccessor="end"
-        view={view}
-        onView={onView} // Prop for changing view (e.g., clicking Month/Week/Day)
-        date={selectedDate} // Controlled current date
-        onNavigate={setSelectedDate} // Prop for handling date changes (e.g., clicking arrows)
-        onSelectEvent={onSelectEvent} // Prop for handling event clicks
-        messages={messages} // Pass the messages prop down
-        style={{ height: "100%" }} // RBCalendar fills the container div
-        eventPropGetter={eventPropGetter} // Apply custom styles/classes to events
+        defaultView={currentView}
+        view={currentView}
+        onView={handleViewChange}
+        date={selectedDate}
+        onNavigate={(date) => setSelectedDate(date)}
+        draggableAccessor={() => true}
+        onEventDrop={handleEventDrop}
+        style={{ direction: "rtl" }}
+        eventPropGetter={(event) => ({
+          style: {
+            textAlign: "right",
+            direction: "rtl",
+            backgroundColor: event.resource?.type === "task"
+              ? event.isDone ? "#a1a1aa" : "#3b82f6"
+              : "#10b981",
+            opacity: event.resource?.type === "task" && event.isDone ? 0.7 : 1,
+            borderRadius: "5px",
+            color: "white",
+            border: "0px",
+            display: "block",
+            padding: "4px",
+            fontSize: "0.85rem"
+          },
+        })}
+        components={{
+          event: CustomEvent,
+          eventWrapper: CustomEventWrapper  // ✅ plugs in the separate, working override
+        }}
       />
-      {/* Current Time Indicator Line */}
-      {indicatorTop !== null && (
-        <div
-          // Changed to solid border, increased z-index
-          className="absolute left-0 w-full border-t-2 border-solid border-red-500 opacity-90 pointer-events-none"
-          style={{
-            top: `${indicatorTop}px`, // Position based on state
-            zIndex: 20, // Ensure visibility
-          }}
-          title={`Current time: ${moment().format('HH:mm')}`} // Show time on hover
-        />
-      )}
     </div>
   );
 }
-
