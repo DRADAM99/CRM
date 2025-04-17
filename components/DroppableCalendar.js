@@ -1,10 +1,45 @@
+"use client";
 
 import React, { useEffect, useRef, useState } from "react";
-import { Calendar, Views, momentLocalizer } from "react-big-calendar";
-import moment from "moment";
+import moment from "moment-timezone";
+import { momentLocalizer } from "react-big-calendar";
 import "react-big-calendar/lib/css/react-big-calendar.css";
+import dynamic from "next/dynamic";
 
+const Calendar = dynamic(() => import("react-big-calendar").then(mod => mod.Calendar), {
+  ssr: false
+});
+
+
+moment.locale("he");
+moment.tz.setDefault("Asia/Jerusalem");
 const localizer = momentLocalizer(moment);
+
+// ✅ Define your custom event layout
+const CustomEvent = ({ event }) => (
+  <div style={{
+    direction: "rtl",
+    textAlign: "right",
+    padding: "4px",
+    margin: 0,
+    lineHeight: "1.3",
+    whiteSpace: "normal",
+    height: "auto"
+  }}>
+    <div style={{ fontSize: "10px", color: "#E5E7EB" }}>
+      {moment(event.start).format("HH:mm")}
+    </div>
+    <div style={{ fontSize: "12px", fontWeight: "600", color: "white" }}>
+      {event.resource?.data?.category ? `${event.resource.data.category}: ` : ""}
+      {event.resource?.data?.title || event.title}
+    </div>
+  </div>
+);
+const CustomEventWrapper = ({ children }) => (
+  <div style={{ overflow: "hidden", height: "100%" }}>
+    {children}
+  </div>
+);
 
 export default function DroppableCalendar({
   events,
@@ -12,12 +47,11 @@ export default function DroppableCalendar({
   onView,
   selectedDate,
   setSelectedDate,
-  onEventDrop
+  onEventDrop,
 }) {
   const calendarRef = useRef(null);
   const [currentView, setCurrentView] = useState(view || "week");
 
-  // 1. Persist calendar view to localStorage
   useEffect(() => {
     const savedView = localStorage.getItem("calendarView");
     if (savedView) {
@@ -32,22 +66,24 @@ export default function DroppableCalendar({
     onView(newView);
   };
 
-  // 2. Center time in daily view
   useEffect(() => {
-    if (currentView === "day") {
-      const scrollContainer = document.querySelector(".rbc-time-content");
-      if (scrollContainer) {
-        const now = new Date();
-        const hours = now.getHours();
-        const scrollHeight = scrollContainer.scrollHeight;
-        const hourBlockHeight = scrollHeight / 24;
-        scrollContainer.scrollTop = hourBlockHeight * hours - scrollContainer.clientHeight / 2;
-      }
+    if (currentView === "day" && calendarRef.current) {
+      const now = new Date();
+      const calendarEl = calendarRef.current;
+      const hourHeight = 40;
+      const scrollTop = now.getHours() * hourHeight - calendarEl.clientHeight / 2;
+      calendarEl.scrollTop = scrollTop > 0 ? scrollTop : 0;
     }
   }, [currentView, events]);
 
+  const handleEventDrop = ({ event, start }) => {
+    if (onEventDrop && typeof onEventDrop === "function") {
+      onEventDrop(event, start);
+    }
+  };
+
   return (
-    <div ref={calendarRef} style={{ height: "80vh" }}>
+    <div ref={calendarRef} style={{ height: "100%", maxHeight: "100%", overflowY: "auto" }}>
       <Calendar
         localizer={localizer}
         events={events}
@@ -58,23 +94,28 @@ export default function DroppableCalendar({
         onView={handleViewChange}
         date={selectedDate}
         onNavigate={(date) => setSelectedDate(date)}
-        style={{ direction: "rtl" }}
-        onEventDrop={onEventDrop}
         draggableAccessor={() => true}
-        popup
-        eventPropGetter={() => ({
+        onEventDrop={handleEventDrop}
+        style={{ direction: "rtl" }}
+        eventPropGetter={(event) => ({
           style: {
             textAlign: "right",
-            paddingRight: "8px"
+            direction: "rtl",
+            backgroundColor: event.resource?.type === "task"
+              ? event.isDone ? "#a1a1aa" : "#3b82f6"
+              : "#10b981",
+            opacity: event.resource?.type === "task" && event.isDone ? 0.7 : 1,
+            borderRadius: "5px",
+            color: "white",
+            border: "0px",
+            display: "block",
+            padding: "4px",
+            fontSize: "0.85rem"
           },
         })}
         components={{
-          event: ({ event }) => (
-            <div style={{ direction: "rtl" }}>
-              <strong>{event.title}</strong>
-              {event.subtitle && <div>{event.subtitle}</div>}
-            </div>
-          ),
+          event: CustomEvent,
+          eventWrapper: CustomEventWrapper  // ✅ plugs in the separate, working override
         }}
       />
     </div>
