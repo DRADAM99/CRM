@@ -36,10 +36,11 @@ export default function NotesAndLinks({ section }) {
   };
 
   const fetchLinks = async () => {
+    if (!userEmail) return; // ✅ Prevent invalid query
     const q = query(collection(db, "links"), where("addedBy", "==", userEmail));
     const snapshot = await getDocs(q);
     setLinks(snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })));
-  };
+  };  
 
   const addNote = async () => {
     if (!newNote.trim()) return;

@@ -163,7 +163,6 @@ export default function Dashboard() {
   const [role, setRole] = useState("");
 
   const handleAliasUpdate = async () => {
-    console.log("Clicked save alias. Current alias:", alias);
     if (!currentUser) return;
     const ref = doc(db, "users", currentUser.uid);
     const snap = await getDoc(ref);
@@ -172,16 +171,12 @@ export default function Dashboard() {
       await setDoc(ref, {
         email: currentUser.email,
         alias,
-        role: "staff", // or "pending", if you want approval later
-        createdAt: serverTimestamp(),
+        role: "staff", 
       });
-      console.log("New user doc created with alias:", alias);
     } else {
       await updateDoc(ref, { alias });
-      console.log("Alias updated to:", alias);
     }
   };
-  
 
 const [selectedDate, setSelectedDate] = useState(new Date());
   const [view, setView] = useState("month");
@@ -1300,26 +1295,24 @@ const calculatedAnalytics = useMemo(() => {
     />
 
     {/* Sticky Notes - right of logo */}
-    <div className="absolute left-0 flex gap-2">
+    <div className="absolute left-2 flex gap-2">
       <NotesAndLinks section="notes" />
     </div>
   </div>
 
   
   <div className="w-48 text-left text-sm text-gray-500 flex flex-col justify-end gap-1">
-    <span>{'Version 4.8'}</span>
-    {false && (
-      <div className="text-xs">
-        <input
-          type="text"
-          value={alias}
-          onChange={(e) => setAlias(e.target.value)}
-          placeholder="הכינוי שלך"
-          className="border px-1 py-0.5 w-full rounded text-xs"
-        />
-        <button onClick={handleAliasUpdate} className="text-blue-600 text-xs mt-1">שמור כינוי</button>
-      </div>
-    )}
+    <span>{'Version 4.7'}</span>
+    <div className="text-xs">
+      <input
+        type="text"
+        value={alias}
+        onChange={(e) => setAlias(e.target.value)}
+        placeholder="הכינוי שלך"
+        className="border px-1 py-0.5 w-full rounded text-xs"
+      />
+      <button onClick={handleAliasUpdate} className="text-blue-600 text-xs mt-1">שמור כינוי</button>
+    </div>
   </div>
 
 </header>
@@ -1479,7 +1472,7 @@ const calculatedAnalytics = useMemo(() => {
                                               {task.subtitle && (<p className={`text-xs mt-0.5 ${task.done ? "line-through text-gray-400" : "text-gray-600"}`}>{task.subtitle}</p>)}
                                               <div className={`text-xs mt-1 space-x-2 space-x-reverse ${task.done ? 'text-gray-400' : overdue ? 'text-red-600 font-medium' : 'text-gray-500'}`}>
                                                   <span><span role="img" aria-label="Due">🗓️</span> {formatDateTime(task.dueDate)}</span>
-                                                  <span><span role="img" aria-label="Assignee">👤</span> {assignableUsers.find(u => u.email === task.assignTo)?.alias || task.assignTo}</span>
+                                                  <span><span role="img" aria-label="Assignee">👤</span> {task.assignTo}</span>
                                                   <span>{task.priority === 'דחוף' ? '🔥' : task.priority === 'נמוך' ? '⬇️' : '➖'} {task.priority}</span>
                                                   {task.done && task.completedAt && (<span className="text-green-600"><span role="img" aria-label="Done">✅</span> {formatDateTime(task.completedAt)}</span>)}
                                               </div>
@@ -1578,7 +1571,7 @@ const calculatedAnalytics = useMemo(() => {
                                     {task.subtitle && (<p className={`text-xs mt-0.5 ${task.done ? "line-through text-gray-400" : "text-gray-600"}`}>{task.subtitle}</p>)}
                                     <div className={`text-xs mt-1 space-x-2 space-x-reverse flex flex-wrap gap-x-2 ${task.done ? 'text-gray-400' : overdue ? 'text-red-600 font-medium' : 'text-gray-500'}`}>
                                         <span><span role="img" aria-label="Due">🗓️</span> {formatDateTime(task.dueDate)}</span>
-                                        <span><span role="img" aria-label="Assignee">👤</span> {assignableUsers.find(u => u.email === task.assignTo)?.alias || task.assignTo}</span>
+                                        <span><span role="img" aria-label="Assignee">👤</span> {task.assignTo}</span>
                                         <span><span role="img" aria-label="Category">🏷️</span> {task.category}</span>
                                         <span>{task.priority === 'דחוף' ? '🔥' : task.priority === 'נמוך' ? '⬇️' : '➖'} {task.priority}</span>
                                         {task.done && task.completedAt && (<span className="text-green-600"><span role="img" aria-label="Done">✅</span> {formatDateTime(task.completedAt)}</span>)}
