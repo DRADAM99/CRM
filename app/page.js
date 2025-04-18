@@ -26,6 +26,7 @@ import {
   getDocs,
   getDoc,
   updateDoc,
+  onSnapshot,
   setDoc,
   doc
 } from "firebase/firestore";
@@ -163,6 +164,7 @@ export default function Dashboard() {
   const [role, setRole] = useState("");
 
   const handleAliasUpdate = async () => {
+    console.log("Clicked save alias. Current alias:", alias);
     if (!currentUser) return;
     const ref = doc(db, "users", currentUser.uid);
     const snap = await getDoc(ref);
@@ -171,12 +173,16 @@ export default function Dashboard() {
       await setDoc(ref, {
         email: currentUser.email,
         alias,
-        role: "staff", 
+        role: "staff", // or "pending", if you want approval later
+        createdAt: serverTimestamp(),
       });
+      console.log("New user doc created with alias:", alias);
     } else {
       await updateDoc(ref, { alias });
+      console.log("Alias updated to:", alias);
     }
   };
+  
 
 const [selectedDate, setSelectedDate] = useState(new Date());
   const [view, setView] = useState("month");
@@ -230,12 +236,12 @@ const [selectedDate, setSelectedDate] = useState(new Date());
 
 
   const [leads, setLeads] = useState([
-
+/** 
     { id: 'lead-1', createdAt: new Date(new Date().setDate(new Date().getDate() - 10)), fullName: "יוסי כהן", phoneNumber: "0501234567", message: "פולו-אפ על פגישה", status: "מעקב", source: "פייסבוק", conversationSummary: [ { text: "יצירת קשר ראשונית.", timestamp: new Date(new Date().setDate(new Date().getDate() - 10)) }, { text: "תיאום פגישה.", timestamp: new Date(new Date().setDate(new Date().getDate() - 9)) }, ], expanded: false, appointmentDateTime: null, },
     { id: 'lead-2', createdAt: new Date(new Date().setDate(new Date().getDate() - 5)), fullName: "שרה מזרחי", phoneNumber: "0527654321", message: "שיחת בירור מצב", status: "תור נקבע", source: "מבצע טלמרקטינג", conversationSummary: [ { text: "שוחחנו על המצב, תיאום שיחה נוספת.", timestamp: new Date(new Date().setDate(new Date().getDate() - 5)) }, ], expanded: false, appointmentDateTime: new Date(new Date().setDate(new Date().getDate() + 7)).toISOString(), },
     { id: 'lead-3', createdAt: new Date(new Date().setDate(new Date().getDate() - 2)), fullName: "בני גנץ", phoneNumber: "0509876543", message: "לא היה מענה", status: "חדש", source: "אתר אינטרנט", conversationSummary: [], expanded: false, appointmentDateTime: null, },
-    { id: 'lead-4', createdAt: new Date(new Date().setDate(new Date().getDate() - 1)), fullName: "דנה לוי", phoneNumber: "0541122334", message: "קבעה פגישה לשבוע הבא", status: "תור נקבע", source: "המלצה", conversationSummary: [ { text: "שיחה ראשונית, עניין רב.", timestamp: new Date(new Date().setDate(new Date().getDate() - 1)) }, { text: "נקבעה פגישת ייעוץ ל-15/4.", timestamp: new Date(new Date().setDate(new Date().getDate() - 1)) }, ], expanded: false, appointmentDateTime: new Date(2025, 3, 15, 10, 30).toISOString(), },
-  ]);
+    { id: 'lead-4', createdAt: new Date(new Date().setDate(new Date().getDate() - 1)), fullName: "דנה לוי", phoneNumber: "0541122334", message: "קבעה פגישה לשבוע הבא", status: "תור נקבע", source: "המלצה", conversationSummary: [ { text: "שיחה ראשונית, עניין רב.", timestamp: new Date(new Date().setDate(new Date().getDate() - 1)) }, { text: "נקבעה פגישת ייעוץ ל-15/4.", timestamp: new Date(new Date().setDate(new Date().getDate() - 1)) }, ], expanded: false, appointmentDateTime: new Date(2025, 3, 15, 10, 30).toISOString(), }, */
+  ]); 
   const [editingLeadId, setEditingLeadId] = useState(null);
   const [editLeadFullName, setEditLeadFullName] = useState("");
   const [editLeadPhone, setEditLeadPhone] = useState("");
@@ -268,14 +274,30 @@ const [selectedDate, setSelectedDate] = useState(new Date());
   const [assignableUsers, setAssignableUsers] = useState([]);
 
   useEffect(() => {
-    const fetchAssignableUsers = async () => {
-      const snap = await getDocs(collection(db, "users"));
-      setAssignableUsers(snap.docs.map(doc => {
+    const unsubscribe = onSnapshot(collection(db, "leads"), (snapshot) => {
+      const fetchedLeads = snapshot.docs.map((doc) => {
         const data = doc.data();
-        return { email: data.email || "", alias: data.alias || "", id: doc.id };
-      }));
-    };
-    fetchAssignableUsers();
+        return {
+          id: doc.id,
+          createdAt: data.createdAt?.toDate?.() || new Date(),
+          fullName: data.fullName || "",
+          phoneNumber: data.phoneNumber || "",
+          message: data.message || "",
+          status: data.status || "חדש",
+          source: data.source || "",
+          conversationSummary: data.conversationSummary?.map(entry => ({
+            text: entry.text || "",
+            timestamp: entry.timestamp?.toDate?.() || new Date()
+          })) || [],
+          appointmentDateTime: data.appointmentDateTime?.toDate?.() || null,
+          expanded: false,
+        };
+      });
+  
+      setLeads(fetchedLeads);
+    });
+  
+    return () => unsubscribe();
   }, []);
 
 
@@ -1295,24 +1317,26 @@ const calculatedAnalytics = useMemo(() => {
     />
 
     {/* Sticky Notes - right of logo */}
-    <div className="absolute left-2 flex gap-2">
+    <div className="absolute left-0 flex gap-2">
       <NotesAndLinks section="notes" />
     </div>
   </div>
 
   
   <div className="w-48 text-left text-sm text-gray-500 flex flex-col justify-end gap-1">
-    <span>{'Version 4.7'}</span>
-    <div className="text-xs">
-      <input
-        type="text"
-        value={alias}
-        onChange={(e) => setAlias(e.target.value)}
-        placeholder="הכינוי שלך"
-        className="border px-1 py-0.5 w-full rounded text-xs"
-      />
-      <button onClick={handleAliasUpdate} className="text-blue-600 text-xs mt-1">שמור כינוי</button>
-    </div>
+    <span>{'Version 4.8'}</span>
+    {false && (
+      <div className="text-xs">
+        <input
+          type="text"
+          value={alias}
+          onChange={(e) => setAlias(e.target.value)}
+          placeholder="הכינוי שלך"
+          className="border px-1 py-0.5 w-full rounded text-xs"
+        />
+        <button onClick={handleAliasUpdate} className="text-blue-600 text-xs mt-1">שמור כינוי</button>
+      </div>
+    )}
   </div>
 
 </header>
@@ -1472,7 +1496,7 @@ const calculatedAnalytics = useMemo(() => {
                                               {task.subtitle && (<p className={`text-xs mt-0.5 ${task.done ? "line-through text-gray-400" : "text-gray-600"}`}>{task.subtitle}</p>)}
                                               <div className={`text-xs mt-1 space-x-2 space-x-reverse ${task.done ? 'text-gray-400' : overdue ? 'text-red-600 font-medium' : 'text-gray-500'}`}>
                                                   <span><span role="img" aria-label="Due">🗓️</span> {formatDateTime(task.dueDate)}</span>
-                                                  <span><span role="img" aria-label="Assignee">👤</span> {task.assignTo}</span>
+                                                  <span><span role="img" aria-label="Assignee">👤</span> {assignableUsers.find(u => u.email === task.assignTo)?.alias || task.assignTo}</span>
                                                   <span>{task.priority === 'דחוף' ? '🔥' : task.priority === 'נמוך' ? '⬇️' : '➖'} {task.priority}</span>
                                                   {task.done && task.completedAt && (<span className="text-green-600"><span role="img" aria-label="Done">✅</span> {formatDateTime(task.completedAt)}</span>)}
                                               </div>
@@ -1571,7 +1595,7 @@ const calculatedAnalytics = useMemo(() => {
                                     {task.subtitle && (<p className={`text-xs mt-0.5 ${task.done ? "line-through text-gray-400" : "text-gray-600"}`}>{task.subtitle}</p>)}
                                     <div className={`text-xs mt-1 space-x-2 space-x-reverse flex flex-wrap gap-x-2 ${task.done ? 'text-gray-400' : overdue ? 'text-red-600 font-medium' : 'text-gray-500'}`}>
                                         <span><span role="img" aria-label="Due">🗓️</span> {formatDateTime(task.dueDate)}</span>
-                                        <span><span role="img" aria-label="Assignee">👤</span> {task.assignTo}</span>
+                                        <span><span role="img" aria-label="Assignee">👤</span> {assignableUsers.find(u => u.email === task.assignTo)?.alias || task.assignTo}</span>
                                         <span><span role="img" aria-label="Category">🏷️</span> {task.category}</span>
                                         <span>{task.priority === 'דחוף' ? '🔥' : task.priority === 'נמוך' ? '⬇️' : '➖'} {task.priority}</span>
                                         {task.done && task.completedAt && (<span className="text-green-600"><span role="img" aria-label="Done">✅</span> {formatDateTime(task.completedAt)}</span>)}
