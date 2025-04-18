@@ -3,33 +3,31 @@
 import { db } from "@/firebase";
 import { collection, addDoc, serverTimestamp } from "firebase/firestore";
 
-export async function POST(request) {
+export async function POST(req) {
   try {
-    const body = await request.json();
+    const data = await req.json();
 
-    const { full_name, phone, source, message, email } = body;
-
-    // Basic validation
-    if (!full_name || !phone || !source || !message || !email) {
+    if (!data.full_name || !data.phone) {
       return new Response(JSON.stringify({ error: "Missing required fields" }), {
         status: 400,
       });
     }
 
-    const newLead = {
-      full_name,
-      phone,
-      source,
-      message,
-      email,
-      status: "new",
+    await addDoc(collection(db, "leads"), {
+      fullName: data.full_name,
+      phoneNumber: data.phone,
+      message: data.message || "",
+      email: data.email || "",
+      source: data.source || "unknown",
+      status: "חדש",
       createdAt: serverTimestamp(),
       conversationSummary: [],
-    };
+    });
 
-    await addDoc(collection(db, "leads"), newLead);
+    return new Response(JSON.stringify({ success: true }), {
+      status: 200,
+    });
 
-    return new Response(JSON.stringify({ success: true }), { status: 200 });
   } catch (error) {
     console.error("Error saving lead:", error);
     return new Response(JSON.stringify({ error: "Failed to process lead" }), {
@@ -37,3 +35,4 @@ export async function POST(request) {
     });
   }
 }
+
