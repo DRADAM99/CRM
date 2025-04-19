@@ -10,7 +10,7 @@ import Image from 'next/image';
 import { useRouter } from "next/navigation";
 import { onAuthStateChanged } from "firebase/auth";
 import { auth } from "../firebase";
-
+import { FaWhatsapp } from "react-icons/fa";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -1404,7 +1404,7 @@ const calculatedAnalytics = useMemo(() => {
 
   
   <div className="w-48 text-left text-sm text-gray-500 flex flex-col justify-end gap-1">
-    <span>{'Version 4.8'}</span>
+    <span>{'Version 5.0'}</span>
     <button
   className="text-xs text-red-600 underline ml-2"
   onClick={() => {
@@ -1894,8 +1894,24 @@ const calculatedAnalytics = useMemo(() => {
                                                    <div className="flex items-center justify-start gap-1">
                                                         
                                                        <Tooltip><TooltipTrigger asChild><Button size="icon" variant="ghost" className="w-7 h-7 text-gray-500 hover:text-blue-600" onClick={() => handleEditLead(lead)}><span role="img" aria-label="Edit">✎</span></Button></TooltipTrigger><TooltipContent>{'פתח/ערוך ליד'}</TooltipContent></Tooltip>
-                                                       <Tooltip><TooltipTrigger asChild><a href={`https: wa.me/${lead.phoneNumber}`} target="_blank" rel="noopener noreferrer"><Button size="icon" variant="ghost" className="w-7 h-7 text-green-600 hover:text-green-700"><span role="img" aria-label="WhatsApp">💬</span></Button></a></TooltipTrigger><TooltipContent>{'שלח וואטסאפ'}</TooltipContent></Tooltip> 
-                                                       <Tooltip><TooltipTrigger asChild><a href={`tel:${lead.phoneNumber}`}><Button size="icon" variant="ghost" className="w-7 h-7 text-blue-600 hover:text-blue-700"><span role="img" aria-label="Call">📞</span></Button></a></TooltipTrigger><TooltipContent>{'התקשר'}</TooltipContent></Tooltip>
+<Tooltip>
+  <TooltipTrigger asChild>
+    <a
+      href={`https://wa.me/${lead.phoneNumber}`}
+      target="_blank"
+      rel="noopener noreferrer"
+    >
+      <Button
+        size="icon"
+        variant="ghost"
+        className="w-7 h-7 text-green-600 hover:text-green-700"
+      >
+        <FaWhatsapp className="w-4 h-4" />
+      </Button>
+    </a>
+  </TooltipTrigger>
+  <TooltipContent>{'שלח וואטסאפ'}</TooltipContent>
+</Tooltip>                                                       <Tooltip><TooltipTrigger asChild><a href={`tel:${lead.phoneNumber}`}><Button size="icon" variant="ghost" className="w-7 h-7 text-blue-600 hover:text-blue-700"><span role="img" aria-label="Call">📞</span></Button></a></TooltipTrigger><TooltipContent>{'התקשר'}</TooltipContent></Tooltip>
                                                    </div>
                                                </td>
                                            </tr>
