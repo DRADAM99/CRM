@@ -7,6 +7,9 @@
 
 import React, { useState, useEffect, useMemo, useCallback } from "react";
 import Image from 'next/image';
+import { useRouter } from 'next/navigation';
+import { getAuth, signInWithEmailAndPassword } from "firebase/auth";
+import { auth } from "../firebase"; // Adjust path if needed
 
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -160,6 +163,12 @@ export default function Dashboard() {
 
   
   const [currentUser, setCurrentUser] = useState(null);
+  const router = useRouter();
+  useEffect(() => {
+    if (!currentUser) {
+    router.push("/login");
+  }
+    }, [currentUser, router]);
   const [alias, setAlias] = useState("");
   const [role, setRole] = useState("");
 

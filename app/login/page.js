@@ -12,16 +12,21 @@ export default function LoginPage() {
   const [error, setError] = useState("");
   const router = useRouter();
 
-  const handleLogin = async (e) => {
+  const handleLogin = (e) => {
     e.preventDefault();
-    setError("");
-    try {
-      await signInWithEmailAndPassword(auth, email, password);
-      router.push("/"); // redirect to dashboard
-    } catch (err) {
-      setError("שגיאה בכניסה: כתובת או סיסמה שגויה");
-    }
+    signInWithEmailAndPassword(auth, email, password)
+      .then((userCredential) => {
+        const user = userCredential.user;
+        console.log("Logged in:", user);
+        // You might want to redirect, e.g.
+        router.push("/");
+      })
+      .catch((error) => {
+        console.error("Login error:", error.message);
+        alert("שגיאת התחברות: בדוק אימייל וסיסמה.");
+      });
   };
+  
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50 px-4">
