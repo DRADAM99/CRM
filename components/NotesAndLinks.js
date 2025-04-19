@@ -23,6 +23,8 @@ export default function NotesAndLinks({ section }) {
   const [newLink, setNewLink] = useState({ title: "", url: "" });
 
   const userEmail = auth.currentUser?.email;
+  console.log("🔐 Auth Email:", userEmail);  // Should log your email
+
 
   const fetchUsers = async () => {
     const snap = await getDocs(collection(db, "users"));

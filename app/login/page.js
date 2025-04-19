@@ -1,10 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import { signInWithEmailAndPassword } from "firebase/auth";
 import { auth } from "../../firebase";
+import { signInWithEmailAndPassword } from "firebase/auth";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
+import { doc, getDoc } from "firebase/firestore";
+import { db } from "../../firebase"; // make sure this line also exists
+
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -12,19 +15,26 @@ export default function LoginPage() {
   const [error, setError] = useState("");
   const router = useRouter();
 
-  const handleLogin = (e) => {
+  const handleLogin = async (e) => {
     e.preventDefault();
-    signInWithEmailAndPassword(auth, email, password)
-      .then((userCredential) => {
-        const user = userCredential.user;
-        console.log("Logged in:", user);
-        // You might want to redirect, e.g.
-        router.push("/");
-      })
-      .catch((error) => {
-        console.error("Login error:", error.message);
-        alert("שגיאת התחברות: בדוק אימייל וסיסמה.");
-      });
+  
+    try {
+      const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      const user = userCredential.user;
+      console.log("✅ SIGNED IN:", user.email, "UID:", user.uid);
+  
+      const docRef = doc(db, "users", user.uid);
+      const docSnap = await getDoc(docRef);
+  
+      if (docSnap.exists()) {
+        console.log("✅ USER DOCUMENT:", docSnap.data());
+        router.push("/"); // or "/dashboard" — depending on your setup
+      } else {
+        console.warn("❌ No user document found for this UID.");
+      }
+    } catch (error) {
+      console.error("🔥 Login error:", error.code, error.message);
+    }
   };
   
 

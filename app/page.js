@@ -7,9 +7,9 @@
 
 import React, { useState, useEffect, useMemo, useCallback } from "react";
 import Image from 'next/image';
-import { useRouter } from 'next/navigation';
-import { getAuth, signInWithEmailAndPassword } from "firebase/auth";
-import { auth } from "../firebase"; // Adjust path if needed
+import { useRouter } from "next/navigation";
+import { onAuthStateChanged } from "firebase/auth";
+import { auth } from "../firebase";
 
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -163,14 +163,33 @@ export default function Dashboard() {
 
   
   const [currentUser, setCurrentUser] = useState(null);
-  const router = useRouter();
-  useEffect(() => {
-    if (!currentUser) {
-    router.push("/login");
-  }
-    }, [currentUser, router]);
+  const [loading, setLoading] = useState(true);
   const [alias, setAlias] = useState("");
   const [role, setRole] = useState("");
+  const router = useRouter();
+
+  // ✅ 1. Listen to auth state changes
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      if (user) {
+        setCurrentUser(user);
+      } else {
+        setCurrentUser(null);
+      }
+      setLoading(false);
+    });
+
+    return () => unsubscribe();
+  }, []);
+
+  // ✅ 2. Redirect after auth check
+  useEffect(() => {
+    if (!loading && !currentUser) {
+      router.push("/login");
+    }
+  }, [loading, currentUser, router]);
+
+  // ✅ 3. Optional loading screen (handled in return)
 
   const handleAliasUpdate = async () => {
     console.log("Clicked save alias. Current alias:", alias);
@@ -282,32 +301,81 @@ const [selectedDate, setSelectedDate] = useState(new Date());
   
   const [assignableUsers, setAssignableUsers] = useState([]);
 
-  useEffect(() => {
-    const unsubscribe = onSnapshot(collection(db, "leads"), (snapshot) => {
-      const fetchedLeads = snapshot.docs.map((doc) => {
-        const data = doc.data();
-        return {
-          id: doc.id,
-          createdAt: data.createdAt?.toDate?.() || new Date(),
-          fullName: data.fullName || "",
-          phoneNumber: data.phoneNumber || "",
-          message: data.message || "",
-          status: data.status || "חדש",
-          source: data.source || "",
-          conversationSummary: data.conversationSummary?.map(entry => ({
-            text: entry.text || "",
-            timestamp: entry.timestamp?.toDate?.() || new Date()
-          })) || [],
-          appointmentDateTime: data.appointmentDateTime?.toDate?.() || null,
-          expanded: false,
-        };
-      });
-  
-      setLeads(fetchedLeads);
+  // Redirect if not logged in
+
+
+// Real-time leads listener
+useEffect(() => {
+  if (!currentUser) return; // ⛔ Prevent running if not logged in
+
+  const unsubscribe = onSnapshot(collection(db, "leads"), (snapshot) => {
+    const fetchedLeads = snapshot.docs.map((doc) => {
+      const data = doc.data();
+      return {
+        id: doc.id,
+        createdAt: data.createdAt?.toDate?.() || new Date(),
+        fullName: data.fullName || "",
+        phoneNumber: data.phoneNumber || "",
+        message: data.message || "",
+        status: data.status || "חדש",
+        source: data.source || "",
+        conversationSummary: data.conversationSummary?.map(entry => ({
+          text: entry.text || "",
+          timestamp: entry.timestamp?.toDate?.() || new Date()
+        })) || [],
+        appointmentDateTime: data.appointmentDateTime?.toDate?.() || null,
+        expanded: false,
+      };
     });
-  
-    return () => unsubscribe();
-  }, []);
+
+    setLeads(fetchedLeads);
+  });
+
+  return () => unsubscribe(); // ✅ Clean up
+}, [currentUser]); // ✅ Re-run when currentUser changes
+
+
+    // 🔁 Redirect if not logged in
+
+
+// ✅ First: real-time listener for leads
+useEffect(() => {
+  if (!currentUser) return; // 👈 prevent listener without auth
+
+  const unsubscribe = onSnapshot(collection(db, "leads"), (snapshot) => {
+    const fetchedLeads = snapshot.docs.map((doc) => {
+      const data = doc.data();
+      return {
+        id: doc.id,
+        createdAt: data.createdAt?.toDate?.() || new Date(),
+        fullName: data.fullName || "",
+        phoneNumber: data.phoneNumber || "",
+        message: data.message || "",
+        status: data.status || "חדש",
+        source: data.source || "",
+        conversationSummary: data.conversationSummary?.map((entry) => ({
+          text: entry.text || "",
+          timestamp: entry.timestamp?.toDate?.() || new Date(),
+        })) || [],
+        appointmentDateTime: data.appointmentDateTime?.toDate?.() || null,
+        expanded: false,
+      };
+    });
+
+    setLeads(fetchedLeads);
+  });
+
+  return () => unsubscribe(); // ✅ cleanup on logout
+}, [currentUser]);
+
+
+/**  ✅ Second: redirect if not logged in
+useEffect(() => {
+  if (!loading && !currentUser) {
+    router.push("/login");
+  }
+}, [currentUser, loading, router]);
+*/
 
 
 
@@ -1302,7 +1370,10 @@ const calculatedAnalytics = useMemo(() => {
   const activeTaskForOverlay = activeId && typeof activeId === 'string' && activeId.startsWith('task-')
      ? tasks.find(task => `task-${task.id}` === activeId)
      : null;
-
+     if (!mounted || loading) {
+      return <div className="flex items-center justify-center min-h-screen">בודק הרשאות...</div>;
+    }
+    
   return (
 
     <TooltipProvider>
@@ -1334,6 +1405,17 @@ const calculatedAnalytics = useMemo(() => {
   
   <div className="w-48 text-left text-sm text-gray-500 flex flex-col justify-end gap-1">
     <span>{'Version 4.8'}</span>
+    <button
+  className="text-xs text-red-600 underline ml-2"
+  onClick={() => {
+    import("firebase/auth").then(({ signOut }) =>
+      signOut(auth).then(() => router.push("/login"))
+    );
+  }}
+>
+  התנתק
+</button>
+
     {false && (
       <div className="text-xs">
         <input
