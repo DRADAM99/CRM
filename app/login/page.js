@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { sendPasswordResetEmail } from "firebase/auth";
 import { auth } from "../../firebase";
 import { signInWithEmailAndPassword } from "firebase/auth";
 import Image from "next/image";
@@ -37,7 +38,21 @@ export default function LoginPage() {
     }
   };
   
-
+  const handleForgotPassword = async () => {
+    if (!email) {
+      alert("נא להזין אימייל קודם");
+      return;
+    }
+  
+    try {
+      await sendPasswordResetEmail(auth, email);
+      alert("קישור לאיפוס סיסמה נשלח לאימייל");
+    } catch (error) {
+      console.error("שגיאה בשליחת מייל לאיפוס:", error.message);
+      alert("אירעה שגיאה. ודא שהאימייל תקין");
+    }
+  };
+  
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50 px-4">
       <Image
@@ -70,9 +85,14 @@ export default function LoginPage() {
         >
           התחבר
         </button>
-        <a href="#" className="text-sm text-blue-600 text-right block hover:underline">
-          שכחת סיסמה?
-        </a>
+        <button
+  type="button"
+  onClick={handleForgotPassword}
+  className="text-sm text-blue-600 text-right block hover:underline"
+>
+  שכחת סיסמה?
+</button>
+
       </form>
       <Image
         src="/logo.png"
