@@ -300,7 +300,31 @@ const [selectedDate, setSelectedDate] = useState(new Date());
 
   
   const [assignableUsers, setAssignableUsers] = useState([]);
-
+  useEffect(() => {
+    const fetchUsers = async () => {
+      try {
+        const querySnapshot = await getDocs(collection(db, "users"));
+        const users = querySnapshot.docs.map((doc) => {
+          const data = doc.data();
+          return {
+            id: doc.id,
+            email: data.email || "",
+            alias: data.alias || data.email || "",
+            role: data.role || "staff",
+          };
+        });
+  
+        setAssignableUsers(users);
+      } catch (error) {
+        console.error("שגיאה בטעינת משתמשים:", error);
+      }
+    };
+  
+    if (currentUser) {
+      fetchUsers();
+    }
+  }, [currentUser]);
+  
   // Redirect if not logged in
 
 
@@ -2285,5 +2309,9 @@ const calculatedAnalytics = useMemo(() => {
       </DndContext>
     </TooltipProvider>
   );
+
+
+
+
 
 }
