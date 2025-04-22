@@ -450,7 +450,7 @@ const [selectedDate, setSelectedDate] = useState(new Date());
             <div className="text-xs text-gray-500 mt-1 space-x-2 space-x-reverse">
               <span>🗓️ {formatDateTime(task.dueDate)}</span>
               <span>👤 מוקצה ל: {assignableUsers.find(u => u.email === task.assignTo)?.alias || task.assignTo}</span>
-              {task.creatorAlias && <span className="font-medium">📝 נוצר ע"י: {task.creatorAlias}</span>}
+              {task.creatorAlias && <span className="font-medium">📝 נוצר ע&quot;י: {task.creatorAlias}</span>}
               <span>🏷️ {task.category}</span>
               <span>{task.priority === 'דחוף' ? '🔥' : task.priority === 'נמוך' ? '⬇️' : '➖'} {task.priority}</span>
             </div>
