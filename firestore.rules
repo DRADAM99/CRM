@@ -77,8 +77,7 @@ service cloud.firestore {
       // Simplified validation for testing
       function isValidTaskData(task) {
         return task.keys().hasAll([
-          "userId", "title", "createdAt", "done", "category", "priority",
-          "doneByAssignee", "doneByCreator", "completedBy", "completedAt"
+          "userId", "title", "createdAt", "done", "category", "priority"
         ]);
       }
 
@@ -91,8 +90,6 @@ service cloud.firestore {
       allow read: if isSignedIn();
       allow create: if isSignedIn() && isValidTaskData(request.resource.data);
       allow update: if isSignedIn() && (
-        // Allow updates to completion status
-        (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['doneByAssignee', 'doneByCreator', 'completedBy', 'completedAt'])) ||
         // Allow updates to replies and related fields
         (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['replies', 'hasNewReply', 'lastReplyAt']) &&
          request.resource.data.replies is list &&
@@ -100,11 +97,7 @@ service cloud.firestore {
         // Allow other task updates
         isValidTaskData(request.resource.data)
       );
-      allow delete: if isSignedIn() && (
-        isAdmin() || // Allow admins to delete any task
-        (resource.data.doneByAssignee == true && resource.data.doneByCreator == true) || // Allow deleting fully completed tasks
-        isTaskAssignee(resource.data) // Allow assignee to delete their own tasks
-      );
+      allow delete: if isSignedIn() && (isTaskDone(resource) || isTaskAssignee(resource.data));
     }
 
     // ────────────────

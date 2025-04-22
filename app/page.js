@@ -293,98 +293,34 @@ const [selectedDate, setSelectedDate] = useState(new Date());
     hasNewReply: false // Add flag for new replies
   });
 
-  const handleCreateTask = useCallback(async (e) => {
+  const handleCreateTask = async (e) => {
     e.preventDefault();
-    if (!newTask.title || !newTask.category) {
-      alert('נא למלא את כל השדות החובה');
-      return;
-    }
-
     try {
       const taskData = {
         userId: currentUser.uid,
-        title: newTask.title,
-        subtitle: newTask.subtitle || '',
-        category: newTask.category,
-        dueDate: newTask.dueDate ? new Date(newTask.dueDate) : null,
-        priority: newTask.priority,
-        assignTo: newTask.assignTo || alias,
+        title: e.target.title.value,
+        subtitle: e.target.subtitle.value,
+        category: e.target.category.value,
+        priority: e.target.priority.value,
+        dueDate: e.target.dueDate.value ? new Date(e.target.dueDate.value) : null,
+        assignTo: e.target.assignTo.value,
         creatorId: currentUser.uid,
         creatorAlias: alias,
         done: false,
-        doneByAssignee: false,
-        doneByCreator: false,
-        completedBy: null,
-        completedAt: null,
         createdAt: serverTimestamp(),
         replies: [],
         hasNewReply: false
       };
 
-      await addDoc(collection(db, 'tasks'), taskData);
+      const docRef = await addDoc(collection(db, "tasks"), taskData);
+      console.log("Task created with ID: ", docRef.id);
+      
+      // Reset form
+      e.target.reset();
       setShowTaskModal(false);
-      setNewTask({
-        title: '',
-        subtitle: '',
-        category: '',
-        dueDate: new Date().toISOString().slice(0, 16),
-        priority: 'רגיל',
-        assignTo: '',
-        done: false,
-        createdAt: new Date(),
-        completedBy: null,
-        completedAt: null,
-        creatorId: currentUser.uid,
-        creatorAlias: alias,
-        replies: [],
-        hasNewReply: false
-      });
     } catch (error) {
       console.error('Error creating task:', error);
       alert('שגיאה ביצירת המשימה');
-    }
-  }, [currentUser, alias, setShowTaskModal, setNewTask]);
-
-  const handleTaskDone = async (taskId, checked) => {
-    try {
-      const taskRef = doc(db, 'tasks', taskId);
-      const taskDoc = await getDoc(taskRef);
-      
-      if (!taskDoc.exists()) {
-        console.error('Task not found');
-        return;
-      }
-
-      const taskData = taskDoc.data();
-      const isAssignee = taskData.assignTo === currentUser.email;
-      const isCreator = taskData.creatorId === currentUser.uid;
-
-      if (!isAssignee && !isCreator) {
-        alert('אינך מורשה לסמן משימה זו כבוצעה');
-        return;
-      }
-
-      const updates = {};
-      if (isAssignee) {
-        updates.doneByAssignee = checked;
-      }
-      if (isCreator) {
-        updates.doneByCreator = checked;
-      }
-
-      if (checked) {
-        updates.completedBy = alias;
-        updates.completedAt = serverTimestamp();
-      } else {
-        updates.completedBy = null;
-        updates.completedAt = null;
-      }
-
-      await updateDoc(taskRef, updates);
-      console.log('Task completion status updated');
-    } catch (error) {
-      console.error('Error updating task completion:', error);
-      alert('שגיאה בעדכון סטטוס המשימה');
     }
   };
 
@@ -478,10 +414,8 @@ const [selectedDate, setSelectedDate] = useState(new Date());
       !reply.isRead && reply.userId !== currentUser.uid
     );
     
-    // Determine task background color and opacity
+    // Determine task background color
     let taskStyle = '';
-    let opacity = 'opacity-100';
-    
     if (hasUnreadReplies) {
       taskStyle = 'bg-green-50';
     } else if (isAssignedToMe) {
@@ -490,31 +424,26 @@ const [selectedDate, setSelectedDate] = useState(new Date());
       taskStyle = 'bg-gray-50';
     }
 
-    // Add opacity if partially done
-    if (task.doneByAssignee || task.doneByCreator) {
-      opacity = 'opacity-75';
-    }
-
     // Sort replies by timestamp
     const sortedReplies = task.replies ? [...task.replies].sort((a, b) => 
       new Date(b.timestamp) - new Date(a.timestamp)
     ) : [];
 
     return (
-      <li key={task.id} className={`p-3 border rounded ${taskStyle} ${opacity}`}>
+      <li key={task.id} className={`p-3 border rounded ${taskStyle}`}>
         <div className="flex items-start space-x-3 space-x-reverse">
           <Checkbox 
-            checked={task.doneByAssignee || task.doneByCreator} 
+            checked={task.done} 
             onCheckedChange={(checked) => handleTaskDone(task.id, checked)}
             id={`task-${task.id}`}
             className="mt-1 shrink-0"
           />
           <div className="flex-grow overflow-hidden">
-            <label htmlFor={`task-${task.id}`} className={`font-medium text-sm ${(task.doneByAssignee || task.doneByCreator) ? "line-through text-gray-500" : "text-gray-900"}`}>
+            <label htmlFor={`task-${task.id}`} className={`font-medium text-sm ${task.done ? "line-through text-gray-500" : "text-gray-900"}`}>
               {task.title}
             </label>
             {task.subtitle && (
-              <p className={`text-xs mt-0.5 ${(task.doneByAssignee || task.doneByCreator) ? "line-through text-gray-400" : "text-gray-600"}`}>
+              <p className={`text-xs mt-0.5 ${task.done ? "line-through text-gray-400" : "text-gray-600"}`}>
                 {task.subtitle}
               </p>
             )}
@@ -525,15 +454,6 @@ const [selectedDate, setSelectedDate] = useState(new Date());
               <span>🏷️ {task.category}</span>
               <span>{task.priority === 'דחוף' ? '🔥' : task.priority === 'נמוך' ? '⬇️' : '➖'} {task.priority}</span>
             </div>
-            
-            {/* Show completion status */}
-            {(task.doneByAssignee || task.doneByCreator) && (
-              <p className="text-xs text-gray-500 mt-1">
-                {task.doneByAssignee && !task.doneByCreator && "ממתין לאישור יוצר המשימה"}
-                {!task.doneByAssignee && task.doneByCreator && "ממתין לאישור המבצע"}
-                {task.doneByAssignee && task.doneByCreator && "הושלם על ידי שניהם"}
-              </p>
-            )}
             
             {/* Replies section */}
             {sortedReplies.length > 0 && (
@@ -552,7 +472,7 @@ const [selectedDate, setSelectedDate] = useState(new Date());
             )}
 
             {/* Reply input */}
-            {!(task.doneByAssignee && task.doneByCreator) && (
+            {!task.done && (
               <div className="mt-2">
                 <input
                   type="text"
@@ -651,7 +571,7 @@ const [selectedDate, setSelectedDate] = useState(new Date());
     if (currentUser) {
       fetchUsers();
     }
-  }, [currentUser, fetchUsers, defaultBlockOrder]);
+  }, [currentUser]);
   
   /** Task Listener */
   useEffect(() => {
@@ -1222,38 +1142,26 @@ const handleNLPSubmit = useCallback(async (e) => {
     if (window.confirm("האם אתה בטוח שברצונך למחוק את כל המשימות שבוצעו? לא ניתן לשחזר פעולה זו.")) {
       try {
         // Get all completed tasks
-        const completedTasks = tasks.filter(task => task.doneByAssignee && task.doneByCreator);
+        const completedTasks = tasks.filter(task => task.done);
         
-        // Delete each completed task from Firebase one by one
-        let successCount = 0;
-        let errorCount = 0;
+        // Delete each completed task from Firebase
+        const deletePromises = completedTasks.map(task => 
+          deleteDoc(doc(db, 'tasks', task.id))
+        );
         
-        for (const task of completedTasks) {
-          try {
-            await deleteDoc(doc(db, 'tasks', task.id));
-            successCount++;
-          } catch (error) {
-            console.error(`Error deleting task ${task.id}:`, error);
-            errorCount++;
-          }
-        }
+        // Wait for all deletions to complete
+        await Promise.all(deletePromises);
         
-        // Update local state to remove successfully deleted tasks
-        setTasks(prevTasks => prevTasks.filter(task => !(task.doneByAssignee && task.doneByCreator)));
+        // Update local state
+        setTasks(prevTasks => prevTasks.filter(task => !task.done));
         
-        if (errorCount > 0) {
-          alert(`נמחקו ${successCount} משימות בהצלחה. ${errorCount} משימות לא נמחקו עקב שגיאה.`);
-        } else {
-          alert(`נמחקו ${successCount} משימות בהצלחה.`);
-        }
-        
-        console.log(`Successfully deleted ${successCount} completed tasks, ${errorCount} failed`);
+        console.log(`Successfully deleted ${completedTasks.length} completed tasks`);
       } catch (error) {
-        console.error('Error in handleClearDoneTasks:', error);
+        console.error('Error deleting completed tasks:', error);
         alert('שגיאה במחיקת המשימות שבוצעו');
       }
     }
-  }, [tasks, setTasks, currentUser?.uid]);
+  }, [tasks]);
 
 
 
@@ -1880,7 +1788,7 @@ const calculatedAnalytics = useMemo(() => {
 
   
   <div className="w-48 text-left text-sm text-gray-500 flex flex-col justify-end gap-1">
-    <span>{'Version 5.1'}</span>
+    <span>{'Version 5.0'}</span>
     <button
   className="text-xs text-red-600 underline ml-2"
   onClick={() => {
@@ -2228,7 +2136,12 @@ const calculatedAnalytics = useMemo(() => {
                                                 <SelectContent>{taskPriorities.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}</SelectContent>
                                             </Select>
                                         </div>
-                                        <div className="flex-1"><Label className="text-xs">קטגוריה:</Label><Input type="text" value={editingCategory} readOnly disabled className="h-8 text-sm bg-gray-100"/></div>
+                                        <div className="flex-1"><Label className="text-xs">קטגוריה:</Label>
+                                            <Select value={editingCategory} onValueChange={setEditingCategory}>
+                                                <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
+                                                <SelectContent>{taskCategories.map(cat => <SelectItem key={cat} value={cat}>{cat}</SelectItem>)}</SelectContent>
+                                            </Select>
+                                        </div>
                                    </div>
                                    <div className="flex gap-2">
                                         <div className="flex-1"><Label className="text-xs">תאריך:</Label><Input type="date" value={editingDueDate} onChange={(e) => setEditingDueDate(e.target.value)} className="h-8 text-sm" required /></div>
