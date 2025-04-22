@@ -1,0 +1,125 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ────────────────
+    // Helper Functions
+    // ────────────────
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isUser(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function getUserRole() {
+      let userDoc = get(/databases/$(database)/documents/users/$(request.auth.uid));
+      return userDoc.exists ? userDoc.data.role : "staff";
+    }
+
+    function isAdmin() {
+      return isSignedIn() && getUserRole() == "admin";
+    }
+
+    function isStaff() {
+      return isSignedIn() && getUserRole() == "staff";
+    }
+
+    function isStaffOrAdmin() {
+      return isStaff() || isAdmin();
+    }
+
+    // ────────────────
+    // Users Collection
+    // ────────────────
+    match /users/{userId} {
+      allow read: if isSignedIn();
+      allow create, update: if request.auth != null;
+      allow delete: if isAdmin();
+    }
+
+    // ────────────────
+    // Leads Collection
+    // ────────────────
+    match /leads/{leadId} {
+      function isLeadOwner(lead) {
+        return request.auth.uid == lead.userId;
+      }
+
+      function isValidLeadData(lead) {
+        return lead.fullName is string
+          && lead.phoneNumber is string
+          && lead.status is string
+          && lead.message is string
+          && lead.createdAt is timestamp;
+      }
+
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isValidLeadData(request.resource.data);
+      allow update: if isSignedIn() && isValidLeadData(request.resource.data);
+      allow delete: if isAdmin() || isLeadOwner(resource.data);
+    }
+
+    // ────────────────
+    // Tasks Collection
+    // ────────────────
+    match /tasks/{taskId} {
+      function isTaskAssignee(taskDoc) {
+        return request.auth.uid == taskDoc.userId;
+      }
+
+      function isTaskDone(taskDoc) {
+        return taskDoc.data.done == true;
+      }
+
+      // Simplified validation for testing
+      function isValidTaskData(task) {
+        return task.keys().hasAll([
+          "userId", "title", "createdAt", "done", "category", "priority",
+          "doneByAssignee", "doneByCreator", "completedBy", "completedAt"
+        ]);
+      }
+
+      function isValidReply(reply) {
+        return reply.keys().hasAll([
+          "text", "timestamp", "userId", "userAlias", "isRead"
+        ]);
+      }
+
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isValidTaskData(request.resource.data);
+      allow update: if isSignedIn() && (
+        // Allow updates to completion status
+        (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['doneByAssignee', 'doneByCreator', 'completedBy', 'completedAt'])) ||
+        // Allow updates to replies and related fields
+        (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['replies', 'hasNewReply', 'lastReplyAt']) &&
+         request.resource.data.replies is list &&
+         request.resource.data.replies.all(r => isValidReply(r))) ||
+        // Allow other task updates
+        isValidTaskData(request.resource.data)
+      );
+      allow delete: if isSignedIn() && (
+        isAdmin() || // Allow admins to delete any task
+        (resource.data.doneByAssignee == true && resource.data.doneByCreator == true) || // Allow deleting fully completed tasks
+        isTaskAssignee(resource.data) // Allow assignee to delete their own tasks
+      );
+    }
+
+    // ────────────────
+    // Notes Collection
+    // ────────────────
+    match /notes/{noteId} {
+      allow read, create, update, delete: if isSignedIn();
+    }
+
+    // ────────────────
+    // Links Collection
+    // ────────────────
+    match /links/{linkId} {
+      allow read, create, update, delete: if isSignedIn();
+    }
+
+  } // END documents
+} // END service 

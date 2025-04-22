@@ -1,16 +1,13 @@
 "use client";
 
-
-
-
-
-
+import { serverTimestamp } from "firebase/firestore";
 import React, { useState, useEffect, useMemo, useCallback } from "react";
 import Image from 'next/image';
 import { useRouter } from "next/navigation";
 import { onAuthStateChanged } from "firebase/auth";
-import { auth } from "../firebase";
+import { auth, db } from "../firebase";
 import { FaWhatsapp } from "react-icons/fa";
+import { or, query, where, orderBy, arrayUnion } from "firebase/firestore";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -28,10 +25,12 @@ import {
   collection,
   getDocs,
   getDoc,
+  addDoc,
   updateDoc,
   onSnapshot,
   setDoc,
-  doc
+  doc,
+  deleteDoc
 } from "firebase/firestore";
 
 import {
@@ -61,8 +60,6 @@ import 'moment/locale/he';
 
 import { momentLocalizer } from 'react-big-calendar';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
-import { db } from "../firebase";
-
 
 import {
     ResponsiveContainer,
@@ -164,9 +161,24 @@ export default function Dashboard() {
   
   const [currentUser, setCurrentUser] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [alias, setAlias] = useState("");
   const [role, setRole] = useState("");
   const router = useRouter();
+
+/** 🔁 Fetch logged-in user's alias */
+useEffect(() => {
+  if (currentUser) {
+    const fetchAlias = async () => {
+      const userRef = doc(db, "users", currentUser.uid);
+      const userSnap = await getDoc(userRef);
+      if (userSnap.exists()) {
+        const data = userSnap.data();
+        setAlias(data.alias || data.email);
+      }
+    };
+    fetchAlias();
+  }
+}, [currentUser]);
+
 
   // ✅ 1. Listen to auth state changes
   useEffect(() => {
@@ -200,14 +212,14 @@ export default function Dashboard() {
     if (!snap.exists()) {
       await setDoc(ref, {
         email: currentUser.email,
-        alias,
-        role: "staff", // or "pending", if you want approval later
-        createdAt: serverTimestamp(),
+        alias: alias,
+        role: "staff", // Default role for new users
+        createdAt: new Date()
       });
-      console.log("New user doc created with alias:", alias);
     } else {
-      await updateDoc(ref, { alias });
-      console.log("Alias updated to:", alias);
+      await updateDoc(ref, {
+        alias: alias
+      });
     }
   };
   
@@ -261,9 +273,325 @@ const [selectedDate, setSelectedDate] = useState(new Date());
   const [editingDueDate, setEditingDueDate] = useState("");
   const [editingDueTime, setEditingDueTime] = useState("");
 
+  // Add task creation state variables
+  const [showTaskModal, setShowTaskModal] = useState(false);
+  const [selectedCategory, setSelectedCategory] = useState('');
+  const [alias, setAlias] = useState("");
+  const [newTask, setNewTask] = useState({
+    title: '',
+    subtitle: '',
+    category: '',
+    dueDate: new Date().toISOString().slice(0, 16),
+    priority: 'רגיל',
+    assignTo: '',
+    done: false,
+    createdAt: new Date(),
+    completedBy: null,
+    completedAt: null,
+    creatorId: currentUser?.uid,
+    replies: [], // Add replies array
+    hasNewReply: false // Add flag for new replies
+  });
+
+  const handleCreateTask = async (e) => {
+    e.preventDefault();
+    if (!newTask.title || !newTask.category) {
+      alert('נא למלא את כל השדות החובה');
+      return;
+    }
+
+    try {
+      const taskData = {
+        userId: currentUser.uid,
+        title: newTask.title,
+        subtitle: newTask.subtitle || '',
+        category: newTask.category,
+        dueDate: newTask.dueDate ? new Date(newTask.dueDate) : null,
+        priority: newTask.priority,
+        assignTo: newTask.assignTo || alias,
+        creatorId: currentUser.uid,
+        creatorAlias: alias,
+        done: false,
+        doneByAssignee: false,
+        doneByCreator: false,
+        completedBy: null,
+        completedAt: null,
+        createdAt: serverTimestamp(),
+        replies: [],
+        hasNewReply: false
+      };
+
+      await addDoc(collection(db, 'tasks'), taskData);
+      setShowTaskModal(false);
+      setNewTask({
+        title: '',
+        subtitle: '',
+        category: '',
+        dueDate: new Date().toISOString().slice(0, 16),
+        priority: 'רגיל',
+        assignTo: '',
+        done: false,
+        createdAt: new Date(),
+        completedBy: null,
+        completedAt: null,
+        creatorId: currentUser.uid,
+        creatorAlias: alias,
+        replies: [],
+        hasNewReply: false
+      });
+    } catch (error) {
+      console.error('Error creating task:', error);
+      alert('שגיאה ביצירת המשימה');
+    }
+  };
+
+  const handleTaskDone = async (taskId, checked) => {
+    try {
+      const taskRef = doc(db, 'tasks', taskId);
+      const taskDoc = await getDoc(taskRef);
+      
+      if (!taskDoc.exists()) {
+        console.error('Task not found');
+        return;
+      }
+
+      const taskData = taskDoc.data();
+      const isAssignee = taskData.assignTo === currentUser.email;
+      const isCreator = taskData.creatorId === currentUser.uid;
+
+      if (!isAssignee && !isCreator) {
+        alert('אינך מורשה לסמן משימה זו כבוצעה');
+        return;
+      }
+
+      const updates = {};
+      if (isAssignee) {
+        updates.doneByAssignee = checked;
+      }
+      if (isCreator) {
+        updates.doneByCreator = checked;
+      }
+
+      if (checked) {
+        updates.completedBy = alias;
+        updates.completedAt = serverTimestamp();
+      } else {
+        updates.completedBy = null;
+        updates.completedAt = null;
+      }
+
+      await updateDoc(taskRef, updates);
+      console.log('Task completion status updated');
+    } catch (error) {
+      console.error('Error updating task completion:', error);
+      alert('שגיאה בעדכון סטטוס המשימה');
+    }
+  };
+
+  const handleTaskReply = async (taskId, replyText) => {
+    if (!replyText.trim()) {
+      console.log("Empty reply, skipping");
+      return;
+    }
+
+    try {
+      const taskRef = doc(db, 'tasks', taskId);
+      
+      // First get the current task data
+      const taskDoc = await getDoc(taskRef);
+      if (!taskDoc.exists()) {
+        console.error('Task not found');
+        return;
+      }
+
+      const taskData = taskDoc.data();
+      const currentReplies = taskData.replies || [];
+      
+      // Create the new reply object
+      const newReply = {
+        text: replyText,
+        timestamp: serverTimestamp(),
+        userId: currentUser.uid,
+        userAlias: alias,
+        isRead: false
+      };
+
+      // Update the task with the new reply
+      await updateDoc(taskRef, {
+        replies: arrayUnion(newReply),
+        hasNewReply: true,
+        lastReplyAt: serverTimestamp()
+      });
+
+      console.log('Reply added successfully to task:', taskId);
+      
+      // Refresh the task data to verify
+      const updatedDoc = await getDoc(taskRef);
+      if (updatedDoc.exists()) {
+        const updatedData = updatedDoc.data();
+        console.log('Updated task data:', {
+          id: taskId,
+          replies: updatedData.replies,
+          hasNewReply: updatedData.hasNewReply,
+          lastReplyAt: updatedData.lastReplyAt
+        });
+      }
+    } catch (error) {
+      console.error('Error adding reply:', error);
+      alert('שגיאה בהוספת תגובה');
+    }
+  };
+
+  const handleMarkReplyAsRead = async (taskId) => {
+    try {
+      const taskRef = doc(db, 'tasks', taskId);
+      const taskDoc = await getDoc(taskRef);
+      
+      if (!taskDoc.exists()) {
+        console.error('Task not found');
+        return;
+      }
+
+      const taskData = taskDoc.data();
+      const updatedReplies = taskData.replies.map(reply => ({
+        ...reply,
+        isRead: true
+      }));
+
+      await updateDoc(taskRef, {
+        replies: updatedReplies,
+        hasNewReply: false
+      });
+
+    } catch (error) {
+      console.error('Error marking reply as read:', error);
+    }
+  };
+
+  // Update the task rendering to show replies
+  const renderTask = (task) => {
+    const isTaskCreator = task.creatorId === currentUser.uid;
+    const isAssignedToMe = task.assignTo === currentUser.email;
+    
+    // Check for unread replies
+    const hasUnreadReplies = task.replies?.some(reply => 
+      !reply.isRead && reply.userId !== currentUser.uid
+    );
+    
+    // Determine task background color and opacity
+    let taskStyle = '';
+    let opacity = 'opacity-100';
+    
+    if (hasUnreadReplies) {
+      taskStyle = 'bg-green-50';
+    } else if (isAssignedToMe) {
+      taskStyle = 'bg-blue-50';
+    } else if (isTaskCreator) {
+      taskStyle = 'bg-gray-50';
+    }
+
+    // Add opacity if partially done
+    if (task.doneByAssignee || task.doneByCreator) {
+      opacity = 'opacity-75';
+    }
+
+    // Sort replies by timestamp
+    const sortedReplies = task.replies ? [...task.replies].sort((a, b) => 
+      new Date(b.timestamp) - new Date(a.timestamp)
+    ) : [];
+
+    return (
+      <li key={task.id} className={`p-3 border rounded ${taskStyle} ${opacity}`}>
+        <div className="flex items-start space-x-3 space-x-reverse">
+          <Checkbox 
+            checked={task.doneByAssignee || task.doneByCreator} 
+            onCheckedChange={(checked) => handleTaskDone(task.id, checked)}
+            id={`task-${task.id}`}
+            className="mt-1 shrink-0"
+          />
+          <div className="flex-grow overflow-hidden">
+            <label htmlFor={`task-${task.id}`} className={`font-medium text-sm ${(task.doneByAssignee || task.doneByCreator) ? "line-through text-gray-500" : "text-gray-900"}`}>
+              {task.title}
+            </label>
+            {task.subtitle && (
+              <p className={`text-xs mt-0.5 ${(task.doneByAssignee || task.doneByCreator) ? "line-through text-gray-400" : "text-gray-600"}`}>
+                {task.subtitle}
+              </p>
+            )}
+            <div className="text-xs text-gray-500 mt-1 space-x-2 space-x-reverse">
+              <span>🗓️ {formatDateTime(task.dueDate)}</span>
+              <span>👤 מוקצה ל: {assignableUsers.find(u => u.email === task.assignTo)?.alias || task.assignTo}</span>
+              {task.creatorAlias && <span className="font-medium">📝 נוצר ע"י: {task.creatorAlias}</span>}
+              <span>🏷️ {task.category}</span>
+              <span>{task.priority === 'דחוף' ? '🔥' : task.priority === 'נמוך' ? '⬇️' : '➖'} {task.priority}</span>
+            </div>
+            
+            {/* Show completion status */}
+            {(task.doneByAssignee || task.doneByCreator) && (
+              <p className="text-xs text-gray-500 mt-1">
+                {task.doneByAssignee && !task.doneByCreator && "ממתין לאישור יוצר המשימה"}
+                {!task.doneByAssignee && task.doneByCreator && "ממתין לאישור המבצע"}
+                {task.doneByAssignee && task.doneByCreator && "הושלם על ידי שניהם"}
+              </p>
+            )}
+            
+            {/* Replies section */}
+            {sortedReplies.length > 0 && (
+              <div className="mt-2 border-t pt-2">
+                <div className="text-xs font-medium text-gray-500 mb-1">תגובות:</div>
+                {sortedReplies.map((reply, index) => (
+                  <div key={index} className={`text-xs mb-1 ${!reply.isRead && reply.userId !== currentUser.uid ? 'font-bold' : ''}`}>
+                    <span className="font-bold">{reply.userAlias}:</span> {reply.text}
+                    <span className="text-gray-400 text-xs mr-2"> ({formatDateTime(reply.timestamp)})</span>
+                    {!reply.isRead && reply.userId !== currentUser.uid && (
+                      <span className="text-green-500 text-xs">(חדש)</span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Reply input */}
+            {!(task.doneByAssignee && task.doneByCreator) && (
+              <div className="mt-2">
+                <input
+                  type="text"
+                  placeholder="הוסף תגובה..."
+                  className="w-full text-sm border rounded p-1 rtl"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && e.target.value.trim()) {
+                      handleTaskReply(task.id, e.target.value.trim());
+                      e.target.value = '';
+                    }
+                  }}
+                />
+              </div>
+            )}
+
+            {/* Mark as read button */}
+            {hasUnreadReplies && (
+              <div className="mt-2">
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  className="text-xs"
+                  onClick={() => handleMarkReplyAsRead(task.id)}
+                >
+                  סמן כנקרא
+                </Button>
+              </div>
+            )}
+          </div>
+        </div>
+      </li>
+    );
+  };
 
 
-  const [leads, setLeads] = useState([
+
+
+
+  const [leads, setLeads] = useState([
 /** 
     { id: 'lead-1', createdAt: new Date(new Date().setDate(new Date().getDate() - 10)), fullName: "יוסי כהן", phoneNumber: "0501234567", message: "פולו-אפ על פגישה", status: "מעקב", source: "פייסבוק", conversationSummary: [ { text: "יצירת קשר ראשונית.", timestamp: new Date(new Date().setDate(new Date().getDate() - 10)) }, { text: "תיאום פגישה.", timestamp: new Date(new Date().setDate(new Date().getDate() - 9)) }, ], expanded: false, appointmentDateTime: null, },
     { id: 'lead-2', createdAt: new Date(new Date().setDate(new Date().getDate() - 5)), fullName: "שרה מזרחי", phoneNumber: "0527654321", message: "שיחת בירור מצב", status: "תור נקבע", source: "מבצע טלמרקטינג", conversationSummary: [ { text: "שוחחנו על המצב, תיאום שיחה נוספת.", timestamp: new Date(new Date().setDate(new Date().getDate() - 5)) }, ], expanded: false, appointmentDateTime: new Date(new Date().setDate(new Date().getDate() + 7)).toISOString(), },
@@ -325,8 +653,42 @@ const [selectedDate, setSelectedDate] = useState(new Date());
     }
   }, [currentUser]);
   
-  // Redirect if not logged in
+  /** Task Listener */
+  useEffect(() => {
+    const unsubscribe = onSnapshot(collection(db, "tasks"), (snapshot) => {
+        const newTasks = snapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data(),
+            dueDate: doc.data().dueDate?.toDate() || null,
+            createdAt: doc.data().createdAt?.toDate() || null,
+            completedAt: doc.data().completedAt?.toDate() || null,
+            lastReplyAt: doc.data().lastReplyAt?.toDate() || null,
+            replies: doc.data().replies?.map(reply => ({
+                ...reply,
+                timestamp: reply.timestamp?.toDate() || null
+            })) || []
+        }));
 
+        // Filter out done tasks if showDoneTasks is false
+        const filteredTasks = showDoneTasks 
+            ? newTasks 
+            : newTasks.filter(task => !task.done);
+
+        setTasks(filteredTasks);
+    });
+
+    return () => unsubscribe();
+  }, [showDoneTasks]);
+  /** listens to pull but not needed here
+  const tasksRef = collection(db, "tasks");
+const q = query(
+  tasksRef,
+  or(
+    where("userId", "==", currentUser.uid),
+    where("assignTo", "==", alias)
+  )
+);
+*/
 
 // Real-time leads listener
 useEffect(() => {
@@ -513,38 +875,41 @@ useEffect(() => {
   * @returns {object} - A partial task object with extracted details.
   */
   const parseTaskFromText = useCallback((text) => {
-
     let category = taskCategories.find(cat => text.toLowerCase().includes(cat.toLowerCase())) || "אחר";
     let dueDate = new Date();
     let dueTime = "13:00";
+    let assignTo = currentUser?.alias || currentUser?.email || "עצמי";
 
+    // Check for user assignment
+    const userMatch = text.match(/\{([^}]+)\}/);
+    if (userMatch) {
+        const alias = userMatch[1];
+        const user = assignableUsers.find(u => 
+            u.alias?.toLowerCase() === alias.toLowerCase() || 
+            u.email?.toLowerCase() === alias.toLowerCase()
+        );
+        if (user) {
+            assignTo = user.alias || user.email;
+        }
+    }
 
-    if (text.includes("מחר")) {
-      dueDate.setDate(dueDate.getDate() + 1);
+    // Handle dates
+    if (text.includes("מחר בבוקר")) {
+        dueDate.setDate(dueDate.getDate() + 1);
+        dueTime = "09:00";
+    } else if (text.includes("מחר בערב")) {
+        dueDate.setDate(dueDate.getDate() + 1);
+        dueTime = "18:00";
+    } else if (text.includes("מחר")) {
+        dueDate.setDate(dueDate.getDate() + 1);
     } else if (text.includes("מחרתיים")) {
         dueDate.setDate(dueDate.getDate() + 2);
     }
 
-     const dateMatch = text.match(/(\d{1,2})[./](\d{1,2})/);
-     if (dateMatch) {
-        const day = parseInt(dateMatch[1], 10);
-        const month = parseInt(dateMatch[2], 10) - 1;
-        const currentYear = new Date().getFullYear();
-
-        const potentialDate = new Date(currentYear, month, day);
-
-        if (potentialDate < new Date(Date.now() - 30*24*60*60*1000) && !text.match(/(\d{4})/)) {
-          dueDate.setFullYear(currentYear + 1, month, day);
-        } else {
-          dueDate.setFullYear(currentYear, month, day);
-        }
-     }
-
-
-
+    // Handle times
     const timeMatch = text.match(/(?:בשעה|ב)\s*(\d{1,2}):(\d{2})/);
     if (timeMatch) {
-      dueTime = `${timeMatch[1].padStart(2, '0')}:${timeMatch[2]}`;
+        dueTime = `${timeMatch[1].padStart(2, '0')}:${timeMatch[2]}`;
     } else {
         const singleHourMatch = text.match(/(?:בשעה|ב)\s*(\d{1,2})(?!\d|:)/);
         if (singleHourMatch) {
@@ -552,16 +917,25 @@ useEffect(() => {
         }
     }
 
+    // Handle morning/afternoon/evening
+    if (text.includes("בבוקר")) {
+        dueTime = "09:00";
+    } else if (text.includes("בצהריים")) {
+        dueTime = "13:00";
+    } else if (text.includes("בערב")) {
+        dueTime = "18:00";
+    }
 
     const [hours, minutes] = dueTime.split(":").map(Number);
     dueDate.setHours(hours, minutes, 0, 0);
 
-
+    // Clean up title
     let title = text
+        .replace(/\{([^}]+)\}/g, '') // Remove user assignments
         .replace(/מחרתיים|מחר/g, '')
         .replace(/(?:בשעה|ב)\s*(\d{1,2}):?(\d{2})?/g, '')
         .replace(/(\d{1,2})[./](\d{1,2})(?:[./](\d{4}|\d{2}))?/g,'')
-
+        .replace(/בבוקר|בצהריים|בערב/g, '')
         .replace(new RegExp(`\\b(${taskCategories.join('|')})\\b`, 'gi'), (match, p1, offset, string) => string.trim() === match ? match : '')
         .trim();
 
@@ -569,49 +943,68 @@ useEffect(() => {
         title = text;
     }
 
+    // Try to determine category from title if not found
+    if (category === "אחר") {
+        const categoryMatch = taskCategories.find(cat => 
+            title.toLowerCase().includes(cat.toLowerCase())
+        );
+        if (categoryMatch) {
+            category = categoryMatch;
+        }
+    }
 
     return {
-
-      assignTo: "עצמי",
-      title: title,
-      subtitle: "",
-      priority: "רגיל",
-      category,
-      dueDate,
-      done: false,
-      completedBy: null,
-      completedAt: null
-
+        assignTo,
+        title: title,
+        subtitle: "",
+        priority: "רגיל",
+        category,
+        dueDate,
+        done: false,
+        completedBy: null,
+        completedAt: null
     };
-  }, []);
+}, [taskCategories, assignableUsers, currentUser]);
 
-  /**
-  * Handles submission of the NLP task form.
-  * Parses input, creates a new task, adds creatorId,
-  * adds it to state, and closes the modal.
-  * @param {React.FormEvent} e - The form submission event.
-  */
-  const handleNLPSubmit = useCallback((e) => {
+  /** ✅ NLP Task Submit (with Firestore save and user assignment) */
+const handleNLPSubmit = useCallback(async (e) => {
     e.preventDefault();
-    if (!nlpInput.trim()) return;
+    if (!nlpInput.trim() || !currentUser) return;
 
-    const parsedDetails = parseTaskFromText(nlpInput);
-    const finalCategory = prefillCategory || parsedDetails.category;
+    const parsed = parseTaskFromText(nlpInput);
+    const finalCategory = prefillCategory || parsed.category;
 
     const newTask = {
-      ...parsedDetails,
-      category: finalCategory,
-      id: `task-${Date.now()}`,
-      createdAt: new Date(),
+        userId: currentUser.uid,
+        creatorId: currentUser.uid,
+        creatorAlias: alias || currentUser.email || "",
+        assignTo: parsed.assignTo,
+        title: parsed.title || "משימה ללא שם",
+        subtitle: "",  // Optional: add lead name later
+        createdAt: serverTimestamp(),
+        done: false,
+        category: finalCategory,
+        priority: parsed.priority,
+        dueDate: parsed.dueDate,
+        completedAt: null,
+        completedBy: null,
+        replies: [] // Initialize empty replies array
+    };  
 
-      creatorId: "current-user-placeholder"
-    };
-    setTasks((prevTasks) => [newTask, ...prevTasks]);
+    try {
+        console.log("🔍 NLP Task Payload:", newTask);
+        await addDoc(collection(db, "tasks"), newTask);
+    } catch (error) {
+        console.error("שגיאה ביצירת משימת NLP:", error);
+        alert("שגיאה בשמירת המשימה. נסה שוב.");
+    }
+
     setNlpInput("");
     setShowNLPModal(false);
     setPrefillCategory(null);
-  }, [nlpInput, parseTaskFromText, prefillCategory, setTasks, setNlpInput, setShowNLPModal, setPrefillCategory]);
+}, [nlpInput, parseTaskFromText, prefillCategory, currentUser, alias]);
 
+  
   /**
   * Toggles the completion status of a task and records completion info.
   * @param {string} id - The ID of the task to toggle.
@@ -654,18 +1047,37 @@ useEffect(() => {
     setEditingCategory(task.category);
 
     try {
-        const due = new Date(task.dueDate);
-         if (isNaN(due.getTime())) throw new Error("Invalid date object");
-
-        setEditingDueDate(due.toISOString().split("T")[0]);
-        setEditingDueTime(due.toTimeString().split(" ")[0].slice(0, 5));
+        if (task.dueDate) {
+            const due = new Date(task.dueDate);
+            if (!isNaN(due.getTime())) {
+                // Format date as YYYY-MM-DD
+                const dateStr = due.toLocaleDateString('en-CA'); // en-CA gives YYYY-MM-DD format
+                // Format time as HH:mm
+                const timeStr = due.toTimeString().slice(0, 5);
+                
+                setEditingDueDate(dateStr);
+                setEditingDueTime(timeStr);
+                return;
+            }
+        }
+        // If we get here, either no date or invalid date - use current date/time
+        const now = new Date();
+        const dateStr = now.toLocaleDateString('en-CA');
+        const timeStr = now.toTimeString().slice(0, 5);
+        
+        setEditingDueDate(dateStr);
+        setEditingDueTime(timeStr);
     } catch (error) {
         console.error("Error processing task due date for editing:", task.dueDate, error);
-
-        setEditingDueDate("");
-        setEditingDueTime("");
+        // On error, still use current date/time
+        const now = new Date();
+        const dateStr = now.toLocaleDateString('en-CA');
+        const timeStr = now.toTimeString().slice(0, 5);
+        
+        setEditingDueDate(dateStr);
+        setEditingDueTime(timeStr);
     }
-  }, [setEditingTaskId, setEditingAssignTo, setEditingTitle, setEditingSubtitle, setEditingPriority, setEditingCategory, setEditingDueDate, setEditingDueTime]);
+}, [setEditingTaskId, setEditingAssignTo, setEditingTitle, setEditingSubtitle, setEditingPriority, setEditingCategory, setEditingDueDate, setEditingDueTime]);
 
   /**
   * Saves the edited task details back to the main tasks state.
@@ -676,59 +1088,54 @@ useEffect(() => {
     e.preventDefault();
     if (!editingTaskId) return;
 
-    let dueDateTime;
+    let dueDateTime = null;
     try {
-
-
-        const timeString = editingDueTime || "00:00";
-
-        if (!editingDueDate || typeof editingDueDate !== 'string' || !editingDueDate.match(/^\d{4}-\d{2}-\d{2}$/)) {
-
-            dueDateTime = null;
-            console.log("No valid due date provided for saving task.");
-        } else {
-            dueDateTime = new Date(`${editingDueDate}T${timeString}:00`);
-             if (isNaN(dueDateTime.getTime())) throw new Error("Invalid combined date/time");
+        if (editingDueDate && editingDueDate.match(/^\d{4}-\d{2}-\d{2}$/)) {
+            const timeString = editingDueTime || "00:00";
+            const dateTimeStr = `${editingDueDate}T${timeString}:00`;
+            const newDate = new Date(dateTimeStr);
+            
+            if (!isNaN(newDate.getTime())) {
+                dueDateTime = newDate;
+            } else {
+                console.error("Invalid date/time combination:", dateTimeStr);
+            }
         }
     } catch (error) {
         console.error("Error creating due date from inputs:", editingDueDate, editingDueTime, error);
-
-
-        dueDateTime = null;
     }
 
-
     setTasks((prevTasks) =>
-      prevTasks.map((task) =>
-        task.id === editingTaskId
-          ? {
-              ...task,
-              assignTo: editingAssignTo,
-              title: editingTitle,
-              subtitle: editingSubtitle,
-              priority: editingPriority,
-              category: editingCategory,
-              dueDate: dueDateTime,
-
-            }
-          : task
-      )
+        prevTasks.map((task) =>
+            task.id === editingTaskId
+                ? {
+                    ...task,
+                    creatorId: currentUser?.uid || task.creatorId,
+                    assignTo: editingAssignTo,
+                    title: editingTitle,
+                    subtitle: editingSubtitle,
+                    priority: editingPriority,
+                    category: editingCategory,
+                    dueDate: dueDateTime
+                }
+                : task
+        )
     );
+    
     setEditingTaskId(null);
-
-     setEditingAssignTo("");
-     setEditingTitle("");
-     setEditingSubtitle("");
-     setEditingPriority("רגיל");
-     setEditingCategory(taskCategories[0] || "");
-     setEditingDueDate("");
-     setEditingDueTime("");
-  }, [
-      editingTaskId, editingAssignTo, editingTitle, editingSubtitle,
-      editingPriority, editingCategory, editingDueDate, editingDueTime,
-      setTasks, setEditingTaskId, setEditingAssignTo, setEditingTitle, setEditingSubtitle,
-      setEditingPriority, setEditingCategory, setEditingDueDate, setEditingDueTime
-  ]);
+    setEditingAssignTo("");
+    setEditingTitle("");
+    setEditingSubtitle("");
+    setEditingPriority("רגיל");
+    setEditingCategory(taskCategories[0] || "");
+    setEditingDueDate("");
+    setEditingDueTime("");
+}, [
+    editingTaskId, editingAssignTo, editingTitle, editingSubtitle,
+    editingPriority, editingCategory, editingDueDate, editingDueTime,
+    setTasks, setEditingTaskId, setEditingAssignTo, setEditingTitle, setEditingSubtitle,
+    setEditingPriority, setEditingCategory, setEditingDueDate, setEditingDueTime
+]);
 
   /**
   * Cancels the task editing process and clears the editing form state.
@@ -755,13 +1162,7 @@ useEffect(() => {
         return;
     }
 
-    if (!task.creatorId || task.creatorId === "current-user-placeholder") {
-        alert("לא ניתן לשלוח תגובה למשימה זו (אין יוצר או שאתה היוצר).");
-        return;
-    }
-
-
-    console.log(`Placeholder: Would open reply modal for task ${taskId} (creator: ${task.creatorId})`);
+    // Allow reply from any user, not just the creator
     const replyMessage = prompt(`הזן תגובה עבור המשימה "${task.title}":`);
 
     if (replyMessage === null || !replyMessage.trim()) {
@@ -769,18 +1170,32 @@ useEffect(() => {
         return;
     }
 
+    // Mark the current task as done
+    setTasks(prevTasks => 
+        prevTasks.map(t => 
+            t.id === taskId 
+                ? { ...t, done: true, completedAt: new Date().toISOString(), completedBy: currentUser?.alias || currentUser?.email || 'Unknown' }
+                : t
+        )
+    );
 
-    console.log(`Placeholder: Would mark task ${taskId} done and create reply task for ${task.creatorId} with message: ${replyMessage}`);
-    alert('פונקציונליות השלמה ותגובה עדיין בפיתוח.');
+    // Create a new task as a reply
+    const newTask = {
+        id: crypto.randomUUID(),
+        title: `תגובה: ${task.title}`,
+        subtitle: replyMessage,
+        creatorId: currentUser?.uid || "current-user-placeholder",
+        assignTo: task.creatorId, // Assign back to the original creator
+        priority: "רגיל",
+        category: task.category,
+        dueDate: new Date().toISOString(),
+        createdAt: new Date().toISOString(),
+        done: false
+    };
 
-
-
-
-
-
-
-
-  }, [tasks, setTasks]);
+    setTasks(prevTasks => [...prevTasks, newTask]);
+    alert('המשימה סומנה כבוצעה ותגובה נשלחה.');
+}, [tasks, setTasks, currentUser]);
 
 
   /**
@@ -801,16 +1216,44 @@ useEffect(() => {
   }, [returnTaskId, returnNewAssignee, returnComment, setShowReturnModal, setReturnComment, setReturnNewAssignee, setReturnTaskId]);
 
   /**
-  * Removes all tasks marked as 'done' from the tasks state after confirmation.
+  * Removes all tasks marked as 'done' from both Firebase and local state after confirmation.
   */
-  const handleClearDoneTasks = useCallback(() => {
-
+  const handleClearDoneTasks = useCallback(async () => {
     if (window.confirm("האם אתה בטוח שברצונך למחוק את כל המשימות שבוצעו? לא ניתן לשחזר פעולה זו.")) {
-      setTasks((prevTasks) => prevTasks.filter(task => !task.done));
-
-
+      try {
+        // Get all completed tasks
+        const completedTasks = tasks.filter(task => task.done);
+        
+        // Delete each completed task from Firebase one by one
+        let successCount = 0;
+        let errorCount = 0;
+        
+        for (const task of completedTasks) {
+          try {
+            await deleteDoc(doc(db, 'tasks', task.id));
+            successCount++;
+          } catch (error) {
+            console.error(`Error deleting task ${task.id}:`, error);
+            errorCount++;
+          }
+        }
+        
+        // Update local state to remove successfully deleted tasks
+        setTasks(prevTasks => prevTasks.filter(task => !task.done));
+        
+        if (errorCount > 0) {
+          alert(`נמחקו ${successCount} משימות בהצלחה. ${errorCount} משימות לא נמחקו עקב שגיאה.`);
+        } else {
+          alert(`נמחקו ${successCount} משימות בהצלחה.`);
+        }
+        
+        console.log(`Successfully deleted ${successCount} completed tasks, ${errorCount} failed`);
+      } catch (error) {
+        console.error('Error in handleClearDoneTasks:', error);
+        alert('שגיאה במחיקת המשימות שבוצעו');
+      }
     }
-  }, [setTasks]);
+  }, [tasks]);
 
 
 
@@ -1126,10 +1569,20 @@ const sortedAndFilteredTasks = useMemo(() => {
   const lowerSearchTerm = taskSearchTerm.toLowerCase();
 
   let filtered = tasks.filter((task) => {
+      // Admin can see all tasks
+      if (currentUser?.isAdmin) return true;
+      
+      // Regular users can see tasks assigned to them or created by them
+      const isAssignedToMe = task.assignTo === currentUser?.email || 
+                            task.assignTo === currentUser?.alias ||
+                            task.assignTo === "עצמי" && task.creatorId === currentUser?.uid;
+      const isCreatedByMe = task.creatorId === currentUser?.uid;
+      
+      if (!isAssignedToMe && !isCreatedByMe) return false;
 
       const assigneeMatch = taskFilter === "הכל" ||
-                            (taskFilter === "שלי" && task.assignTo === "עצמי") ||
-                            (taskFilter === "אחרים" && task.assignTo !== "עצמי");
+                          (taskFilter === "שלי" && (task.assignTo === currentUser?.email || task.assignTo === currentUser?.alias)) ||
+                          (taskFilter === "אחרים" && task.assignTo !== currentUser?.email && task.assignTo !== currentUser?.alias);
 
       const doneMatch = showDoneTasks || !task.done;
 
@@ -1138,9 +1591,8 @@ const sortedAndFilteredTasks = useMemo(() => {
       const categoryMatch = selectedTaskCategories.length === 0 || selectedTaskCategories.includes(task.category);
 
       const searchTermMatch = !lowerSearchTerm ||
-                              task.title.toLowerCase().includes(lowerSearchTerm) ||
-                              (task.subtitle && task.subtitle.toLowerCase().includes(lowerSearchTerm));
-
+                            task.title.toLowerCase().includes(lowerSearchTerm) ||
+                            (task.subtitle && task.subtitle.toLowerCase().includes(lowerSearchTerm));
 
       return assigneeMatch && doneMatch && priorityMatch && categoryMatch && searchTermMatch;
   });
@@ -1178,7 +1630,7 @@ const sortedAndFilteredTasks = useMemo(() => {
   return filtered;
 }, [
     tasks, taskFilter, showDoneTasks, userHasSortedTasks, isTMFullView,
-    taskPriorityFilter, selectedTaskCategories, taskSearchTerm
+    taskPriorityFilter, selectedTaskCategories, taskSearchTerm, currentUser
 ]);
 
 
@@ -1439,6 +1891,9 @@ const calculatedAnalytics = useMemo(() => {
 >
   התנתק
 </button>
+{alias && (
+  <div className="text-xs text-gray-700">{`שלום, ${alias}`}</div>
+)}
 
     {false && (
       <div className="text-xs">
@@ -1546,8 +2001,98 @@ const calculatedAnalytics = useMemo(() => {
                            <div className="flex justify-between items-center mb-2 sticky top-0 bg-gray-100 py-1 px-1 z-10">
                               <h3 className="font-semibold text-center flex-grow">{category} ({categoryTasks.length})</h3>
                               
-                              <Button variant="ghost" size="icon" className="w-6 h-6 text-gray-500 hover:text-blue-600 shrink-0" title={`הוסף ל${category}`} onClick={() => { setPrefillCategory(category); setNlpInput(""); setShowNLPModal(true); }}> <span role="img" aria-label="Add">➕</span> </Button>
+                              <Button 
+                                variant="ghost" 
+                                size="icon" 
+                                className="w-6 h-6 text-gray-500 hover:text-blue-600 shrink-0" 
+                                title={`הוסף ל${category}`} 
+                                onClick={() => {
+                                  setSelectedCategory(category);
+                                  setNewTask({...newTask, category});
+                                  setShowTaskModal(true);
+                                }}
+                              >
+                                <span role="img" aria-label="Add">➕</span>
+                              </Button>
                           </div>
+                          
+                          {showTaskModal && selectedCategory === category && (
+                            <div className="bg-white rounded-lg p-4 border shadow-sm rtl mb-3">
+                              <h2 className="text-lg font-semibold mb-4 text-right">יצירת משימה חדשה</h2>
+                              <form onSubmit={handleCreateTask}>
+                                <div className="space-y-3">
+                                  <div>
+                                    <Label htmlFor="task-title" className="block text-sm font-medium mb-1 text-right">כותרת המשימה <span className="text-red-500">*</span></Label>
+                                    <Input
+                                      id="task-title"
+                                      type="text"
+                                      value={newTask.title}
+                                      onChange={(e) => setNewTask({ ...newTask, title: e.target.value })}
+                                      required
+                                      className="rtl text-right"
+                                    />
+                                  </div>
+
+                                  <div>
+                                    <Label htmlFor="task-subtitle" className="block text-sm font-medium mb-1 text-right">תיאור המשימה</Label>
+                                    <Input
+                                      id="task-subtitle"
+                                      type="text"
+                                      value={newTask.subtitle}
+                                      onChange={(e) => setNewTask({ ...newTask, subtitle: e.target.value })}
+                                      className="rtl text-right"
+                                    />
+                                  </div>
+
+                                  <div>
+                                    <Label htmlFor="task-due-date" className="block text-sm font-medium mb-1 text-right">תאריך יעד</Label>
+                                    <Input
+                                      id="task-due-date"
+                                      type="datetime-local"
+                                      value={newTask.dueDate ? new Date(newTask.dueDate).toISOString().slice(0, 16) : ''}
+                                      onChange={(e) => setNewTask({ ...newTask, dueDate: e.target.value })}
+                                      className="rtl text-right"
+                                    />
+                                  </div>
+
+                                  <div className="grid grid-cols-2 gap-3">
+                                    <div>
+                                      <Label htmlFor="task-priority" className="block text-sm font-medium mb-1 text-right">עדיפות</Label>
+                                      <Select value={newTask.priority} onValueChange={(value) => setNewTask({ ...newTask, priority: value })}>
+                                        <SelectTrigger id="task-priority" className="rtl text-right">
+                                          <SelectValue placeholder="בחר עדיפות..." />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                          <SelectItem value="נמוך" className="text-right">נמוך</SelectItem>
+                                          <SelectItem value="רגיל" className="text-right">רגיל</SelectItem>
+                                          <SelectItem value="דחוף" className="text-right">דחוף</SelectItem>
+                                        </SelectContent>
+                                      </Select>
+                                    </div>
+
+                                    <div>
+                                      <Label htmlFor="task-assign" className="block text-sm font-medium mb-1 text-right">הקצה ל</Label>
+                                      <Select value={newTask.assignTo} onValueChange={(value) => setNewTask({ ...newTask, assignTo: value })}>
+                                        <SelectTrigger id="task-assign" className="rtl text-right">
+                                          <SelectValue placeholder="בחר משתמש..." />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                          {assignableUsers.map(user => (
+                                            <SelectItem key={user.id} value={user.email} className="text-right">{user.alias || user.email}</SelectItem>
+                                          ))}
+                                        </SelectContent>
+                                      </Select>
+                                    </div>
+                                  </div>
+                                </div>
+
+                                <div className="mt-4 flex justify-end gap-3">
+                                  <Button type="submit">צור משימה</Button>
+                                  <Button type="button" variant="outline" onClick={() => setShowTaskModal(false)}>ביטול</Button>
+                                </div>
+                              </form>
+                            </div>
+                          )}
                           
                           <SortableContext items={categoryTasks.map(t => `task-${t.id}`)} strategy={verticalListSortingStrategy} id={category}>
                             <ul className="space-y-3 flex-grow overflow-y-auto pr-1">
@@ -1651,9 +2196,10 @@ const calculatedAnalytics = useMemo(() => {
                         const overdue = isTaskOverdue(task);
                         const overdue12h = isTaskOverdue12h(task);
 
-                         const canReply = !task.done && task.creatorId && task.creatorId !== "current-user-placeholder";
+                        // Reply button is available to all users for incomplete tasks
+                        const canReply = !task.done;
 
-                         if (editingTaskId === task.id) { console.log('Rendering EDIT form for task (Compact):', task.id); }
+                        if (editingTaskId === task.id) { console.log('Rendering EDIT form for task (Compact):', task.id); }
                         return (
                           editingTaskId === task.id ? (
 
@@ -1682,12 +2228,7 @@ const calculatedAnalytics = useMemo(() => {
                                                 <SelectContent>{taskPriorities.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}</SelectContent>
                                             </Select>
                                         </div>
-                                        <div className="flex-1"><Label className="text-xs">קטגוריה:</Label>
-                                            <Select value={editingCategory} onValueChange={setEditingCategory}>
-                                                <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
-                                                <SelectContent>{taskCategories.map(cat => <SelectItem key={cat} value={cat}>{cat}</SelectItem>)}</SelectContent>
-                                            </Select>
-                                        </div>
+                                        <div className="flex-1"><Label className="text-xs">קטגוריה:</Label><Input type="text" value={editingCategory} readOnly disabled className="h-8 text-sm bg-gray-100"/></div>
                                    </div>
                                    <div className="flex gap-2">
                                         <div className="flex-1"><Label className="text-xs">תאריך:</Label><Input type="date" value={editingDueDate} onChange={(e) => setEditingDueDate(e.target.value)} className="h-8 text-sm" required /></div>
