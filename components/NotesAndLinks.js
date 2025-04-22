@@ -1,4 +1,3 @@
-
 import { useEffect, useState } from "react";
 import { db, auth } from "../firebase";
 import {
@@ -24,7 +23,6 @@ export default function NotesAndLinks({ section }) {
 
   const userEmail = auth.currentUser?.email;
   console.log("🔐 Auth Email:", userEmail);  // Should log your email
-
 
   const fetchUsers = async () => {
     const snap = await getDocs(collection(db, "users"));

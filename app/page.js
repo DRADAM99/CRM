@@ -293,7 +293,7 @@ const [selectedDate, setSelectedDate] = useState(new Date());
     hasNewReply: false // Add flag for new replies
   });
 
-  const handleCreateTask = async (e) => {
+  const handleCreateTask = useCallback(async (e) => {
     e.preventDefault();
     if (!newTask.title || !newTask.category) {
       alert('נא למלא את כל השדות החובה');
@@ -343,7 +343,7 @@ const [selectedDate, setSelectedDate] = useState(new Date());
       console.error('Error creating task:', error);
       alert('שגיאה ביצירת המשימה');
     }
-  };
+  }, [currentUser, alias, setShowTaskModal, setNewTask]);
 
   const handleTaskDone = async (taskId, checked) => {
     try {
@@ -651,7 +651,7 @@ const [selectedDate, setSelectedDate] = useState(new Date());
     if (currentUser) {
       fetchUsers();
     }
-  }, [currentUser]);
+  }, [currentUser, fetchUsers, defaultBlockOrder]);
   
   /** Task Listener */
   useEffect(() => {
@@ -1222,7 +1222,7 @@ const handleNLPSubmit = useCallback(async (e) => {
     if (window.confirm("האם אתה בטוח שברצונך למחוק את כל המשימות שבוצעו? לא ניתן לשחזר פעולה זו.")) {
       try {
         // Get all completed tasks
-        const completedTasks = tasks.filter(task => task.done);
+        const completedTasks = tasks.filter(task => task.doneByAssignee && task.doneByCreator);
         
         // Delete each completed task from Firebase one by one
         let successCount = 0;
@@ -1239,7 +1239,7 @@ const handleNLPSubmit = useCallback(async (e) => {
         }
         
         // Update local state to remove successfully deleted tasks
-        setTasks(prevTasks => prevTasks.filter(task => !task.done));
+        setTasks(prevTasks => prevTasks.filter(task => !(task.doneByAssignee && task.doneByCreator)));
         
         if (errorCount > 0) {
           alert(`נמחקו ${successCount} משימות בהצלחה. ${errorCount} משימות לא נמחקו עקב שגיאה.`);
@@ -1253,7 +1253,7 @@ const handleNLPSubmit = useCallback(async (e) => {
         alert('שגיאה במחיקת המשימות שבוצעו');
       }
     }
-  }, [tasks]);
+  }, [tasks, setTasks, currentUser?.uid]);
 
 
 
@@ -1880,7 +1880,7 @@ const calculatedAnalytics = useMemo(() => {
 
   
   <div className="w-48 text-left text-sm text-gray-500 flex flex-col justify-end gap-1">
-    <span>{'Version 5.0'}</span>
+    <span>{'Version 5.1'}</span>
     <button
   className="text-xs text-red-600 underline ml-2"
   onClick={() => {
