@@ -1,13 +1,14 @@
+// Version 5.2 - Working Task Assignment
 "use client";
 
 import { serverTimestamp } from "firebase/firestore";
 import React, { useState, useEffect, useMemo, useCallback } from "react";
 import Image from 'next/image';
 import { useRouter } from "next/navigation";
-import { onAuthStateChanged } from "firebase/auth";
 import { auth, db } from "../firebase";
 import { FaWhatsapp } from "react-icons/fa";
 import { or, query, where, orderBy, arrayUnion } from "firebase/firestore";
+import { useAuth } from "./context/AuthContext";  // Updated import path
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -18,8 +19,9 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Search, RotateCcw, Bell, ChevronDown } from 'lucide-react';
+import { Search, RotateCcw, Bell, ChevronDown, Pencil, MessageCircle } from 'lucide-react';
 import NotesAndLinks from "@/components/NotesAndLinks";
 import {
   collection,
@@ -71,6 +73,10 @@ import {
     Tooltip as RechartsTooltip,
     Legend,
 } from 'recharts';
+
+import TaskManager from "@/components/TaskManager";
+
+import { useToast } from "@/components/ui/use-toast"
 
 
 /*
@@ -156,43 +162,176 @@ const taskPriorities = ["דחוף", "רגיל", "נמוך"];
 
 
 
-export default function Dashboard() {
 
-  
-  const [currentUser, setCurrentUser] = useState(null);
+
+
+
+export default function Dashboard() {
+  const { currentUser } = useAuth();
+  const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [role, setRole] = useState("");
-  const router = useRouter();
+  const [alias, setAlias] = useState("");
+  const [users, setUsers] = useState([]);
+  
+  // Single tasks state declaration
+  const [tasks, setTasks] = useState([]);
 
-/** 🔁 Fetch logged-in user's alias */
-useEffect(() => {
-  if (currentUser) {
-    const fetchAlias = async () => {
-      const userRef = doc(db, "users", currentUser.uid);
-      const userSnap = await getDoc(userRef);
-      if (userSnap.exists()) {
-        const data = userSnap.data();
-        setAlias(data.alias || data.email);
+  // Redirect if not logged in
+  useEffect(() => {
+    if (!loading && !currentUser) {
+      router.push("/login");
+      return;
+    }
+    setLoading(false);
+  }, [loading, currentUser, router]);
+
+  // Fetch user's alias
+  useEffect(() => {
+    const fetchUserData = async () => {
+      if (!currentUser) return;
+      
+      try {
+        const userRef = doc(db, "users", currentUser.uid);
+        const userSnap = await getDoc(userRef);
+        if (userSnap.exists()) {
+          const data = userSnap.data();
+          setAlias(data.alias || currentUser.email || "");
+          setRole(data.role || "staff");
+        }
+      } catch (error) {
+        console.error("Error fetching user data:", error);
       }
     };
-    fetchAlias();
-  }
-}, [currentUser]);
 
+    fetchUserData();
+  }, [currentUser]);
 
-  // ✅ 1. Listen to auth state changes
+  // Fetch users with better error handling and logging
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      if (user) {
-        setCurrentUser(user);
-      } else {
-        setCurrentUser(null);
+    const fetchUsers = async () => {
+      try {
+        const usersRef = collection(db, "users");
+        const usersSnap = await getDocs(usersRef);
+        const usersData = usersSnap.docs.map(doc => {
+          const data = doc.data();
+          return {
+            id: doc.id,
+            email: data.email || "",
+            alias: data.alias || data.email || "",
+            role: data.role || "staff"
+          };
+        });
+        console.log("Fetched users:", usersData);
+        setUsers(usersData);
+        setAssignableUsers(usersData);
+      } catch (error) {
+        console.error("Error fetching users:", error);
       }
-      setLoading(false);
+    };
+    if (currentUser) {
+      fetchUsers();
+    }
+  }, [currentUser]);
+
+  /** Task Listener with improved visibility logic */
+  useEffect(() => {
+    if (!currentUser || !users.length) return;
+
+    console.log("Setting up task listener for user:", {
+      uid: currentUser.uid,
+      email: currentUser.email,
+      alias: currentUser.alias || alias
+    });
+
+    const tasksRef = collection(db, "tasks");
+    // Query all tasks - we'll filter client-side for better flexibility
+    const q = query(tasksRef, orderBy("createdAt", "desc"));
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const allTasks = snapshot.docs.map(doc => {
+        const data = doc.data();
+        // Ensure replies are properly structured
+        const replies = Array.isArray(data.replies) ? data.replies.map(reply => ({
+          ...reply,
+          timestamp: reply.timestamp?.toDate?.() || new Date(reply.timestamp) || new Date(),
+          isRead: reply.isRead || false
+        })).sort((a, b) => b.timestamp - a.timestamp) : [];
+
+        return {
+          id: doc.id,
+          ...data,
+          replies,
+          uniqueId: `task-${doc.id}-${Date.now()}`
+        };
+      });
+      
+      console.log("All tasks with replies:", allTasks);
+
+      const visibleTasks = allTasks.filter(task => {
+        // Get all possible identifiers for the current user
+        const userIdentifiers = [
+          currentUser.uid,
+          currentUser.email,
+          currentUser.alias,
+          alias
+        ].filter(Boolean); // Remove any undefined/null values
+
+        // Check if user is creator
+        const isCreator = task.userId === currentUser.uid || 
+                         task.creatorId === currentUser.uid;
+
+        // Check if task is assigned to any of user's identifiers
+        const isAssignee = userIdentifiers.some(identifier => 
+          task.assignTo === identifier
+        );
+
+        // Log task visibility and replies
+        console.log(`Task ${task.id} visibility check:`, {
+          taskAssignTo: task.assignTo,
+          userIdentifiers,
+          isCreator,
+          isAssignee,
+          isDone: task.done,
+          replyCount: task.replies?.length || 0,
+          hasUnreadReplies: task.replies?.some(reply => !reply.isRead && reply.userId !== currentUser.uid)
+        });
+
+        // Keep task visible if user is creator or assignee, regardless of completion status
+        return isCreator || isAssignee;
+      });
+
+      console.log("Filtered visible tasks with replies:", visibleTasks);
+      setTasks(visibleTasks);
+    }, (error) => {
+      console.error("Error in task listener:", error);
     });
 
     return () => unsubscribe();
-  }, []);
+  }, [currentUser, users, alias]);
+
+  /** 🔁 Fetch logged-in user's alias */
+  useEffect(() => {
+    if (currentUser) {
+      const fetchAlias = async () => {
+        const userRef = doc(db, "users", currentUser.uid);
+        const userSnap = await getDoc(userRef);
+        if (userSnap.exists()) {
+          const data = userSnap.data();
+          setAlias(data.alias || data.email);
+        }
+      };
+      fetchAlias();
+    }
+  }, [currentUser]);
+
+
+  // ✅ 1. Listen to auth state changes - REMOVED duplicate listener since we use AuthContext
+  useEffect(() => {
+    if (!currentUser) {
+      setLoading(false);
+    }
+  }, [currentUser]);
 
   // ✅ 2. Redirect after auth check
   useEffect(() => {
@@ -224,154 +363,157 @@ useEffect(() => {
   };
   
 
-const [selectedDate, setSelectedDate] = useState(new Date());
-  const [view, setView] = useState("month");
-  const [isFullView, setIsFullView] = useState(false);
-  const [mounted, setMounted] = useState(false);
-  const [currentDateTime, setCurrentDateTime] = useState('');
-  const defaultBlockOrder = { TM: 1, Calendar: 2, Leads: 3 };
-  const [blockOrder, setBlockOrder] = useState(defaultBlockOrder);
+  const [selectedDate, setSelectedDate] = useState(new Date());
+  const [view, setView] = useState("month");
+  const [isFullView, setIsFullView] = useState(false);
+  const [mounted, setMounted] = useState(false);
+  const [currentDateTime, setCurrentDateTime] = useState('');
+  const defaultBlockOrder = { TM: 1, Calendar: 2, Leads: 3 };
+  const [blockOrder, setBlockOrder] = useState(defaultBlockOrder);
 
 
-  const [showNLPModal, setShowNLPModal] = useState(false);
-  const [nlpInput, setNlpInput] = useState("");
-  const [showReturnModal, setShowReturnModal] = useState(false);
-  const [returnTaskId, setReturnTaskId] = useState(null);
-  const [returnComment, setReturnComment] = useState("");
-  const [returnNewAssignee, setReturnNewAssignee] = useState("");
-  const [showHistoryModal, setShowHistoryModal] = useState(false);
-  const [showAddLeadModal, setShowAddLeadModal] = useState(false);
-  const [newLeadFullName, setNewLeadFullName] = useState("");
-  const [newLeadPhone, setNewLeadPhone] = useState("");
-  const [newLeadMessage, setNewLeadMessage] = useState("");
-  const [newLeadStatus, setNewLeadStatus] = useState("חדש");
-  const [newLeadSource, setNewLeadSource] = useState("");
+  const [showNLPModal, setShowNLPModal] = useState(false);
+  const [nlpInput, setNlpInput] = useState("");
+  const [showReturnModal, setShowReturnModal] = useState(false);
+  const [returnTaskId, setReturnTaskId] = useState(null);
+  const [returnComment, setReturnComment] = useState("");
+  const [returnNewAssignee, setReturnNewAssignee] = useState("");
+  const [showHistoryModal, setShowHistoryModal] = useState(false);
+  const [showAddLeadModal, setShowAddLeadModal] = useState(false);
+  const [newLeadFullName, setNewLeadFullName] = useState("");
+  const [newLeadPhone, setNewLeadPhone] = useState("");
+  const [newLeadMessage, setNewLeadMessage] = useState("");
+  const [newLeadStatus, setNewLeadStatus] = useState("חדש");
+  const [newLeadSource, setNewLeadSource] = useState("");
 
 
-  const [tasks, setTasks] = useState([
-
-    { id: 'task-1', assignTo: "עצמי", title: "משימה 1 - לקבוע סדרה", subtitle: "תיאור משימה 1", priority: "רגיל", category: "לקבוע סדרה", dueDate: new Date(new Date().setDate(new Date().getDate() + 1)), done: false, completedBy: null, completedAt: null, createdAt: new Date(new Date().setDate(new Date().getDate() - 1)), creatorId: "creator-A", },
-    { id: 'task-2', assignTo: "עצמי", title: "משימה 2 - דוחות (בוצעה)", subtitle: "תיאור משימה 2", priority: "רגיל", category: "דוחות", dueDate: new Date(new Date().setDate(new Date().getDate() - 1)), done: true, completedBy: "creator-B", completedAt: new Date(new Date().setDate(new Date().getDate() - 1)), createdAt: new Date(new Date().setDate(new Date().getDate() - 2)), creatorId: "creator-B", },
-    { id: 'task-3', assignTo: "משתמש אחר", title: "משימה 3 - תשלומים (דחופה)", subtitle: "תיאור משימה 3", priority: "דחוף", category: "תשלומים", dueDate: todayAt(10, 0), done: false, completedBy: null, completedAt: null, createdAt: new Date(new Date().setHours(new Date().getHours() - 5)), creatorId: "creator-A", },
-    { id: 'task-4', assignTo: "אדם", title: "משימה 4 - להתקשר", subtitle: "משימה עבור אדם", priority: "רגיל", category: "להתקשר", dueDate: new Date(new Date().setDate(new Date().getDate() + 2)), done: false, completedBy: null, completedAt: null, createdAt: new Date(new Date().setDate(new Date().getDate() - 3)), creatorId: "creator-B", },
-    { id: 'task-5', assignTo: "עצמי", title: "משימה 5 - אדם", subtitle: "תיאור משימה 5 לאדם", priority: "נמוך", category: "אדם", dueDate: new Date(new Date().setDate(new Date().getDate() + 5)), done: false, completedBy: null, completedAt: null, createdAt: new Date(new Date().setDate(new Date().getDate() - 7)), creatorId: "creator-A", },
-    { id: 'task-6', assignTo: "עצמי", title: "משימה 6 - אחר", subtitle: "תיאור משימה 6", priority: "רגיל", category: "אחר", dueDate: new Date(new Date().setDate(new Date().getDate() + 3)), done: false, completedBy: null, completedAt: null, createdAt: new Date(), creatorId: "creator-B", },
-  ]);
-  const [taskFilter, setTaskFilter] = useState("הכל");
-  const [taskPriorityFilter, setTaskPriorityFilter] = useState("all");
-  const [selectedTaskCategories, setSelectedTaskCategories] = useState([]);
-  const [taskSearchTerm, setTaskSearchTerm] = useState("");
-  const [isTMFullView, setIsTMFullView] = useState(false);
-  const [showDoneTasks, setShowDoneTasks] = useState(false);
-  const [userHasSortedTasks, setUserHasSortedTasks] = useState(false);
-  const [editingTaskId, setEditingTaskId] = useState(null);
-  const [editingAssignTo, setEditingAssignTo] = useState("");
-  const [editingTitle, setEditingTitle] = useState("");
-  const [editingSubtitle, setEditingSubtitle] = useState("");
-  const [editingPriority, setEditingPriority] = useState("רגיל");
-  const [editingCategory, setEditingCategory] = useState(taskCategories[0] || "");
-  const [editingDueDate, setEditingDueDate] = useState("");
-  const [editingDueTime, setEditingDueTime] = useState("");
+  const [taskFilter, setTaskFilter] = useState("הכל");
+  const [taskPriorityFilter, setTaskPriorityFilter] = useState("all");
+  const [selectedTaskCategories, setSelectedTaskCategories] = useState([]);
+  const [taskSearchTerm, setTaskSearchTerm] = useState("");
+  const [isTMFullView, setIsTMFullView] = useState(false);
+  const [showDoneTasks, setShowDoneTasks] = useState(false);
+  const [userHasSortedTasks, setUserHasSortedTasks] = useState(false);
+  const [editingTaskId, setEditingTaskId] = useState(null);
+  const [editingAssignTo, setEditingAssignTo] = useState("");
+  const [editingTitle, setEditingTitle] = useState("");
+  const [editingSubtitle, setEditingSubtitle] = useState("");
+  const [editingPriority, setEditingPriority] = useState("רגיל");
+  const [editingCategory, setEditingCategory] = useState(taskCategories[0] || "");
+  const [editingDueDate, setEditingDueDate] = useState("");
+  const [editingDueTime, setEditingDueTime] = useState("");
 
   // Add task creation state variables
   const [showTaskModal, setShowTaskModal] = useState(false);
-  const [selectedCategory, setSelectedCategory] = useState('');
-  const [alias, setAlias] = useState("");
-  const [newTask, setNewTask] = useState({
-    title: '',
-    subtitle: '',
-    category: '',
-    dueDate: new Date().toISOString().slice(0, 16),
-    priority: 'רגיל',
-    assignTo: '',
-    done: false,
-    createdAt: new Date(),
-    completedBy: null,
-    completedAt: null,
-    creatorId: currentUser?.uid,
-    replies: [], // Add replies array
-    hasNewReply: false // Add flag for new replies
-  });
+  const [newTaskTitle, setNewTaskTitle] = useState("");
+  const [newTaskSubtitle, setNewTaskSubtitle] = useState("");
+  const [newTaskPriority, setNewTaskPriority] = useState("רגיל");
+  const [newTaskCategory, setNewTaskCategory] = useState(taskCategories[0] || "");
+  const [newTaskDueDate, setNewTaskDueDate] = useState("");
+  const [newTaskDueTime, setNewTaskDueTime] = useState("");
+  const [newTaskAssignTo, setNewTaskAssignTo] = useState("");
 
+  // Update task creation to use consistent user identifiers
   const handleCreateTask = async (e) => {
     e.preventDefault();
+    if (!currentUser) {
+      console.error("No current user found");
+      return;
+    }
+
     try {
-      const taskData = {
+      // Find the assigned user's details
+      const assignedUser = users.find(u => 
+        u.alias === newTaskAssignTo || 
+        u.email === newTaskAssignTo
+      );
+
+      console.log("Creating task with assignment:", {
+        assignTo: newTaskAssignTo,
+        foundUser: assignedUser
+      });
+
+      const taskRef = doc(collection(db, "tasks"));
+      const newTask = {
+        id: taskRef.id,
         userId: currentUser.uid,
-        title: e.target.title.value,
-        subtitle: e.target.subtitle.value,
-        category: e.target.category.value,
-        priority: e.target.priority.value,
-        dueDate: e.target.dueDate.value ? new Date(e.target.dueDate.value) : null,
-        assignTo: e.target.assignTo.value,
         creatorId: currentUser.uid,
-        creatorAlias: alias,
-        done: false,
+        title: newTaskTitle,
+        subtitle: newTaskSubtitle,
+        priority: newTaskPriority,
+        category: newTaskCategory,
+        status: "פתוח",
         createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+        creatorAlias: alias || currentUser.email || "",
+        // Use the most specific identifier available
+        assignTo: assignedUser ? assignedUser.email : newTaskAssignTo,
+        dueDate: newTaskDueDate && newTaskDueTime
+          ? new Date(`${newTaskDueDate}T${newTaskDueTime}`).toISOString()
+          : null,
         replies: [],
-        hasNewReply: false
+        isRead: false,
+        isArchived: false,
+        done: false,
+        completedBy: null,
+        completedAt: null
       };
 
-      const docRef = await addDoc(collection(db, "tasks"), taskData);
-      console.log("Task created with ID: ", docRef.id);
-      
+      console.log("Saving task with data:", newTask);
+      await setDoc(taskRef, newTask);
+
       // Reset form
-      e.target.reset();
+      setNewTaskTitle("");
+      setNewTaskSubtitle("");
+      setNewTaskPriority("רגיל");
+      setNewTaskCategory(taskCategories[0] || "");
+      setNewTaskDueDate("");
+      setNewTaskDueTime("");
+      setNewTaskAssignTo("");
       setShowTaskModal(false);
     } catch (error) {
-      console.error('Error creating task:', error);
-      alert('שגיאה ביצירת המשימה');
+      console.error("Error creating task:", error);
+      alert("שגיאה ביצירת המשימה. נסה שוב.");
     }
   };
 
   const handleTaskReply = async (taskId, replyText) => {
-    if (!replyText.trim()) {
-      console.log("Empty reply, skipping");
+    if (!replyText.trim() || !currentUser) {
+      console.log("Empty reply or no user, skipping");
       return;
     }
 
     try {
       const taskRef = doc(db, 'tasks', taskId);
-      
-      // First get the current task data
       const taskDoc = await getDoc(taskRef);
+      
       if (!taskDoc.exists()) {
         console.error('Task not found');
         return;
       }
-
-      const taskData = taskDoc.data();
-      const currentReplies = taskData.replies || [];
       
       // Create the new reply object
       const newReply = {
+        id: `reply-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
         text: replyText,
         timestamp: serverTimestamp(),
         userId: currentUser.uid,
-        userAlias: alias,
+        userAlias: alias || currentUser.email,
         isRead: false
       };
 
+      // Get existing replies
+      const existingReplies = taskDoc.data().replies || [];
+
       // Update the task with the new reply
       await updateDoc(taskRef, {
-        replies: arrayUnion(newReply),
+        replies: [...existingReplies, newReply],
         hasNewReply: true,
-        lastReplyAt: serverTimestamp()
+        lastReplyAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
       });
 
       console.log('Reply added successfully to task:', taskId);
-      
-      // Refresh the task data to verify
-      const updatedDoc = await getDoc(taskRef);
-      if (updatedDoc.exists()) {
-        const updatedData = updatedDoc.data();
-        console.log('Updated task data:', {
-          id: taskId,
-          replies: updatedData.replies,
-          hasNewReply: updatedData.hasNewReply,
-          lastReplyAt: updatedData.lastReplyAt
-        });
-      }
     } catch (error) {
       console.error('Error adding reply:', error);
       alert('שגיאה בהוספת תגובה');
@@ -389,67 +531,124 @@ const [selectedDate, setSelectedDate] = useState(new Date());
       }
 
       const taskData = taskDoc.data();
-      const updatedReplies = taskData.replies.map(reply => ({
+      const updatedReplies = (taskData.replies || []).map(reply => ({
         ...reply,
         isRead: true
       }));
 
       await updateDoc(taskRef, {
         replies: updatedReplies,
-        hasNewReply: false
+        hasNewReply: false,
+        updatedAt: serverTimestamp()
       });
+
+      // Update local state
+      setTasks(prevTasks => 
+        prevTasks.map(task => 
+          task.id === taskId 
+            ? {
+                ...task,
+                replies: updatedReplies,
+                hasNewReply: false
+              }
+            : task
+        )
+      );
 
     } catch (error) {
       console.error('Error marking reply as read:', error);
+      alert('שגיאה בעדכון סטטוס תגובה');
     }
   };
 
   // Update the task rendering to show replies
   const renderTask = (task) => {
-    const isTaskCreator = task.creatorId === currentUser.uid;
-    const isAssignedToMe = task.assignTo === currentUser.email;
-    
-    // Check for unread replies
-    const hasUnreadReplies = task.replies?.some(reply => 
-      !reply.isRead && reply.userId !== currentUser.uid
-    );
-    
-    // Determine task background color
-    let taskStyle = '';
-    if (hasUnreadReplies) {
-      taskStyle = 'bg-green-50';
-    } else if (isAssignedToMe) {
-      taskStyle = 'bg-blue-50';
-    } else if (isTaskCreator) {
-      taskStyle = 'bg-gray-50';
-    }
-
-    // Sort replies by timestamp
-    const sortedReplies = task.replies ? [...task.replies].sort((a, b) => 
-      new Date(b.timestamp) - new Date(a.timestamp)
-    ) : [];
+    const hasUnreadReplies = task.replies?.some(reply => !reply.readBy?.includes(currentUser?.uid));
+    const isCreator = task.createdBy === currentUser?.uid;
+    const isAssignee = task.assignTo === currentUser?.uid;
+    const bgColor = isCreator ? 'bg-blue-50' : isAssignee ? 'bg-green-50' : 'bg-white';
+    const sortedReplies = task.replies?.sort((a, b) => b.timestamp - a.timestamp) || [];
 
     return (
-      <li key={task.id} className={`p-3 border rounded ${taskStyle}`}>
-        <div className="flex items-start space-x-3 space-x-reverse">
+      <div key={task.id} className={`p-3 rounded-lg shadow-sm border ${bgColor} relative`}>
+        <div className="flex items-start justify-between gap-2">
+          <div className="flex-grow">
+            <div className="flex items-center gap-2 mb-1">
           <Checkbox 
             checked={task.done} 
             onCheckedChange={(checked) => handleTaskDone(task.id, checked)}
-            id={`task-${task.id}`}
-            className="mt-1 shrink-0"
+                className="data-[state=checked]:bg-green-600"
           />
-          <div className="flex-grow overflow-hidden">
-            <label htmlFor={`task-${task.id}`} className={`font-medium text-sm ${task.done ? "line-through text-gray-500" : "text-gray-900"}`}>
+              <span className={`font-medium ${task.done ? 'line-through text-gray-500' : ''}`}>
               {task.title}
-            </label>
+              </span>
+            </div>
             {task.subtitle && (
-              <p className={`text-xs mt-0.5 ${task.done ? "line-through text-gray-400" : "text-gray-600"}`}>
+              <p className={`text-sm text-gray-600 mb-2 ${task.done ? 'line-through' : ''}`}>
                 {task.subtitle}
               </p>
             )}
+          </div>
+          
+          <div className="flex items-center gap-1">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8"
+                  onClick={() => {
+                    setEditingTaskId(task.id);
+                    setEditingTitle(task.title);
+                    setEditingSubtitle(task.subtitle || '');
+                    setEditingPriority(task.priority);
+                    setEditingCategory(task.category);
+                    setEditingDueDate(task.dueDate || '');
+                    setEditingDueTime(task.dueTime || '');
+                    setEditingAssignTo(task.assignTo || '');
+                  }}
+                >
+                  <Pencil className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>ערוך משימה</TooltipContent>
+            </Tooltip>
+
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 relative"
+                  onClick={() => setReplyingToTaskId(task.id)}
+                >
+                  <MessageCircle className="h-4 w-4" />
+                  {hasUnreadReplies && (
+                    <span className="absolute -top-1 -right-1 h-3 w-3 bg-red-500 rounded-full" />
+                  )}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>הוסף תגובה</TooltipContent>
+            </Tooltip>
+
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8"
+                  onClick={() => setShowingNotificationsForTaskId(task.id)}
+                >
+                  <Bell className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>הגדר תזכורות</TooltipContent>
+            </Tooltip>
+          </div>
+        </div>
             <div className="text-xs text-gray-500 mt-1 space-x-2 space-x-reverse">
               <span>🗓️ {formatDateTime(task.dueDate)}</span>
-              <span>👤 מוקצה ל: {assignableUsers.find(u => u.email === task.assignTo)?.alias || task.assignTo}</span>
+          <span>👤 מוקצה ל: {assignableUsers.find(u => u.id === task.assignTo)?.alias || assignableUsers.find(u => u.email === task.assignTo)?.alias || task.assignTo}</span>
               {task.creatorAlias && <span className="font-medium">📝 נוצר ע&quot;י: {task.creatorAlias}</span>}
               <span>🏷️ {task.category}</span>
               <span>{task.priority === 'דחוף' ? '🔥' : task.priority === 'נמוך' ? '⬇️' : '➖'} {task.priority}</span>
@@ -460,7 +659,10 @@ const [selectedDate, setSelectedDate] = useState(new Date());
               <div className="mt-2 border-t pt-2">
                 <div className="text-xs font-medium text-gray-500 mb-1">תגובות:</div>
                 {sortedReplies.map((reply, index) => (
-                  <div key={index} className={`text-xs mb-1 ${!reply.isRead && reply.userId !== currentUser.uid ? 'font-bold' : ''}`}>
+              <div 
+                key={`${task.id}-reply-${reply.timestamp?.toMillis?.() || Date.now()}-${index}`} 
+                className={`text-xs mb-1 ${!reply.isRead && reply.userId !== currentUser.uid ? 'font-bold' : ''}`}
+              >
                     <span className="font-bold">{reply.userAlias}:</span> {reply.text}
                     <span className="text-gray-400 text-xs mr-2"> ({formatDateTime(reply.timestamp)})</span>
                     {!reply.isRead && reply.userId !== currentUser.uid && (
@@ -502,8 +704,6 @@ const [selectedDate, setSelectedDate] = useState(new Date());
               </div>
             )}
           </div>
-        </div>
-      </li>
     );
   };
 
@@ -518,32 +718,32 @@ const [selectedDate, setSelectedDate] = useState(new Date());
     { id: 'lead-3', createdAt: new Date(new Date().setDate(new Date().getDate() - 2)), fullName: "בני גנץ", phoneNumber: "0509876543", message: "לא היה מענה", status: "חדש", source: "אתר אינטרנט", conversationSummary: [], expanded: false, appointmentDateTime: null, },
     { id: 'lead-4', createdAt: new Date(new Date().setDate(new Date().getDate() - 1)), fullName: "דנה לוי", phoneNumber: "0541122334", message: "קבעה פגישה לשבוע הבא", status: "תור נקבע", source: "המלצה", conversationSummary: [ { text: "שיחה ראשונית, עניין רב.", timestamp: new Date(new Date().setDate(new Date().getDate() - 1)) }, { text: "נקבעה פגישת ייעוץ ל-15/4.", timestamp: new Date(new Date().setDate(new Date().getDate() - 1)) }, ], expanded: false, appointmentDateTime: new Date(2025, 3, 15, 10, 30).toISOString(), }, */
   ]); 
-  const [editingLeadId, setEditingLeadId] = useState(null);
-  const [editLeadFullName, setEditLeadFullName] = useState("");
-  const [editLeadPhone, setEditLeadPhone] = useState("");
-  const [editLeadMessage, setEditLeadMessage] = useState("");
-  const [editLeadStatus, setEditLeadStatus] = useState("חדש");
-  const [editLeadSource, setEditLeadSource] = useState("");
-  const [editLeadAppointmentDateTime, setEditLeadAppointmentDateTime] = useState("");
-  const [editLeadNLP, setEditLeadNLP] = useState("");
-  const [newConversationText, setNewConversationText] = useState("");
-  const [showConvUpdate, setShowConvUpdate] = useState(null);
-  const [leadSortBy, setLeadSortBy] = useState("priority");
-  const [leadTimeFilter, setLeadTimeFilter] = useState("all");
-  const [leadFilterFrom, setLeadFilterFrom] = useState("");
-  const [leadFilterTo, setLeadFilterTo] = useState("");
-  const [leadSearchTerm, setLeadSearchTerm] = useState("");
+  const [editingLeadId, setEditingLeadId] = useState(null);
+  const [editLeadFullName, setEditLeadFullName] = useState("");
+  const [editLeadPhone, setEditLeadPhone] = useState("");
+  const [editLeadMessage, setEditLeadMessage] = useState("");
+  const [editLeadStatus, setEditLeadStatus] = useState("חדש");
+  const [editLeadSource, setEditLeadSource] = useState("");
+  const [editLeadAppointmentDateTime, setEditLeadAppointmentDateTime] = useState("");
+  const [editLeadNLP, setEditLeadNLP] = useState("");
+  const [newConversationText, setNewConversationText] = useState("");
+  const [showConvUpdate, setShowConvUpdate] = useState(null);
+  const [leadSortBy, setLeadSortBy] = useState("priority");
+  const [leadTimeFilter, setLeadTimeFilter] = useState("all");
+  const [leadFilterFrom, setLeadFilterFrom] = useState("");
+  const [leadFilterTo, setLeadFilterTo] = useState("");
+  const [leadSearchTerm, setLeadSearchTerm] = useState("");
 
 
-  const [showAnalytics, setShowAnalytics] = useState(false);
-  const [analyticsTimeFilter, setAnalyticsTimeFilter] = useState("month");
-  const [analyticsFilterFrom, setAnalyticsFilterFrom] = useState("");
-  const [analyticsFilterTo, setAnalyticsFilterTo] = useState("");
+  const [showAnalytics, setShowAnalytics] = useState(false);
+  const [analyticsTimeFilter, setAnalyticsTimeFilter] = useState("month");
+  const [analyticsFilterFrom, setAnalyticsFilterFrom] = useState("");
+  const [analyticsFilterTo, setAnalyticsFilterTo] = useState("");
 
 
 
-  const [activeId, setActiveId] = useState(null);
-  const [prefillCategory, setPrefillCategory] = useState(null);
+  const [activeId, setActiveId] = useState(null);
+  const [prefillCategory, setPrefillCategory] = useState(null);
 
 
   
@@ -575,30 +775,59 @@ const [selectedDate, setSelectedDate] = useState(new Date());
   
   /** Task Listener */
   useEffect(() => {
-    const unsubscribe = onSnapshot(collection(db, "tasks"), (snapshot) => {
-        const newTasks = snapshot.docs.map(doc => ({
+    if (!currentUser) return;
+    console.log("Current user:", { uid: currentUser.uid, email: currentUser.email, alias });
+
+    const tasksRef = collection(db, "tasks");
+    const q = query(
+      tasksRef,
+      orderBy("createdAt", "desc")
+    );
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      console.log("Raw tasks from Firebase:", snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      
+      const tasksData = snapshot.docs
+        .map(doc => {
+          const data = doc.data();
+          console.log("Processing task:", { id: doc.id, assignTo: data.assignTo, creatorId: data.creatorId });
+          return {
             id: doc.id,
-            ...doc.data(),
-            dueDate: doc.data().dueDate?.toDate() || null,
-            createdAt: doc.data().createdAt?.toDate() || null,
-            completedAt: doc.data().completedAt?.toDate() || null,
-            lastReplyAt: doc.data().lastReplyAt?.toDate() || null,
-            replies: doc.data().replies?.map(reply => ({
-                ...reply,
-                timestamp: reply.timestamp?.toDate() || null
-            })) || []
-        }));
+            ...data,
+            // Ensure we have a unique, clean ID for React keys
+            uniqueId: `task-${doc.id}-${Date.now()}`
+          };
+        })
+        .filter(task => {
+          const isCreator = task.userId === currentUser.uid || task.creatorId === currentUser.uid;
+          const isAssignee = 
+            task.assignTo === currentUser.uid ||
+            task.assignTo === currentUser.email ||
+            task.assignTo === currentUser.alias ||
+            task.assignTo === alias;
+          
+          console.log("Task visibility check:", {
+            taskId: task.id,
+            assignTo: task.assignTo,
+            currentUser: currentUser.uid,
+            currentEmail: currentUser.email,
+            currentAlias: currentUser.alias,
+            alias,
+            isCreator,
+            isAssignee
+          });
 
-        // Filter out done tasks if showDoneTasks is false
-        const filteredTasks = showDoneTasks 
-            ? newTasks 
-            : newTasks.filter(task => !task.done);
+          return isCreator || isAssignee;
+        });
 
-        setTasks(filteredTasks);
+      console.log("Filtered tasks:", tasksData);
+      setTasks(tasksData);
+    }, (error) => {
+      console.error("Error fetching tasks:", error);
     });
 
     return () => unsubscribe();
-  }, [showDoneTasks]);
+  }, [currentUser, alias]);
   /** listens to pull but not needed here
   const tasksRef = collection(db, "tasks");
 const q = query(
@@ -685,12 +914,12 @@ useEffect(() => {
 
 
 
-  const sensors = useSensors(
-    useSensor(PointerSensor, {
-      activationConstraint: { distance: 8 },
-    }),
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates, })
-  );
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: { distance: 8 },
+    }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates, })
+  );
 
 
 
@@ -889,39 +1118,55 @@ useEffect(() => {
   /** ✅ NLP Task Submit (with Firestore save and user assignment) */
 const handleNLPSubmit = useCallback(async (e) => {
     e.preventDefault();
-    if (!nlpInput.trim() || !currentUser) return;
+  console.log("🔄 Starting NLP task creation...");
+  if (!nlpInput.trim() || !currentUser) {
+    console.error("❌ No input or current user found");
+    return;
+  }
 
     const parsed = parseTaskFromText(nlpInput);
     const finalCategory = prefillCategory || parsed.category;
+  console.log("📝 Parsed task data:", parsed);
 
+  try {
+    const taskRef = doc(collection(db, "tasks"));
     const newTask = {
+      id: taskRef.id,
         userId: currentUser.uid,
         creatorId: currentUser.uid,
         creatorAlias: alias || currentUser.email || "",
         assignTo: parsed.assignTo,
         title: parsed.title || "משימה ללא שם",
         subtitle: "",  // Optional: add lead name later
-        createdAt: serverTimestamp(),
-        done: false,
         category: finalCategory,
         priority: parsed.priority,
+      status: "פתוח",
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
         dueDate: parsed.dueDate,
-        completedAt: null,
+      replies: [],
+      isRead: false,
+      isArchived: false,
+      done: false,
         completedBy: null,
-        replies: [] // Initialize empty replies array
-    };  
+      completedAt: null
+    };
 
-    try {
-        console.log("🔍 NLP Task Payload:", newTask);
-        await addDoc(collection(db, "tasks"), newTask);
-    } catch (error) {
-        console.error("שגיאה ביצירת משימת NLP:", error);
-        alert("שגיאה בשמירת המשימה. נסה שוב.");
-    }
+    console.log("💾 Saving NLP task to Firestore...");
+    await setDoc(taskRef, newTask);
+    console.log("✅ NLP task saved successfully");
+    
+    setTasks((prev) => [...prev, newTask]);
+    console.log("🔄 Local state updated");
 
     setNlpInput("");
     setShowNLPModal(false);
     setPrefillCategory(null);
+    console.log("✨ Form reset and modal closed");
+  } catch (error) {
+    console.error("❌ Error creating NLP task:", error);
+    alert("שגיאה בשמירת המשימה. נסה שוב.");
+  }
 }, [nlpInput, parseTaskFromText, prefillCategory, currentUser, alias]);
 
   
@@ -938,15 +1183,14 @@ const handleNLPSubmit = useCallback(async (e) => {
           return {
             ...task,
             done: isNowDone,
-
-            completedBy: isNowDone ? "current-user-placeholder" : null,
+            completedBy: isNowDone ? (currentUser?.alias || currentUser?.email || 'Unknown') : null,
             completedAt: isNowDone ? new Date() : null,
           };
         }
         return task;
       })
     );
-  }, [setTasks]);
+  }, [setTasks, currentUser]);
 
   /**
   * Populates the editing form state when the user clicks the edit button on a task.
@@ -1075,47 +1319,61 @@ const handleNLPSubmit = useCallback(async (e) => {
   /** --- NEW: Handler for Complete & Reply --- */
   const handleCompleteAndReply = useCallback(async (taskId) => {
     console.log(`Complete & Reply action initiated for task: ${taskId}`);
-    const task = tasks.find(t => t.id === taskId);
-    if (!task) {
-        console.error("Cannot reply: Task not found locally.");
-        alert("שגיאה: המשימה לא נמצאה.");
+    if (!currentUser) {
+      console.error("Cannot reply: No current user");
+      alert("שגיאה: משתמש לא מחובר");
         return;
     }
 
-    // Allow reply from any user, not just the creator
+    try {
+      const taskRef = doc(db, 'tasks', taskId);
+      const taskDoc = await getDoc(taskRef);
+      
+      if (!taskDoc.exists()) {
+        console.error("Task not found");
+        alert("שגיאה: המשימה לא נמצאה");
+        return;
+      }
+
+      const task = taskDoc.data();
     const replyMessage = prompt(`הזן תגובה עבור המשימה "${task.title}":`);
 
     if (replyMessage === null || !replyMessage.trim()) {
-        console.log("Reply cancelled or empty.");
+        console.log("Reply cancelled or empty");
         return;
     }
 
-    // Mark the current task as done
-    setTasks(prevTasks => 
-        prevTasks.map(t => 
-            t.id === taskId 
-                ? { ...t, done: true, completedAt: new Date().toISOString(), completedBy: currentUser?.alias || currentUser?.email || 'Unknown' }
-                : t
-        )
-    );
+      // Create the new reply with regular Date object
+      const now = new Date();
+      const newReply = {
+        id: `reply-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        text: replyMessage,
+        timestamp: now.toISOString(), // Use ISO string instead of serverTimestamp
+        userId: currentUser.uid,
+        userAlias: alias || currentUser.email,
+        isRead: false
+      };
 
-    // Create a new task as a reply
-    const newTask = {
-        id: crypto.randomUUID(),
-        title: `תגובה: ${task.title}`,
-        subtitle: replyMessage,
-        creatorId: currentUser?.uid || "current-user-placeholder",
-        assignTo: task.creatorId, // Assign back to the original creator
-        priority: "רגיל",
-        category: task.category,
-        dueDate: new Date().toISOString(),
-        createdAt: new Date().toISOString(),
-        done: false
-    };
+      // Get existing replies
+      const existingReplies = task.replies || [];
 
-    setTasks(prevTasks => [...prevTasks, newTask]);
-    alert('המשימה סומנה כבוצעה ותגובה נשלחה.');
-}, [tasks, setTasks, currentUser]);
+      // Update the task in Firebase
+      await updateDoc(taskRef, {
+        done: true,
+        completedAt: serverTimestamp(), // These can still use serverTimestamp
+        completedBy: currentUser?.alias || currentUser?.email || 'Unknown',
+        replies: [...existingReplies, newReply],
+        hasNewReply: true,
+        lastReplyAt: serverTimestamp(), // This too
+        updatedAt: serverTimestamp() // And this
+      });
+
+      console.log('Task completed and reply added successfully');
+    } catch (error) {
+      console.error('Error in Complete & Reply:', error);
+      alert('שגיאה בשמירת התגובה והשלמת המשימה');
+    }
+  }, [currentUser, alias]);
 
 
   /**
@@ -1139,29 +1397,59 @@ const handleNLPSubmit = useCallback(async (e) => {
   * Removes all tasks marked as 'done' from both Firebase and local state after confirmation.
   */
   const handleClearDoneTasks = useCallback(async () => {
+    if (!currentUser) {
+      console.error("No user found");
+      return;
+    }
+
     if (window.confirm("האם אתה בטוח שברצונך למחוק את כל המשימות שבוצעו? לא ניתן לשחזר פעולה זו.")) {
       try {
-        // Get all completed tasks
-        const completedTasks = tasks.filter(task => task.done);
-        
-        // Delete each completed task from Firebase
-        const deletePromises = completedTasks.map(task => 
-          deleteDoc(doc(db, 'tasks', task.id))
+        // Get all completed tasks that belong to the current user
+        const completedTasks = tasks.filter(task => 
+          task.done && (
+            task.userId === currentUser.uid || 
+            task.creatorId === currentUser.uid ||
+            task.assignTo === currentUser.email ||
+            task.assignTo === currentUser.alias
+          )
         );
         
+        if (completedTasks.length === 0) {
+          console.log("No completed tasks to delete");
+          return;
+        }
+        
+        // Delete each completed task from Firebase
+        const deletePromises = completedTasks.map(async task => {
+          try {
+            await deleteDoc(doc(db, 'tasks', task.id));
+            return task.id;
+          } catch (error) {
+            console.error(`Failed to delete task ${task.id}:`, error);
+            return null;
+          }
+        });
+        
         // Wait for all deletions to complete
-        await Promise.all(deletePromises);
+        const results = await Promise.allSettled(deletePromises);
+        const successfulDeletes = results
+          .filter(result => result.status === 'fulfilled' && result.value)
+          .map(result => result.value);
         
-        // Update local state
-        setTasks(prevTasks => prevTasks.filter(task => !task.done));
+        // Update local state only for successfully deleted tasks
+        setTasks(prevTasks => prevTasks.filter(task => !successfulDeletes.includes(task.id)));
         
-        console.log(`Successfully deleted ${completedTasks.length} completed tasks`);
+        console.log(`Successfully deleted ${successfulDeletes.length} of ${completedTasks.length} completed tasks`);
+
+        if (successfulDeletes.length < completedTasks.length) {
+          alert('חלק מהמשימות לא נמחקו עקב הרשאות חסרות');
+        }
       } catch (error) {
         console.error('Error deleting completed tasks:', error);
         alert('שגיאה במחיקת המשימות שבוצעו');
       }
     }
-  }, [tasks]);
+  }, [tasks, currentUser]);
 
 
 
@@ -1408,62 +1696,68 @@ const handleNLPSubmit = useCallback(async (e) => {
 
 
 
-  const handleDragStart = useCallback((event) => { setActiveId(event.active.id); }, [setActiveId]);
+  const handleDragStart = useCallback((event) => {
+    setActiveId(event.active.id);
+  }, [setActiveId]);
+
   const handleDragEnd = useCallback((event) => {
     const { active, over } = event;
     setActiveId(null);
-    if (!over || !active || active.id === over.id) { return; }
-    const activeId = active.id;
-    const overId = over.id;
+    if (!over || !active || active.id === over.id) return;
 
+    const activeTaskId = typeof active.id === 'string' && active.id.startsWith('task-') 
+      ? active.id.replace('task-', '') 
+      : null;
 
-    const activeTaskId = typeof activeId === 'string' && activeId.startsWith('task-') ? activeId.replace('task-', '') : null;
     if (!activeTaskId) {
-      console.error("Dragged item ID is not a valid task ID:", activeId);
+      console.error("Dragged item ID is not a valid task ID:", active.id);
       return;
     }
+
     const activeTask = tasks.find(t => t.id === activeTaskId);
     if (!activeTask) {
         console.error("Cannot find dragged task in state:", activeTaskId);
         return;
     }
 
-
-    if (overId === "calendar-dropzone") {
-      console.log(`Task ${activeId} dropped on Calendar`);
+    if (over.id === "calendar-dropzone") {
       const currentDueDate = new Date(activeTask.dueDate);
       const newDueDate = new Date(selectedDate);
-      if (!isNaN(currentDueDate.getTime())) { newDueDate.setHours(currentDueDate.getHours(), currentDueDate.getMinutes(), 0, 0); }
-      else { newDueDate.setHours(12, 0, 0, 0); }
-      setTasks((prevTasks) => prevTasks.map((task) => task.id === activeTask.id ? { ...task, dueDate: newDueDate } : task ));
+      if (!isNaN(currentDueDate.getTime())) {
+        newDueDate.setHours(currentDueDate.getHours(), currentDueDate.getMinutes(), 0, 0);
+      } else {
+        newDueDate.setHours(12, 0, 0, 0);
+      }
+      setTasks(prevTasks => prevTasks.map(task => 
+        task.id === activeTask.id ? { ...task, dueDate: newDueDate } : task
+      ));
       return;
     }
 
-
     const overContainerId = over.data?.current?.sortable?.containerId;
     const activeContainerId = active.data?.current?.sortable?.containerId;
+
     if (activeContainerId && overContainerId && activeContainerId !== overContainerId) {
-
-        console.log(`Moving task ${activeId} to category ${overContainerId}`);
         if (taskCategories.includes(overContainerId)) {
-            setTasks((prevTasks) => prevTasks.map((task) => task.id === activeTask.id ? { ...task, category: overContainerId } : task ));
-        }
-    } else if (activeId !== overId) {
-
-
-        const overTaskId = typeof overId === 'string' && overId.startsWith('task-') ? overId.replace('task-', '') : null;
-        const oldIndex = tasks.findIndex((t) => t.id === activeTaskId);
-        const newIndex = tasks.findIndex((t) => t.id === overTaskId);
+        setTasks(prevTasks => prevTasks.map(task => 
+          task.id === activeTask.id ? { ...task, category: overContainerId } : task
+        ));
+      }
+    } else if (active.id !== over.id) {
+      const overTaskId = typeof over.id === 'string' && over.id.startsWith('task-') 
+        ? over.id.replace('task-', '') 
+        : null;
+      const oldIndex = tasks.findIndex(t => t.id === activeTaskId);
+      const newIndex = tasks.findIndex(t => t.id === overTaskId);
 
         if (oldIndex !== -1 && newIndex !== -1) {
-            console.log(`Reordering task ${activeId} from index ${oldIndex} to ${newIndex}`);
-            setTasks((items) => arrayMove(items, oldIndex, newIndex));
-            if (!isTMFullView) { setUserHasSortedTasks(true); }
-        } else {
-             console.warn("Could not find indices for reordering:", activeId, overId);
+        setTasks(items => arrayMove(items, oldIndex, newIndex));
+        if (!isTMFullView) {
+          setUserHasSortedTasks(true);
         }
+      }
     }
-  }, [tasks, selectedDate, isTMFullView, setTasks, setUserHasSortedTasks, setActiveId]);
+  }, [tasks, selectedDate, isTMFullView, taskCategories]);
 
 
 
@@ -1761,7 +2055,7 @@ const calculatedAnalytics = useMemo(() => {
   return (
 
     <TooltipProvider>
-      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={handleDragStart} onDragEnd={handleDragEnd} >
+      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
         
       <header dir="rtl" className="flex items-center justify-between p-4 border-b bg-white shadow-sm sticky top-0 z-20 h-[90px]">
   <div className="w-48 text-right text-sm text-gray-600">{currentDateTime || 'טוען תאריך...'}</div>
@@ -1788,7 +2082,7 @@ const calculatedAnalytics = useMemo(() => {
 
   
   <div className="w-48 text-left text-sm text-gray-500 flex flex-col justify-end gap-1">
-    <span>{'Version 5.0'}</span>
+    <span>{'Version 5.1'}</span>
     <button
   className="text-xs text-red-600 underline ml-2"
   onClick={() => {
@@ -1892,7 +2186,21 @@ const calculatedAnalytics = useMemo(() => {
                            <Button variant="outline" size="icon" className="w-8 h-8 text-red-600 hover:bg-red-50 hover:text-red-700" title="מחק משימות שבוצעו" onClick={handleClearDoneTasks} disabled={!tasks.some(task => task.done)}> <span role="img" aria-label="Clear Done">🧹</span> </Button>
                            
                            <Button variant="outline" size="sm" title="היסטוריית משימות" onClick={() => setShowHistoryModal(true)}> <span role="img" aria-label="History">📜</span> </Button>
-                           <Button size="sm" onClick={() => { setPrefillCategory(null); setNlpInput(""); setShowNLPModal(true); }}>{'+ משימה (NLP)'}</Button>
+                           <Button 
+  size="sm" 
+  onClick={() => {
+    setNewTaskTitle("");
+    setNewTaskSubtitle("");
+    setNewTaskPriority("רגיל");
+    setNewTaskCategory(taskCategories[0] || "");
+    setNewTaskDueDate("");
+    setNewTaskDueTime("");
+    setNewTaskAssignTo("");
+    setShowTaskModal(true);
+  }}
+>
+  {'+ משימה'}
+</Button>
                         </div>
                     </div>
                 </div>
@@ -1915,8 +2223,7 @@ const calculatedAnalytics = useMemo(() => {
                                 className="w-6 h-6 text-gray-500 hover:text-blue-600 shrink-0" 
                                 title={`הוסף ל${category}`} 
                                 onClick={() => {
-                                  setSelectedCategory(category);
-                                  setNewTask({...newTask, category});
+                                  setNewTaskCategory(category);
                                   setShowTaskModal(true);
                                 }}
                               >
@@ -1924,174 +2231,14 @@ const calculatedAnalytics = useMemo(() => {
                               </Button>
                           </div>
                           
-                          {showTaskModal && selectedCategory === category && (
-                            <div className="bg-white rounded-lg p-4 border shadow-sm rtl mb-3">
-                              <h2 className="text-lg font-semibold mb-4 text-right">יצירת משימה חדשה</h2>
-                              <form onSubmit={handleCreateTask}>
-                                <div className="space-y-3">
-                                  <div>
-                                    <Label htmlFor="task-title" className="block text-sm font-medium mb-1 text-right">כותרת המשימה <span className="text-red-500">*</span></Label>
-                                    <Input
-                                      id="task-title"
-                                      type="text"
-                                      value={newTask.title}
-                                      onChange={(e) => setNewTask({ ...newTask, title: e.target.value })}
-                                      required
-                                      className="rtl text-right"
-                                    />
+                          <div className="flex-1 overflow-y-auto">
+                            {categoryTasks.map((task) => (
+                              <div key={task.id} className="mb-2">
+                                {renderTask(task)}
                                   </div>
-
-                                  <div>
-                                    <Label htmlFor="task-subtitle" className="block text-sm font-medium mb-1 text-right">תיאור המשימה</Label>
-                                    <Input
-                                      id="task-subtitle"
-                                      type="text"
-                                      value={newTask.subtitle}
-                                      onChange={(e) => setNewTask({ ...newTask, subtitle: e.target.value })}
-                                      className="rtl text-right"
-                                    />
-                                  </div>
-
-                                  <div>
-                                    <Label htmlFor="task-due-date" className="block text-sm font-medium mb-1 text-right">תאריך יעד</Label>
-                                    <Input
-                                      id="task-due-date"
-                                      type="datetime-local"
-                                      value={newTask.dueDate ? new Date(newTask.dueDate).toISOString().slice(0, 16) : ''}
-                                      onChange={(e) => setNewTask({ ...newTask, dueDate: e.target.value })}
-                                      className="rtl text-right"
-                                    />
-                                  </div>
-
-                                  <div className="grid grid-cols-2 gap-3">
-                                    <div>
-                                      <Label htmlFor="task-priority" className="block text-sm font-medium mb-1 text-right">עדיפות</Label>
-                                      <Select value={newTask.priority} onValueChange={(value) => setNewTask({ ...newTask, priority: value })}>
-                                        <SelectTrigger id="task-priority" className="rtl text-right">
-                                          <SelectValue placeholder="בחר עדיפות..." />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                          <SelectItem value="נמוך" className="text-right">נמוך</SelectItem>
-                                          <SelectItem value="רגיל" className="text-right">רגיל</SelectItem>
-                                          <SelectItem value="דחוף" className="text-right">דחוף</SelectItem>
-                                        </SelectContent>
-                                      </Select>
-                                    </div>
-
-                                    <div>
-                                      <Label htmlFor="task-assign" className="block text-sm font-medium mb-1 text-right">הקצה ל</Label>
-                                      <Select value={newTask.assignTo} onValueChange={(value) => setNewTask({ ...newTask, assignTo: value })}>
-                                        <SelectTrigger id="task-assign" className="rtl text-right">
-                                          <SelectValue placeholder="בחר משתמש..." />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                          {assignableUsers.map(user => (
-                                            <SelectItem key={user.id} value={user.email} className="text-right">{user.alias || user.email}</SelectItem>
-                                          ))}
-                                        </SelectContent>
-                                      </Select>
+                            ))}
                                     </div>
                                   </div>
-                                </div>
-
-                                <div className="mt-4 flex justify-end gap-3">
-                                  <Button type="submit">צור משימה</Button>
-                                  <Button type="button" variant="outline" onClick={() => setShowTaskModal(false)}>ביטול</Button>
-                                </div>
-                              </form>
-                            </div>
-                          )}
-                          
-                          <SortableContext items={categoryTasks.map(t => `task-${t.id}`)} strategy={verticalListSortingStrategy} id={category}>
-                            <ul className="space-y-3 flex-grow overflow-y-auto pr-1">
-                              {categoryTasks.length === 0 && (<li className="text-center text-gray-400 text-sm pt-4">{'אין משימות'}</li>)}
-                              {categoryTasks.map((task) => {
-                                const overdue = isTaskOverdue(task);
-                                const overdue12h = isTaskOverdue12h(task);
-
-                                const canReply = !task.done && task.creatorId && task.creatorId !== "current-user-placeholder";
-
-                                if (editingTaskId === task.id) { console.log('Rendering EDIT form for task (Kanban):', task.id); }
-                                return (
-                                  editingTaskId === task.id ? (
-
-                                    <li key={`edit-${task.id}`} className="p-3 border rounded bg-blue-50 shadow-md">
-                                       <form onSubmit={handleSaveTask} className="space-y-2">
-                                           
-                                           
-<div>
-  <Label className="text-xs">מוקצה ל:</Label>
-  <select value={editingAssignTo} onChange={(e) => setEditingAssignTo(e.target.value)} className="h-8 text-sm w-full border rounded">
-    <option value="">בחר משתמש</option>
-    {assignableUsers.map((user) => (
-      <option key={user.id} value={user.alias || user.email}>
-        {user.alias || user.email}
-      </option>
-    ))}
-  </select>
-</div>
-
-                                           <div><Label className="text-xs">כותרת:</Label><Input type="text" value={editingTitle} onChange={(e) => setEditingTitle(e.target.value)} className="h-8 text-sm" required /></div>
-                                           <div><Label className="text-xs">תיאור:</Label><Textarea value={editingSubtitle} onChange={(e) => setEditingSubtitle(e.target.value)} rows={2} className="text-sm" /></div>
-                                           <div className="flex gap-2">
-                                                <div className="flex-1"><Label className="text-xs">עדיפות:</Label>
-                                                    <Select value={editingPriority} onValueChange={setEditingPriority}>
-                                                        <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
-                                                        <SelectContent>{taskPriorities.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}</SelectContent>
-                                                    </Select>
-                                                </div>
-                                                <div className="flex-1"><Label className="text-xs">קטגוריה:</Label><Input type="text" value={editingCategory} readOnly disabled className="h-8 text-sm bg-gray-100"/></div>
-                                           </div>
-                                           <div className="flex gap-2">
-                                                <div className="flex-1"><Label className="text-xs">תאריך:</Label><Input type="date" value={editingDueDate} onChange={(e) => setEditingDueDate(e.target.value)} className="h-8 text-sm" required /></div>
-                                                <div className="flex-1"><Label className="text-xs">שעה:</Label><Input type="time" value={editingDueTime} onChange={(e) => setEditingDueTime(e.target.value)} className="h-8 text-sm" /></div>
-                                           </div>
-                                           
-                                           <div className="flex justify-end space-x-2 space-x-reverse pt-1">
-                                               <Button type="submit" size="sm">{'שמור'}</Button>
-                                               <Button type="button" variant="outline" size="sm" onClick={handleCancelEdit}>{'ביטול'}</Button>
-                                           </div>
-                                       </form>
-                                    </li>
-                                  ) : (
-
-                                    <SortableItem key={task.id} id={`task-${task.id}`}>
-                                      <div className={`p-2 border rounded shadow-sm cursor-grab active:cursor-grabbing ${task.done ? 'bg-gray-200 opacity-75' : 'bg-white'} ${overdue ? 'border-l-4 border-red-500' : 'border-l-4 border-transparent'} ${overdue12h ? 'animate-pulse bg-yellow-50' : ''}`}>
-                                        <div className="flex items-start space-x-3 space-x-reverse">
-                                          <Checkbox checked={!!task.done} onCheckedChange={() => toggleTaskDone(task.id)} id={`task-kanban-${task.id}`} className="mt-1 shrink-0" aria-label={`Mark task ${task.title}`} />
-                                          <div className="flex-grow overflow-hidden">
-                                              <label htmlFor={`task-kanban-${task.id}`} className={`font-medium text-sm cursor-pointer ${task.done ? "line-through text-gray-500" : "text-gray-900"}`}>{task.title}</label>
-                                              {task.subtitle && (<p className={`text-xs mt-0.5 ${task.done ? "line-through text-gray-400" : "text-gray-600"}`}>{task.subtitle}</p>)}
-                                              <div className={`text-xs mt-1 space-x-2 space-x-reverse ${task.done ? 'text-gray-400' : overdue ? 'text-red-600 font-medium' : 'text-gray-500'}`}>
-                                                  <span><span role="img" aria-label="Due">🗓️</span> {formatDateTime(task.dueDate)}</span>
-                                                  <span><span role="img" aria-label="Assignee">👤</span> {assignableUsers.find(u => u.email === task.assignTo)?.alias || task.assignTo}</span>
-                                                  <span>{task.priority === 'דחוף' ? '🔥' : task.priority === 'נמוך' ? '⬇️' : '➖'} {task.priority}</span>
-                                                  {task.done && task.completedAt && (<span className="text-green-600"><span role="img" aria-label="Done">✅</span> {formatDateTime(task.completedAt)}</span>)}
-                                              </div>
-                                              {!task.done && task.createdAt && (<span className="text-xs text-gray-500 mt-1 block"> {'ממתין: '}{formatDuration(new Date() - new Date(task.createdAt))} </span>)}
-                                          </div>
-                                          <div className="flex flex-col items-center gap-0.5 shrink-0">
-                                              
-                                              {!task.done && (
-                                                <Button variant="ghost" size="icon" className="w-6 h-6 text-gray-400 hover:text-orange-600" title="שלח תזכורת" onClick={() => console.log(`Notify ${task.id}`)} onPointerDown={(e) => e.stopPropagation()}> <Bell className="h-4 w-4" /> </Button>
-                                              )}
-                                              
-                                              {canReply && (
-                                                  <Button variant="ghost" size="icon" className="w-6 h-6 text-green-600 hover:text-green-700" title="השלם ושלח תגובה" onClick={() => handleCompleteAndReply(task.id)} onPointerDown={(e) => e.stopPropagation()}>
-                                                      <span role="img" aria-label="Complete and Reply">↩️</span>
-                                                  </Button>
-                                              )}
-                                              <Button variant="ghost" size="icon" className="w-6 h-6 text-gray-500 hover:text-blue-600" title="ערוך משימה" onClick={() => handleEditTask(task)} onPointerDown={(e) => e.stopPropagation()}><span className="text-base" role="img" aria-label="Edit">✎</span></Button>
-                                          </div>
-                                        </div>
-                                      </div>
-                                    </SortableItem>
-                                  )
-                                );
-                              })}
-                            </ul>
-                          </SortableContext>
-                        </div>
                       );
                     })}
                   </div>
@@ -2136,12 +2283,7 @@ const calculatedAnalytics = useMemo(() => {
                                                 <SelectContent>{taskPriorities.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}</SelectContent>
                                             </Select>
                                         </div>
-                                        <div className="flex-1"><Label className="text-xs">קטגוריה:</Label>
-                                            <Select value={editingCategory} onValueChange={setEditingCategory}>
-                                                <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
-                                                <SelectContent>{taskCategories.map(cat => <SelectItem key={cat} value={cat}>{cat}</SelectItem>)}</SelectContent>
-                                            </Select>
-                                        </div>
+                                        <div className="flex-1"><Label className="text-xs">קטגוריה:</Label><Input type="text" value={editingCategory} readOnly disabled className="h-8 text-sm bg-gray-100"/></div>
                                    </div>
                                    <div className="flex gap-2">
                                         <div className="flex-1"><Label className="text-xs">תאריך:</Label><Input type="date" value={editingDueDate} onChange={(e) => setEditingDueDate(e.target.value)} className="h-8 text-sm" required /></div>
@@ -2156,33 +2298,76 @@ const calculatedAnalytics = useMemo(() => {
                             </li>
                           ) : (
 
-                            <SortableItem key={task.id} id={`task-${task.id}`}>
-                               <div className={`flex items-start space-x-3 space-x-reverse p-2 border rounded shadow-sm cursor-grab active:cursor-grabbing ${task.done ? 'bg-gray-100 opacity-70' : 'bg-white'} ${overdue ? 'border-l-4 border-red-500' : 'border-l-4 border-transparent'} ${overdue12h ? 'animate-pulse bg-yellow-50' : ''}`}>
-                                <Checkbox checked={!!task.done} onCheckedChange={() => toggleTaskDone(task.id)} id={`task-compact-${task.id}`} className="mt-1 shrink-0" aria-label={`Mark task ${task.title}`} />
-                                <div className="flex-grow overflow-hidden">
-                                    <label htmlFor={`task-compact-${task.id}`} className={`font-medium text-sm cursor-pointer ${task.done ? "line-through text-gray-500" : "text-gray-900"}`}>{task.title}</label>
-                                    {task.subtitle && (<p className={`text-xs mt-0.5 ${task.done ? "line-through text-gray-400" : "text-gray-600"}`}>{task.subtitle}</p>)}
+                            <SortableItem 
+                              key={task.uniqueId} 
+                              id={`task-${task.id}`}
+                            >
+                               <div className={`flex items-start justify-between p-2 border rounded shadow-sm cursor-grab active:cursor-grabbing ${task.done ? 'bg-gray-100 opacity-70' : 'bg-white'} ${overdue ? 'border-l-4 border-red-500' : 'border-l-4 border-transparent'} ${overdue12h ? 'animate-pulse bg-yellow-50' : ''}`}>
+                                {/* Action Icons */}
+                                <div className="flex flex-col items-center gap-1 shrink-0">
+                                  <Button 
+                                    variant="ghost" 
+                                    size="icon" 
+                                    className="w-6 h-6 text-gray-500 hover:text-blue-600" 
+                                    title="ערוך משימה" 
+                                    onClick={() => handleEditTask(task)} 
+                                    onPointerDown={(e) => e.stopPropagation()}
+                                  >
+                                    <Pencil className="h-4 w-4" />
+                                  </Button>
+                                  {canReply && (
+                                    <Button 
+                                      variant="ghost" 
+                                      size="icon" 
+                                      className="w-6 h-6 text-green-600 hover:text-green-700" 
+                                      title="השלם ושלח תגובה" 
+                                      onClick={() => handleCompleteAndReply(task.id)} 
+                                      onPointerDown={(e) => e.stopPropagation()}
+                                    >
+                                      <MessageCircle className="h-4 w-4" />
+                                    </Button>
+                                  )}
+                                  {!task.done && (
+                                    <Button 
+                                      variant="ghost" 
+                                      size="icon" 
+                                      className="w-6 h-6 text-gray-400 hover:text-orange-600" 
+                                      title="שלח תזכורת" 
+                                      onClick={() => console.log(`Notify ${task.id}`)} 
+                                      onPointerDown={(e) => e.stopPropagation()}
+                                    >
+                                      <Bell className="h-4 w-4" />
+                                    </Button>
+                                  )}
+                                </div>
+
+                                {/* Main Content */}
+                                <div className="flex-grow mx-3 overflow-hidden">
+                                  <label htmlFor={`task-compact-${task.id}`} className={`font-medium text-sm cursor-pointer ${task.done ? "line-through text-gray-500" : "text-gray-900"}`}>
+                                    {task.title}
+                                  </label>
+                                  {task.subtitle && (
+                                    <p className={`text-xs mt-0.5 ${task.done ? "line-through text-gray-400" : "text-gray-600"}`}>
+                                      {task.subtitle}
+                                    </p>
+                                  )}
                                     <div className={`text-xs mt-1 space-x-2 space-x-reverse flex flex-wrap gap-x-2 ${task.done ? 'text-gray-400' : overdue ? 'text-red-600 font-medium' : 'text-gray-500'}`}>
                                         <span><span role="img" aria-label="Due">🗓️</span> {formatDateTime(task.dueDate)}</span>
-                                        <span><span role="img" aria-label="Assignee">👤</span> {assignableUsers.find(u => u.email === task.assignTo)?.alias || task.assignTo}</span>
+                                    <span><span role="img" aria-label="Assignee">👤</span> {assignableUsers.find(u => u.id === task.assignTo)?.alias || assignableUsers.find(u => u.email === task.assignTo)?.alias || task.assignTo}</span>
                                         <span><span role="img" aria-label="Category">🏷️</span> {task.category}</span>
                                         <span>{task.priority === 'דחוף' ? '🔥' : task.priority === 'נמוך' ? '⬇️' : '➖'} {task.priority}</span>
-                                        {task.done && task.completedAt && (<span className="text-green-600"><span role="img" aria-label="Done">✅</span> {formatDateTime(task.completedAt)}</span>)}
                                     </div>
-                                    {!task.done && task.createdAt && (<span className="text-xs text-gray-500 mt-1 block"> {'ממתין: '}{formatDuration(new Date() - new Date(task.createdAt))} </span>)}
                                 </div>
-                                <div className="flex items-center gap-0.5 shrink-0">
-                                    
-                                    {!task.done && (
-                                        <Button variant="ghost" size="icon" className="w-6 h-6 text-gray-400 hover:text-orange-600" title="שלח תזכורת" onClick={() => console.log(`Notify ${task.id}`)} onPointerDown={(e) => e.stopPropagation()}> <Bell className="h-4 w-4" /> </Button>
-                                    )}
-                                    
-                                    {canReply && (
-                                        <Button variant="ghost" size="icon" className="w-6 h-6 text-green-600 hover:text-green-700" title="השלם ושלח תגובה" onClick={() => handleCompleteAndReply(task.id)} onPointerDown={(e) => e.stopPropagation()}>
-                                            <span role="img" aria-label="Complete and Reply">↩️</span>
-                                        </Button>
-                                    )}
-                                    <Button variant="ghost" size="icon" className="w-6 h-6 text-gray-500 hover:text-blue-600" title="ערוך משימה" onClick={() => handleEditTask(task)} onPointerDown={(e) => e.stopPropagation()}><span className="text-base" role="img" aria-label="Edit">✎</span></Button>
+
+                                {/* Checkbox on the far right */}
+                                <div className="shrink-0">
+                                  <Checkbox 
+                                    checked={!!task.done} 
+                                    onCheckedChange={() => toggleTaskDone(task.id)} 
+                                    id={`task-compact-${task.id}`} 
+                                    className="mt-1" 
+                                    aria-label={`Mark task ${task.title}`} 
+                                  />
                                 </div>
                               </div>
                             </SortableItem>
@@ -2760,12 +2945,158 @@ const calculatedAnalytics = useMemo(() => {
             ) : null}
         </DragOverlay>
 
-      </DndContext>
+      
+      
+</DndContext>
+
+      {showTaskModal && (
+        <NewTaskModal
+          showTaskModal={showTaskModal}
+          setShowTaskModal={setShowTaskModal}
+          newTaskAssignTo={newTaskAssignTo}
+          setNewTaskAssignTo={setNewTaskAssignTo}
+          newTaskTitle={newTaskTitle}
+          setNewTaskTitle={setNewTaskTitle}
+          newTaskSubtitle={newTaskSubtitle}
+          setNewTaskSubtitle={setNewTaskSubtitle}
+          newTaskPriority={newTaskPriority}
+          setNewTaskPriority={setNewTaskPriority}
+          newTaskCategory={newTaskCategory}
+          setNewTaskCategory={setNewTaskCategory}
+          newTaskDueDate={newTaskDueDate}
+          setNewTaskDueDate={setNewTaskDueDate}
+          newTaskDueTime={newTaskDueTime}
+          setNewTaskDueTime={setNewTaskDueTime}
+          handleCreateTask={handleCreateTask}
+          users={users}
+          taskPriorities={taskPriorities}
+          taskCategories={taskCategories}
+        />
+      )}
     </TooltipProvider>
   );
-
-
-
-
-
 }
+
+const NewTaskModal = ({
+  showTaskModal,
+  setShowTaskModal,
+  newTaskAssignTo,
+  setNewTaskAssignTo,
+  newTaskTitle,
+  setNewTaskTitle,
+  newTaskSubtitle,
+  setNewTaskSubtitle,
+  newTaskPriority,
+  setNewTaskPriority,
+  newTaskCategory,
+  setNewTaskCategory,
+  newTaskDueDate,
+  setNewTaskDueDate,
+  newTaskDueTime,
+  setNewTaskDueTime,
+  handleCreateTask,
+  users,
+  taskPriorities,
+  taskCategories
+}) => {
+  return (
+    <Dialog open={showTaskModal} onOpenChange={setShowTaskModal}>
+      <DialogContent className="sm:max-w-[425px]">
+        <DialogHeader>
+          <DialogTitle>יצירת משימה חדשה</DialogTitle>
+        </DialogHeader>
+        <form onSubmit={handleCreateTask} className="space-y-2">
+          <div>
+            <Label className="text-xs">מוקצה ל:</Label>
+            <Select value={newTaskAssignTo} onValueChange={setNewTaskAssignTo}>
+              <SelectTrigger className="h-8 text-sm">
+                <SelectValue placeholder="בחר משתמש" />
+              </SelectTrigger>
+              <SelectContent>
+                {users.map((user) => (
+                  <SelectItem key={user.id} value={user.email}>
+                    {user.alias || user.email}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label className="text-xs">כותרת:</Label>
+            <Input 
+              type="text" 
+              value={newTaskTitle} 
+              onChange={(e) => setNewTaskTitle(e.target.value)} 
+              className="h-8 text-sm" 
+              required 
+            />
+          </div>
+          <div>
+            <Label className="text-xs">תיאור:</Label>
+            <Textarea 
+              value={newTaskSubtitle} 
+              onChange={(e) => setNewTaskSubtitle(e.target.value)} 
+              rows={2} 
+              className="text-sm" 
+            />
+          </div>
+          <div className="flex gap-2">
+            <div className="flex-1">
+              <Label className="text-xs">עדיפות:</Label>
+              <Select value={newTaskPriority} onValueChange={setNewTaskPriority}>
+                <SelectTrigger className="h-8 text-sm">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {taskPriorities.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex-1">
+              <Label className="text-xs">קטגוריה:</Label>
+              <Select value={newTaskCategory} onValueChange={setNewTaskCategory}>
+                <SelectTrigger className="h-8 text-sm">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {taskCategories.map(cat => <SelectItem key={cat} value={cat}>{cat}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <div className="flex-1">
+              <Label className="text-xs">תאריך:</Label>
+              <Input 
+                type="date" 
+                value={newTaskDueDate} 
+                onChange={(e) => setNewTaskDueDate(e.target.value)} 
+                className="h-8 text-sm" 
+                required 
+              />
+            </div>
+            <div className="flex-1">
+              <Label className="text-xs">שעה:</Label>
+              <Input 
+                type="time" 
+                value={newTaskDueTime} 
+                onChange={(e) => setNewTaskDueTime(e.target.value)} 
+                className="h-8 text-sm" 
+              />
+            </div>
+          </div>
+          <div className="flex justify-end space-x-2 space-x-reverse pt-1">
+            <Button type="button" variant="outline" size="sm" onClick={() => setShowTaskModal(false)}>
+              ביטול
+            </Button>
+            <Button type="submit" size="sm">צור משימה</Button>
+          </div>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+};
+
+
+
+

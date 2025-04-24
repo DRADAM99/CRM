@@ -6,12 +6,34 @@ service cloud.firestore {
     // ────────────────
     // Helper Functions
     // ────────────────
-    function isSignedIn() {
+    function isAuthenticated() {
       return request.auth != null;
     }
 
+    function isAdmin() {
+      return isAuthenticated() && 
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    function isTaskOwner(taskId) {
+      return isAuthenticated() && 
+        exists(/databases/$(database)/documents/tasks/$(taskId)) &&
+        get(/databases/$(database)/documents/tasks/$(taskId)).data.createdBy == request.auth.uid;
+    }
+
+    function isTaskAssignee(taskId) {
+      let task = get(/databases/$(database)/documents/tasks/$(taskId)).data;
+      let user = get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+      return isAuthenticated() && 
+        exists(/databases/$(database)/documents/tasks/$(taskId)) &&
+        (task.assignTo == request.auth.uid || 
+         task.assignTo == user.email ||
+         task.assignTo == user.alias);
+    }
+
     function isUser(userId) {
-      return isSignedIn() && request.auth.uid == userId;
+      return isAuthenticated() && request.auth.uid == userId;
     }
 
     function getUserRole() {
@@ -19,12 +41,8 @@ service cloud.firestore {
       return userDoc.exists ? userDoc.data.role : "staff";
     }
 
-    function isAdmin() {
-      return isSignedIn() && getUserRole() == "admin";
-    }
-
     function isStaff() {
-      return isSignedIn() && getUserRole() == "staff";
+      return isAuthenticated() && getUserRole() == "staff";
     }
 
     function isStaffOrAdmin() {
@@ -35,8 +53,9 @@ service cloud.firestore {
     // Users Collection
     // ────────────────
     match /users/{userId} {
-      allow read: if isSignedIn();
-      allow create, update: if request.auth != null;
+      allow read: if isAuthenticated();
+      allow create: if isAdmin();
+      allow update: if isAdmin() || request.auth.uid == userId;
       allow delete: if isAdmin();
     }
 
@@ -56,9 +75,9 @@ service cloud.firestore {
           && lead.createdAt is timestamp;
       }
 
-      allow read: if isSignedIn();
-      allow create: if isSignedIn() && isValidLeadData(request.resource.data);
-      allow update: if isSignedIn() && isValidLeadData(request.resource.data);
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && isValidLeadData(request.resource.data);
+      allow update: if isAuthenticated() && isValidLeadData(request.resource.data);
       allow delete: if isAdmin() || isLeadOwner(resource.data);
     }
 
@@ -66,52 +85,39 @@ service cloud.firestore {
     // Tasks Collection
     // ────────────────
     match /tasks/{taskId} {
-      function isTaskAssignee(taskDoc) {
-        return request.auth.uid == taskDoc.userId;
-      }
-
-      function isTaskDone(taskDoc) {
-        return taskDoc.data.done == true;
-      }
-
-      // Simplified validation for testing
-      function isValidTaskData(task) {
-        return task.keys().hasAll([
-          "userId", "title", "createdAt", "done", "category", "priority"
-        ]);
-      }
-
-      function isValidReply(reply) {
-        return reply.keys().hasAll([
-          "text", "timestamp", "userId", "userAlias", "isRead"
-        ]);
-      }
-
-      allow read: if isSignedIn();
-      allow create: if isSignedIn() && isValidTaskData(request.resource.data);
-      allow update: if isSignedIn() && (
-        // Allow updates to replies and related fields
-        (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['replies', 'hasNewReply', 'lastReplyAt']) &&
-         request.resource.data.replies is list &&
-         request.resource.data.replies.all(r => isValidReply(r))) ||
-        // Allow other task updates
-        isValidTaskData(request.resource.data)
+      allow read: if isAuthenticated() && (
+        resource.data.userId == request.auth.uid ||
+        resource.data.creatorId == request.auth.uid ||
+        isTaskAssignee(taskId)
       );
-      allow delete: if isSignedIn() && (isTaskDone(resource) || isTaskAssignee(resource.data));
+      
+      allow create: if isAuthenticated() && 
+        request.resource.data.title is string;
+      
+      allow update: if isAuthenticated() && 
+        (resource.data.userId == request.auth.uid ||
+         resource.data.creatorId == request.auth.uid ||
+         isTaskAssignee(taskId) ||
+         isAdmin());
+      
+      allow delete: if isAuthenticated() && 
+        (resource.data.userId == request.auth.uid ||
+         resource.data.creatorId == request.auth.uid ||
+         isAdmin());
     }
 
     // ────────────────
     // Notes Collection
     // ────────────────
     match /notes/{noteId} {
-      allow read, create, update, delete: if isSignedIn();
+      allow read, create, update, delete: if isAuthenticated();
     }
 
     // ────────────────
     // Links Collection
     // ────────────────
     match /links/{linkId} {
-      allow read, create, update, delete: if isSignedIn();
+      allow read, create, update, delete: if isAuthenticated();
     }
 
   } // END documents
