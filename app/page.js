@@ -505,7 +505,7 @@ export default function Dashboard() {
       // Get existing replies
       const existingReplies = taskDoc.data().replies || [];
 
-      // Update the task with the new reply
+      // Update the task with the new reply - no automatic completion
       await updateDoc(taskRef, {
         replies: [...existingReplies, newReply],
         hasNewReply: true,
@@ -518,7 +518,7 @@ export default function Dashboard() {
       console.error('Error adding reply:', error);
       alert('שגיאה בהוספת תגובה');
     }
-  };
+};
 
   const handleMarkReplyAsRead = async (taskId) => {
     try {
@@ -1837,45 +1837,46 @@ const sortedAndFilteredTasks = useMemo(() => {
 
 
 const events = useMemo(() => {
-
   const taskEvents = tasks
-      .filter(t => t.dueDate instanceof Date && !isNaN(t.dueDate))
-      .map((t) => {
-          let start = t.dueDate;
-
-          let end = new Date(start.getTime() + 60 * 60 * 1000);
-          return {
-              id: `task-${t.id}`,
-              title: t.title,
-              start,
-              end,
-              resource: { type: 'task', data: t },
-
-              isDone: typeof t.done === 'boolean' ? t.done : false
-          };
-      });
-
+    .filter(task => {
+      // Ensure we have a valid date
+      const dueDate = task.dueDate instanceof Date ? task.dueDate : 
+                     typeof task.dueDate === 'string' ? new Date(task.dueDate) : null;
+      return dueDate && !isNaN(dueDate.getTime());
+    })
+    .map((task) => {
+      const start = task.dueDate instanceof Date ? task.dueDate : new Date(task.dueDate);
+      const end = new Date(start.getTime() + 60 * 60 * 1000); // 1 hour duration
+      return {
+        id: `task-${task.id}`,
+        title: task.title,
+        start,
+        end,
+        resource: { type: 'task', data: task },
+        isDone: task.done || false
+      };
+    });
 
   const leadAppointmentEvents = leads
-      .filter(l => l.status === 'תור נקבע' && l.appointmentDateTime)
-      .map(l => {
-            let start, end;
-            try {
-                start = new Date(l.appointmentDateTime);
-                if (isNaN(start.getTime())) throw new Error("Invalid start date");
-                end = new Date(start.getTime() + 60 * 60 * 1000);
-            } catch (error) { return null; }
-
-            return {
-                id: `lead-${l.id}`,
-                title: `פגישה: ${l.fullName}`,
-                start,
-                end,
-                resource: { type: 'lead', data: l }
-            };
-        })
-      .filter(event => event !== null);
-
+    .filter(lead => lead.status === 'תור נקבע' && lead.appointmentDateTime)
+    .map(lead => {
+      try {
+        const start = new Date(lead.appointmentDateTime);
+        if (isNaN(start.getTime())) return null;
+        const end = new Date(start.getTime() + 60 * 60 * 1000);
+        return {
+          id: `lead-${lead.id}`,
+          title: `פגישה: ${lead.fullName}`,
+          start,
+          end,
+          resource: { type: 'lead', data: lead }
+        };
+      } catch (error) {
+        console.error('Error creating lead event:', error);
+        return null;
+      }
+    })
+    .filter(Boolean);
 
   return [...taskEvents, ...leadAppointmentEvents];
 }, [tasks, leads]);
