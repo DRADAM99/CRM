@@ -8,7 +8,7 @@ import { useRouter } from "next/navigation";
 import { auth, db } from "../firebase";
 import { FaWhatsapp } from "react-icons/fa";
 import { or, query, where, orderBy, arrayUnion } from "firebase/firestore";
-import { useAuth } from "./context/AuthContext";  // Updated import path
+import { useAuth } from "../app/context/AuthContext";  // Fixed import path
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
