@@ -8,7 +8,7 @@ import { useRouter } from "next/navigation";
 import { auth, db } from "../firebase";
 import { FaWhatsapp } from "react-icons/fa";
 import { or, query, where, orderBy, arrayUnion } from "firebase/firestore";
-import { useAuth } from "../app/context/AuthContext";  // Fixed import path
+import { useAuth } from "./context/AuthContext";  // Updated import path
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -310,20 +310,20 @@ export default function Dashboard() {
     return () => unsubscribe();
   }, [currentUser, users, alias]);
 
-  /** 🔁 Fetch logged-in user's alias */
-  useEffect(() => {
-    if (currentUser) {
-      const fetchAlias = async () => {
-        const userRef = doc(db, "users", currentUser.uid);
-        const userSnap = await getDoc(userRef);
-        if (userSnap.exists()) {
-          const data = userSnap.data();
-          setAlias(data.alias || data.email);
-        }
-      };
-      fetchAlias();
-    }
-  }, [currentUser]);
+/** 🔁 Fetch logged-in user's alias */
+useEffect(() => {
+  if (currentUser) {
+    const fetchAlias = async () => {
+      const userRef = doc(db, "users", currentUser.uid);
+      const userSnap = await getDoc(userRef);
+      if (userSnap.exists()) {
+        const data = userSnap.data();
+        setAlias(data.alias || data.email);
+      }
+    };
+    fetchAlias();
+  }
+}, [currentUser]);
 
 
   // ✅ 1. Listen to auth state changes - REMOVED duplicate listener since we use AuthContext
@@ -363,45 +363,45 @@ export default function Dashboard() {
   };
   
 
-  const [selectedDate, setSelectedDate] = useState(new Date());
-  const [view, setView] = useState("month");
-  const [isFullView, setIsFullView] = useState(false);
-  const [mounted, setMounted] = useState(false);
-  const [currentDateTime, setCurrentDateTime] = useState('');
-  const defaultBlockOrder = { TM: 1, Calendar: 2, Leads: 3 };
-  const [blockOrder, setBlockOrder] = useState(defaultBlockOrder);
+const [selectedDate, setSelectedDate] = useState(new Date());
+  const [view, setView] = useState("month");
+  const [isFullView, setIsFullView] = useState(false);
+  const [mounted, setMounted] = useState(false);
+  const [currentDateTime, setCurrentDateTime] = useState('');
+  const defaultBlockOrder = { TM: 1, Calendar: 2, Leads: 3 };
+  const [blockOrder, setBlockOrder] = useState(defaultBlockOrder);
 
 
-  const [showNLPModal, setShowNLPModal] = useState(false);
-  const [nlpInput, setNlpInput] = useState("");
-  const [showReturnModal, setShowReturnModal] = useState(false);
-  const [returnTaskId, setReturnTaskId] = useState(null);
-  const [returnComment, setReturnComment] = useState("");
-  const [returnNewAssignee, setReturnNewAssignee] = useState("");
-  const [showHistoryModal, setShowHistoryModal] = useState(false);
-  const [showAddLeadModal, setShowAddLeadModal] = useState(false);
-  const [newLeadFullName, setNewLeadFullName] = useState("");
-  const [newLeadPhone, setNewLeadPhone] = useState("");
-  const [newLeadMessage, setNewLeadMessage] = useState("");
-  const [newLeadStatus, setNewLeadStatus] = useState("חדש");
-  const [newLeadSource, setNewLeadSource] = useState("");
+  const [showNLPModal, setShowNLPModal] = useState(false);
+  const [nlpInput, setNlpInput] = useState("");
+  const [showReturnModal, setShowReturnModal] = useState(false);
+  const [returnTaskId, setReturnTaskId] = useState(null);
+  const [returnComment, setReturnComment] = useState("");
+  const [returnNewAssignee, setReturnNewAssignee] = useState("");
+  const [showHistoryModal, setShowHistoryModal] = useState(false);
+  const [showAddLeadModal, setShowAddLeadModal] = useState(false);
+  const [newLeadFullName, setNewLeadFullName] = useState("");
+  const [newLeadPhone, setNewLeadPhone] = useState("");
+  const [newLeadMessage, setNewLeadMessage] = useState("");
+  const [newLeadStatus, setNewLeadStatus] = useState("חדש");
+  const [newLeadSource, setNewLeadSource] = useState("");
 
 
-  const [taskFilter, setTaskFilter] = useState("הכל");
-  const [taskPriorityFilter, setTaskPriorityFilter] = useState("all");
-  const [selectedTaskCategories, setSelectedTaskCategories] = useState([]);
-  const [taskSearchTerm, setTaskSearchTerm] = useState("");
-  const [isTMFullView, setIsTMFullView] = useState(false);
-  const [showDoneTasks, setShowDoneTasks] = useState(false);
-  const [userHasSortedTasks, setUserHasSortedTasks] = useState(false);
-  const [editingTaskId, setEditingTaskId] = useState(null);
-  const [editingAssignTo, setEditingAssignTo] = useState("");
-  const [editingTitle, setEditingTitle] = useState("");
-  const [editingSubtitle, setEditingSubtitle] = useState("");
-  const [editingPriority, setEditingPriority] = useState("רגיל");
-  const [editingCategory, setEditingCategory] = useState(taskCategories[0] || "");
-  const [editingDueDate, setEditingDueDate] = useState("");
-  const [editingDueTime, setEditingDueTime] = useState("");
+  const [taskFilter, setTaskFilter] = useState("הכל");
+  const [taskPriorityFilter, setTaskPriorityFilter] = useState("all");
+  const [selectedTaskCategories, setSelectedTaskCategories] = useState([]);
+  const [taskSearchTerm, setTaskSearchTerm] = useState("");
+  const [isTMFullView, setIsTMFullView] = useState(false);
+  const [showDoneTasks, setShowDoneTasks] = useState(false);
+  const [userHasSortedTasks, setUserHasSortedTasks] = useState(false);
+  const [editingTaskId, setEditingTaskId] = useState(null);
+  const [editingAssignTo, setEditingAssignTo] = useState("");
+  const [editingTitle, setEditingTitle] = useState("");
+  const [editingSubtitle, setEditingSubtitle] = useState("");
+  const [editingPriority, setEditingPriority] = useState("רגיל");
+  const [editingCategory, setEditingCategory] = useState(taskCategories[0] || "");
+  const [editingDueDate, setEditingDueDate] = useState("");
+  const [editingDueTime, setEditingDueTime] = useState("");
 
   // Add task creation state variables
   const [showTaskModal, setShowTaskModal] = useState(false);
@@ -518,7 +518,7 @@ export default function Dashboard() {
       console.error('Error adding reply:', error);
       alert('שגיאה בהוספת תגובה');
     }
-};
+  };
 
   const handleMarkReplyAsRead = async (taskId) => {
     try {
@@ -549,7 +549,7 @@ export default function Dashboard() {
             ? {
                 ...task,
                 replies: updatedReplies,
-                hasNewReply: false
+        hasNewReply: false
               }
             : task
         )
@@ -718,32 +718,32 @@ export default function Dashboard() {
     { id: 'lead-3', createdAt: new Date(new Date().setDate(new Date().getDate() - 2)), fullName: "בני גנץ", phoneNumber: "0509876543", message: "לא היה מענה", status: "חדש", source: "אתר אינטרנט", conversationSummary: [], expanded: false, appointmentDateTime: null, },
     { id: 'lead-4', createdAt: new Date(new Date().setDate(new Date().getDate() - 1)), fullName: "דנה לוי", phoneNumber: "0541122334", message: "קבעה פגישה לשבוע הבא", status: "תור נקבע", source: "המלצה", conversationSummary: [ { text: "שיחה ראשונית, עניין רב.", timestamp: new Date(new Date().setDate(new Date().getDate() - 1)) }, { text: "נקבעה פגישת ייעוץ ל-15/4.", timestamp: new Date(new Date().setDate(new Date().getDate() - 1)) }, ], expanded: false, appointmentDateTime: new Date(2025, 3, 15, 10, 30).toISOString(), }, */
   ]); 
-  const [editingLeadId, setEditingLeadId] = useState(null);
-  const [editLeadFullName, setEditLeadFullName] = useState("");
-  const [editLeadPhone, setEditLeadPhone] = useState("");
-  const [editLeadMessage, setEditLeadMessage] = useState("");
-  const [editLeadStatus, setEditLeadStatus] = useState("חדש");
-  const [editLeadSource, setEditLeadSource] = useState("");
-  const [editLeadAppointmentDateTime, setEditLeadAppointmentDateTime] = useState("");
-  const [editLeadNLP, setEditLeadNLP] = useState("");
-  const [newConversationText, setNewConversationText] = useState("");
-  const [showConvUpdate, setShowConvUpdate] = useState(null);
-  const [leadSortBy, setLeadSortBy] = useState("priority");
-  const [leadTimeFilter, setLeadTimeFilter] = useState("all");
-  const [leadFilterFrom, setLeadFilterFrom] = useState("");
-  const [leadFilterTo, setLeadFilterTo] = useState("");
-  const [leadSearchTerm, setLeadSearchTerm] = useState("");
+  const [editingLeadId, setEditingLeadId] = useState(null);
+  const [editLeadFullName, setEditLeadFullName] = useState("");
+  const [editLeadPhone, setEditLeadPhone] = useState("");
+  const [editLeadMessage, setEditLeadMessage] = useState("");
+  const [editLeadStatus, setEditLeadStatus] = useState("חדש");
+  const [editLeadSource, setEditLeadSource] = useState("");
+  const [editLeadAppointmentDateTime, setEditLeadAppointmentDateTime] = useState("");
+  const [editLeadNLP, setEditLeadNLP] = useState("");
+  const [newConversationText, setNewConversationText] = useState("");
+  const [showConvUpdate, setShowConvUpdate] = useState(null);
+  const [leadSortBy, setLeadSortBy] = useState("priority");
+  const [leadTimeFilter, setLeadTimeFilter] = useState("all");
+  const [leadFilterFrom, setLeadFilterFrom] = useState("");
+  const [leadFilterTo, setLeadFilterTo] = useState("");
+  const [leadSearchTerm, setLeadSearchTerm] = useState("");
 
 
-  const [showAnalytics, setShowAnalytics] = useState(false);
-  const [analyticsTimeFilter, setAnalyticsTimeFilter] = useState("month");
-  const [analyticsFilterFrom, setAnalyticsFilterFrom] = useState("");
-  const [analyticsFilterTo, setAnalyticsFilterTo] = useState("");
+  const [showAnalytics, setShowAnalytics] = useState(false);
+  const [analyticsTimeFilter, setAnalyticsTimeFilter] = useState("month");
+  const [analyticsFilterFrom, setAnalyticsFilterFrom] = useState("");
+  const [analyticsFilterTo, setAnalyticsFilterTo] = useState("");
 
 
 
-  const [activeId, setActiveId] = useState(null);
-  const [prefillCategory, setPrefillCategory] = useState(null);
+  const [activeId, setActiveId] = useState(null);
+  const [prefillCategory, setPrefillCategory] = useState(null);
 
 
   
@@ -914,12 +914,12 @@ useEffect(() => {
 
 
 
-  const sensors = useSensors(
-    useSensor(PointerSensor, {
-      activationConstraint: { distance: 8 },
-    }),
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates, })
-  );
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: { distance: 8 },
+    }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates, })
+  );
 
 
 
@@ -1150,7 +1150,7 @@ const handleNLPSubmit = useCallback(async (e) => {
       done: false,
         completedBy: null,
       completedAt: null
-    };
+    };  
 
     console.log("💾 Saving NLP task to Firestore...");
     await setDoc(taskRef, newTask);
@@ -1742,7 +1742,7 @@ const handleNLPSubmit = useCallback(async (e) => {
         setTasks(prevTasks => prevTasks.map(task => 
           task.id === activeTask.id ? { ...task, category: overContainerId } : task
         ));
-      }
+        }
     } else if (active.id !== over.id) {
       const overTaskId = typeof over.id === 'string' && over.id.startsWith('task-') 
         ? over.id.replace('task-', '') 
@@ -1755,7 +1755,7 @@ const handleNLPSubmit = useCallback(async (e) => {
         if (!isTMFullView) {
           setUserHasSortedTasks(true);
         }
-      }
+        }
     }
   }, [tasks, selectedDate, isTMFullView, taskCategories]);
 
@@ -1847,35 +1847,35 @@ const events = useMemo(() => {
     .map((task) => {
       const start = task.dueDate instanceof Date ? task.dueDate : new Date(task.dueDate);
       const end = new Date(start.getTime() + 60 * 60 * 1000); // 1 hour duration
-      return {
+          return {
         id: `task-${task.id}`,
         title: task.title,
-        start,
-        end,
+              start,
+              end,
         resource: { type: 'task', data: task },
         isDone: task.done || false
-      };
-    });
+          };
+      });
 
   const leadAppointmentEvents = leads
     .filter(lead => lead.status === 'תור נקבע' && lead.appointmentDateTime)
     .map(lead => {
-      try {
+            try {
         const start = new Date(lead.appointmentDateTime);
         if (isNaN(start.getTime())) return null;
         const end = new Date(start.getTime() + 60 * 60 * 1000);
-        return {
+            return {
           id: `lead-${lead.id}`,
           title: `פגישה: ${lead.fullName}`,
-          start,
-          end,
+                start,
+                end,
           resource: { type: 'lead', data: lead }
-        };
+            };
       } catch (error) {
         console.error('Error creating lead event:', error);
         return null;
       }
-    })
+        })
     .filter(Boolean);
 
   return [...taskEvents, ...leadAppointmentEvents];
