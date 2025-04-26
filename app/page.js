@@ -1,7 +1,6 @@
 // Version 5.2 - Working Task Assignment
 "use client";
 
-import { serverTimestamp } from "firebase/firestore";
 import React, { useState, useEffect, useMemo, useCallback } from "react";
 import Image from 'next/image';
 import { useRouter } from "next/navigation";
@@ -32,7 +31,8 @@ import {
   onSnapshot,
   setDoc,
   doc,
-  deleteDoc
+  deleteDoc,
+  serverTimestamp
 } from "firebase/firestore";
 
 import {
@@ -620,14 +620,39 @@ const [selectedDate, setSelectedDate] = useState(new Date());
   // Add this before the renderTask function
   const handleTaskDone = async (taskId, checked) => {
     try {
-      const taskRef = doc(db, "tasks", taskId);
+      const taskRef = doc(db, 'tasks', taskId);
+      const taskDoc = await getDoc(taskRef);
+      if (!taskDoc.exists()) {
+        console.error('Task not found');
+        return;
+      }
+      const taskData = taskDoc.data();
+      const now = new Date();
+      // Use alias if available, fallback to email or assignTo
+      const aliasToUse = alias || currentUser?.alias || currentUser?.email || taskData.assignTo || taskData.creatorAlias || taskData.creatorEmail || '';
       await updateDoc(taskRef, {
         done: checked,
-        completedAt: checked ? new Date() : null,
-        completedBy: checked ? currentUser?.email : null
+        completedBy: checked ? (currentUser?.email || currentUser?.uid) : null,
+        completedByAlias: checked ? aliasToUse : null,
+        completedAt: checked ? now : null,
+        updatedAt: serverTimestamp()
       });
+      // Update local state
+      setTasks(prevTasks => 
+        prevTasks.map(task => 
+          task.id === taskId 
+            ? { 
+                ...task, 
+                done: checked,
+                completedBy: checked ? (currentUser?.email || currentUser?.uid) : null,
+                completedByAlias: checked ? aliasToUse : null,
+                completedAt: checked ? now : null
+            }
+          : task
+      ));
     } catch (error) {
-      console.error("Error updating task:", error);
+      console.error('Error updating task status:', error);
+      alert('שגיאה בעדכון סטטוס המשימה');
     }
   };
 
@@ -1677,15 +1702,26 @@ const handleNLPSubmit = useCallback(async (e) => {
     setReturnTaskId(null);
   }, [returnTaskId, returnNewAssignee, returnComment, setShowReturnModal, setReturnComment, setReturnNewAssignee, setReturnTaskId]);
 
-  /**
-  * Removes all tasks marked as 'done' from both Firebase and local state after confirmation.
-  */
+  // Add state for archived tasks
+  const [archivedTasks, setArchivedTasks] = useState([]);
+
+  // Fetch archived tasks for history modal
+  useEffect(() => {
+    if (!currentUser) return;
+    const archivedRef = collection(db, "archivedTasks");
+    const unsubscribe = onSnapshot(archivedRef, (snapshot) => {
+      const data = snapshot.docs.map(doc => doc.data());
+      setArchivedTasks(data);
+    });
+    return () => unsubscribe();
+  }, [currentUser]);
+
+  // Update handleClearDoneTasks to archive before delete
   const handleClearDoneTasks = useCallback(async () => {
     if (!currentUser) {
       console.error("No user found");
       return;
     }
-
     if (window.confirm("האם אתה בטוח שברצונך למחוק את כל המשימות שבוצעו? לא ניתן לשחזר פעולה זו.")) {
       try {
         // Get all completed tasks that belong to the current user
@@ -1697,48 +1733,67 @@ const handleNLPSubmit = useCallback(async (e) => {
             task.assignTo === currentUser.alias
           )
         );
-        
         if (completedTasks.length === 0) {
           console.log("No completed tasks to delete");
           return;
         }
-        
-        // Delete each completed task from Firebase
-        const deletePromises = completedTasks.map(async task => {
+        // Archive and delete each completed task
+        const archiveAndDeletePromises = completedTasks.map(async task => {
           try {
+            // Use the best available alias for archiving
+            const aliasToArchive = task.completedByAlias || task.completedBy || task.creatorAlias || task.creatorEmail || task.assignTo || alias || currentUser?.alias || currentUser?.email || '';
+            await setDoc(doc(db, 'archivedTasks', task.id), {
+              ...task,
+              completedByAlias: aliasToArchive,
+              archivedAt: new Date(),
+            });
             await deleteDoc(doc(db, 'tasks', task.id));
             return task.id;
           } catch (error) {
-            console.error(`Failed to delete task ${task.id}:`, error);
+            console.error(`Failed to archive/delete task ${task.id}:`, error);
             return null;
           }
         });
-        
-        // Wait for all deletions to complete
-        const results = await Promise.allSettled(deletePromises);
+        const results = await Promise.allSettled(archiveAndDeletePromises);
         const successfulDeletes = results
           .filter(result => result.status === 'fulfilled' && result.value)
           .map(result => result.value);
-        
-        // Update local state only for successfully deleted tasks
         setTasks(prevTasks => prevTasks.filter(task => !successfulDeletes.includes(task.id)));
-        
-        console.log(`Successfully deleted ${successfulDeletes.length} of ${completedTasks.length} completed tasks`);
-
+        console.log(`Successfully archived and deleted ${successfulDeletes.length} of ${completedTasks.length} completed tasks`);
         if (successfulDeletes.length < completedTasks.length) {
           alert('חלק מהמשימות לא נמחקו עקב הרשאות חסרות');
         }
       } catch (error) {
-        console.error('Error deleting completed tasks:', error);
+        console.error('Error archiving/deleting completed tasks:', error);
         alert('שגיאה במחיקת המשימות שבוצעו');
       }
     }
-  }, [tasks, currentUser]);
+  }, [tasks, currentUser, alias]);
 
-
-
-
-
+  // Restore task from archive (admin only)
+  const restoreTask = async (archivedTask) => {
+    if (!currentUser || !currentUser.isAdmin) {
+      alert('רק אדמין יכול לשחזר משימות');
+      return;
+    }
+    try {
+      // Restore to tasks collection
+      await setDoc(doc(db, 'tasks', archivedTask.id), {
+        ...archivedTask,
+        done: false,
+        completedAt: null,
+        completedBy: null,
+        archivedAt: null,
+        updatedAt: serverTimestamp(),
+      });
+      // Remove from archive
+      await deleteDoc(doc(db, 'archivedTasks', archivedTask.id));
+      alert('המשימה שוחזרה בהצלחה');
+    } catch (error) {
+      console.error('Error restoring task:', error);
+      alert('שגיאה בשחזור המשימה');
+    }
+  };
 
   /** Checks if a lead's creation date falls within the selected time filter range. */
   const isLeadInTimeRange = useCallback((lead) => {
@@ -1852,9 +1907,38 @@ const handleNLPSubmit = useCallback(async (e) => {
     if (!editLeadNLP.trim() || !currentUser) return;
     const lead = leads.find((l) => l.id === leadId);
     if (!lead) return;
-    
+    let parsedDetails = null;
+    let usedApi = false;
     try {
-      const parsedDetails = parseTaskFromText(editLeadNLP);
+      // Try Anthropic NLP API
+      const response = await fetch('/api/parse-task', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: editLeadNLP })
+      });
+      if (response.ok) {
+        const data = await response.json();
+        // Compose parsedDetails in the same format as parseTaskFromText
+        parsedDetails = {
+          title: data.title || '',
+          category: data.category || 'אחר',
+          dueDate: (data.date && data.time) ? new Date(`${data.date}T${data.time}`) : (data.date ? new Date(`${data.date}T13:00`) : new Date()),
+          assignTo: currentUser.email,
+          priority: 'רגיל',
+          done: false,
+          completedBy: null,
+          completedAt: null
+        };
+        usedApi = true;
+      }
+    } catch (err) {
+      // Ignore and fallback
+    }
+    if (!parsedDetails) {
+      // Fallback to local parser
+      parsedDetails = parseTaskFromText(editLeadNLP);
+    }
+    try {
       const taskRef = doc(collection(db, "tasks"));
       const newTask = {
         ...parsedDetails,
@@ -1863,7 +1947,7 @@ const handleNLPSubmit = useCallback(async (e) => {
         creatorId: currentUser.uid,
         creatorAlias: alias || currentUser.email || "",
         assignTo: currentUser.email,
-        title: `מעקב ${lead.fullName}: ${parsedDetails.title}`,
+        title: `מעקב ${lead.fullName}: ${parsedDetails.title || editLeadNLP}`,
         subtitle: editLeadNLP,
         status: "פתוח",
         createdAt: serverTimestamp(),
@@ -1875,7 +1959,6 @@ const handleNLPSubmit = useCallback(async (e) => {
         completedBy: null,
         completedAt: null
       };
-
       await setDoc(taskRef, newTask);
       setEditLeadNLP("");
     } catch (error) {
@@ -3057,31 +3140,59 @@ const calculatedAnalytics = useMemo(() => {
                  <h2 className="text-lg font-semibold mb-4 shrink-0 text-right">{'היסטוריית משימות שבוצעו'}</h2>
                  <div className="overflow-y-auto flex-grow mb-4 border rounded p-2 bg-gray-50">
                      <ul className="space-y-2">
-                         {tasks
-                           .filter(task => task.done && task.completedAt)
-                           .sort((a, b) => new Date(b.completedAt).getTime() - new Date(a.completedAt).getTime())
+                         {archivedTasks
+                           .sort((a, b) => {
+                             const aTime = a.completedAt?.toDate ? a.completedAt.toDate().getTime() : new Date(a.completedAt).getTime();
+                             const bTime = b.completedAt?.toDate ? b.completedAt.toDate().getTime() : new Date(b.completedAt).getTime();
+                             return bTime - aTime;
+                           })
                            .map(task => {
-
+                             // Convert Firestore Timestamps to JS Dates if needed
+                             const createdAt = task.createdAt?.toDate ? task.createdAt.toDate() : new Date(task.createdAt);
+                             const completedAt = task.completedAt?.toDate ? task.completedAt.toDate() : new Date(task.completedAt);
                              let duration = "";
-                             if (task.completedAt && task.createdAt) {
-                                 try {
-                                     const durationMs = new Date(task.completedAt).getTime() - new Date(task.createdAt).getTime();
-                                     duration = formatDuration(durationMs);
-                                 } catch { duration = "N/A"; }
+                             if (completedAt && createdAt && !isNaN(completedAt.getTime()) && !isNaN(createdAt.getTime())) {
+                               try {
+                                 const durationMs = completedAt.getTime() - createdAt.getTime();
+                                 duration = formatDuration(durationMs);
+                               } catch { duration = "N/A"; }
                              }
+                             // Find latest reply if any
+                             let latestReply = null;
+                             if (Array.isArray(task.replies) && task.replies.length > 0) {
+                               latestReply = task.replies.reduce((latest, curr) => {
+                                 const currTime = curr.timestamp?.toDate ? curr.timestamp.toDate().getTime() : new Date(curr.timestamp).getTime();
+                                 const latestTime = latest ? (latest.timestamp?.toDate ? latest.timestamp.toDate().getTime() : new Date(latest.timestamp).getTime()) : 0;
+                                 return currTime > latestTime ? curr : latest;
+                               }, null);
+                             }
+                             // Prefer alias for completedBy if available
+                             const completedBy = task.completedByAlias || task.completedBy || task.completedByEmail || 'לא ידוע';
                              return (
                                <li key={`hist-${task.id}`} className="p-2 border rounded bg-white text-sm text-right">
-                                 <p className="font-medium">{task.title}</p>
-                                 <p className="text-xs text-gray-600">
-                                   {'בוצע על ידי: '}<span className="font-semibold">{task.completedBy || 'לא ידוע'}</span>{' בתאריך: '}<span className="font-semibold">{formatDateTime(task.completedAt)}</span>
-                                   {duration && <span className="ml-2 mr-2 pl-2 border-l">{'זמן ביצוע: '}<span className="font-semibold">{duration}</span></span>} 
-                                 </p>
-                                 {task.subtitle && <p className="text-xs text-gray-500 pt-1 mt-1 border-t">{task.subtitle}</p>}
+                                 <div className="font-medium">
+                                   {task.title}{task.subtitle ? ` - ${task.subtitle}` : ''}
+                                 </div>
+                                 {latestReply && latestReply.text && (
+                                   <div className="text-xs text-blue-700 mt-1 border-b pb-1">{latestReply.text}</div>
+                                 )}
+                                 <div className="text-xs text-gray-600 mt-1">
+                                   {'בוצע על ידי '}
+                                   <span className="font-semibold">{completedBy}</span>
+                                   {' בתאריך '}
+                                   <span className="font-semibold">{formatDateTime(completedAt)}</span>
+                                   {duration && <span className="ml-2 mr-2 pl-2 border-l">{'משך: '}<span className="font-semibold">{duration}</span></span>}
+                                 </div>
+                                 {currentUser?.role === 'admin' && (
+                                   <Button variant="outline" size="sm" className="mt-2" onClick={() => restoreTask(task)}>
+                                     {'שחזר משימה'}
+                                   </Button>
+                                 )}
                                </li>
                              );
                            })
                          }
-                         {tasks.filter(task => task.done && task.completedAt).length === 0 && (
+                         {archivedTasks.length === 0 && (
                             <li className="text-center text-gray-500 py-6">{'אין משימות בהיסטוריה.'}</li>
                          )}
                      </ul>

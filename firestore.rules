@@ -175,5 +175,15 @@ service cloud.firestore {
         resource.data.addedBy == request.auth.email;
     }
 
+    // ────────────────
+    // Archived Tasks Collection
+    // ────────────────
+    match /archivedTasks/{taskId} {
+      // Allow read for all authenticated users
+      allow read: if isAuthenticated();
+      // Allow create, update, delete only for admins
+      allow create, update, delete: if isAdmin();
+    }
+
   } // END documents
 } // END service 
