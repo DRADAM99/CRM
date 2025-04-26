@@ -1,4 +1,3 @@
-
 import { useEffect, useState } from "react";
 import { db, auth } from "../firebase";
 import {
@@ -11,6 +10,8 @@ import {
   query,
   where,
   orderBy,
+  onSnapshot,
+  getDoc,
 } from "firebase/firestore";
 
 export default function NotesAndLinks({ section }) {
@@ -21,69 +22,221 @@ export default function NotesAndLinks({ section }) {
   const [modalOpen, setModalOpen] = useState(false);
   const [newNote, setNewNote] = useState("");
   const [newLink, setNewLink] = useState({ title: "", url: "" });
+  const [isAuthReady, setIsAuthReady] = useState(false);
 
-  const userEmail = auth.currentUser?.email;
-  console.log("🔐 Auth Email:", userEmail);  // Should log your email
+  // Get current user email and listen for auth changes
+  const [userEmail, setUserEmail] = useState(auth.currentUser?.email);
 
+  useEffect(() => {
+    const unsubscribe = auth.onAuthStateChanged((user) => {
+      setUserEmail(user?.email);
+      setIsAuthReady(true);
+      console.log("Auth state changed:", { email: user?.email, isReady: true });
+    });
+
+    return () => unsubscribe();
+  }, []);
 
   const fetchUsers = async () => {
-    const snap = await getDocs(collection(db, "users"));
-    setAllUsers(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    if (!isAuthReady || !userEmail) {
+      console.log("Skipping fetchUsers - auth not ready or no user");
+      return;
+    }
+
+    try {
+      const snap = await getDocs(collection(db, "users"));
+      setAllUsers(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      console.log("Users fetched successfully");
+    } catch (error) {
+      console.error("Error fetching users:", error);
+    }
   };
 
   const fetchNotes = async () => {
-    const q = query(collection(db, "notes"), orderBy("createdAt", "desc"));
-    const snapshot = await getDocs(q);
-    setNotes(snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })));
+    if (!isAuthReady || !userEmail) {
+      console.log("Skipping fetchNotes - auth not ready or no user");
+      return;
+    }
+
+    try {
+      console.log("Fetching notes for user:", userEmail);
+      
+      // Query notes that are either for all users, specifically for the current user,
+      // or created by the current user
+      const q = query(
+        collection(db, "notes"),
+        where("to", "in", ["all", userEmail]),
+        orderBy("createdAt", "desc")
+      );
+      const snapshot = await getDocs(q);
+      
+      // Also get notes authored by the current user
+      const authoredQ = query(
+        collection(db, "notes"),
+        where("author", "==", userEmail),
+        orderBy("createdAt", "desc")
+      );
+      const authoredSnapshot = await getDocs(authoredQ);
+      
+      // Combine and deduplicate notes
+      const allNotes = [...snapshot.docs, ...authoredSnapshot.docs]
+        .map(doc => ({ id: doc.id, ...doc.data() }))
+        .filter((note, index, self) => 
+          index === self.findIndex(n => n.id === note.id)
+        );
+      
+      console.log("Notes fetched:", allNotes.length);
+      setNotes(allNotes);
+    } catch (error) {
+      console.error("Error fetching notes:", error);
+    }
   };
 
   const fetchLinks = async () => {
-    if (!userEmail) return; // ✅ Prevent invalid query
-    const q = query(collection(db, "links"), where("addedBy", "==", userEmail));
-    const snapshot = await getDocs(q);
-    setLinks(snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })));
-  };  
-
-  const addNote = async () => {
-    if (!newNote.trim()) return;
-    await addDoc(collection(db, "notes"), {
-      to: targetUser,
-      text: newNote,
-      createdAt: serverTimestamp(),
-      author: userEmail || "anon",
-    });
-    setNewNote("");
-    setModalOpen(false);
-    fetchNotes();
-  };
-
-  const addLink = async () => {
-    if (!newLink.title.trim() || !newLink.url.trim()) return;
-    if (links.length >= 5) return alert("אפשר לשמור עד 5 קישורים בלבד.");
-    await addDoc(collection(db, "links"), {
-      ...newLink,
-      addedBy: userEmail || "anon",
-    });
-    setNewLink({ title: "", url: "" });
-    setModalOpen(false);
-    fetchLinks();
-  };
-
-  const deleteNote = async (id) => {
-    await deleteDoc(doc(db, "notes", id));
-    fetchNotes();
-  };
-
-  const deleteLink = async (id) => {
-    await deleteDoc(doc(db, "links", id));
-    fetchLinks();
+    if (!userEmail) return;
+    try {
+      const q = query(
+        collection(db, "links"),
+        where("addedBy", "==", userEmail),
+        orderBy("createdAt", "desc")
+      );
+      const snapshot = await getDocs(q);
+      setLinks(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    } catch (error) {
+      console.error("Error fetching links:", error);
+    }
   };
 
   useEffect(() => {
+    if (!isAuthReady || !userEmail) {
+      console.log("Skipping initial fetch - waiting for auth");
+      return;
+    }
+    
+    console.log("Setting up listeners for:", { section, userEmail });
+    
+    let unsubscribeNotes;
+    let unsubscribeLinks;
+    
+    if (section === "notes") {
+      // Set up real-time listener for notes
+      const notesQuery = query(
+        collection(db, "notes"),
+        where("to", "in", ["all", userEmail]),
+        orderBy("createdAt", "desc")
+      );
+
+      unsubscribeNotes = onSnapshot(notesQuery, () => {
+        console.log("Notes updated, fetching new data");
+        fetchNotes();
+      });
+    }
+
+    if (section === "links") {
+      // Set up real-time listener for links
+      const linksQuery = query(
+        collection(db, "links"),
+        where("addedBy", "==", userEmail),
+        orderBy("createdAt", "desc")
+      );
+
+      unsubscribeLinks = onSnapshot(linksQuery, () => {
+        // When changes occur, use the existing fetchLinks function
+        fetchLinks();
+      });
+    }
+
+    // Initial fetch
     if (section === "notes") fetchNotes();
     if (section === "links") fetchLinks();
     fetchUsers();
-  }, [section]);
+
+    // Cleanup listeners
+    return () => {
+      if (unsubscribeNotes) unsubscribeNotes();
+      if (unsubscribeLinks) unsubscribeLinks();
+    };
+  }, [section, userEmail, isAuthReady]);
+
+  const addNote = async () => {
+    if (!newNote.trim() || !userEmail) return;
+    try {
+      await addDoc(collection(db, "notes"), {
+        to: targetUser,
+        text: newNote,
+        createdAt: serverTimestamp(),
+        author: userEmail,
+      });
+      setNewNote("");
+      setModalOpen(false);
+    } catch (error) {
+      console.error("Error adding note:", error);
+      alert("שגיאה בהוספת פתק");
+    }
+  };
+
+  const addLink = async () => {
+    if (!newLink.title.trim() || !newLink.url.trim() || !userEmail) return;
+    try {
+      // Check if user has reached the limit
+      const userLinks = await getDocs(
+        query(collection(db, "links"), where("addedBy", "==", userEmail))
+      );
+      if (userLinks.size >= 5) {
+        alert("אפשר לשמור עד 5 קישורים בלבד.");
+        return;
+      }
+
+      await addDoc(collection(db, "links"), {
+        ...newLink,
+        addedBy: userEmail,
+        createdAt: serverTimestamp(),
+      });
+      setNewLink({ title: "", url: "" });
+      setModalOpen(false);
+    } catch (error) {
+      console.error("Error adding link:", error);
+      alert("שגיאה בהוספת קישור");
+    }
+  };
+
+  const deleteNote = async (id) => {
+    if (!isAuthReady) {
+      console.error("Cannot delete note: Auth not ready");
+      alert("אנא המתן רגע ונסה שוב");
+      return;
+    }
+
+    if (!userEmail) {
+      console.error("Cannot delete note: No user email found");
+      alert("שגיאה: משתמש לא מזוהה");
+      return;
+    }
+
+    try {
+      console.log("Attempting to delete note:", { id, userEmail });
+      
+      // Delete the note
+      await deleteDoc(doc(db, "notes", id));
+      
+      // Update local state
+      setNotes(prev => prev.filter(note => note.id !== id));
+      
+      console.log("Note deleted successfully:", id);
+    } catch (error) {
+      console.error("Error deleting note:", error);
+      alert("שגיאה במחיקת פתק");
+    }
+  };
+
+  const deleteLink = async (id) => {
+    try {
+      await deleteDoc(doc(db, "links", id));
+    } catch (error) {
+      console.error("Error deleting link:", error);
+      alert("שגיאה במחיקת קישור");
+    }
+  };
 
   if (section === "notes") {
     return (
@@ -94,12 +247,16 @@ export default function NotesAndLinks({ section }) {
             className="bg-yellow-200 border-yellow-400 border rounded shadow p-2 max-w-xs text-xs relative font-sans"
           >
             <div>{note.text}</div>
-            <div className="text-gray-600 mt-1 text-[10px]">
-              {allUsers.find(u => u.email === note.author)?.alias || note.author}
+            <div className="text-gray-600 mt-1 text-[10px] flex justify-between">
+              <span>{allUsers.find(u => u.email === note.author)?.alias || note.author}</span>
+              {note.to !== "all" && (
+                <span className="text-blue-600">ל: {allUsers.find(u => u.email === note.to)?.alias || note.to}</span>
+              )}
             </div>
             <button
               onClick={() => deleteNote(note.id)}
               className="absolute top-0 right-1 text-red-400 text-xs"
+              title="מחק פתק"
             >
               ×
             </button>
@@ -118,10 +275,14 @@ export default function NotesAndLinks({ section }) {
         {/* Modal */}
         {modalOpen && (
           <div className="absolute top-16 left-1/2 transform -translate-x-1/2 bg-white shadow-xl p-4 border rounded z-50 w-60">
-            <select value={targetUser} onChange={(e) => setTargetUser(e.target.value)} className="text-xs border p-1 rounded w-full mb-2">
+            <select 
+              value={targetUser} 
+              onChange={(e) => setTargetUser(e.target.value)} 
+              className="text-xs border p-1 rounded w-full mb-2"
+            >
               <option value="all">לכולם</option>
               {allUsers.map((u) => (
-                <option key={u.id} value={u.alias || u.email}>
+                <option key={u.id} value={u.email}>
                   {u.alias || u.email}
                 </option>
               ))}
@@ -147,7 +308,13 @@ export default function NotesAndLinks({ section }) {
       <div className="flex items-center gap-2">
         {links.map((link) => (
           <div key={link.id} className="flex items-center gap-1">
-            <a href={link.url} target="_blank" rel="noopener noreferrer" className="text-blue-600 text-xl">
+            <a 
+              href={link.url} 
+              target="_blank" 
+              rel="noopener noreferrer" 
+              className="text-blue-600 text-xl"
+              title={link.title}
+            >
               📄
             </a>
             <button
@@ -158,10 +325,15 @@ export default function NotesAndLinks({ section }) {
             </button>
           </div>
         ))}
-        <button onClick={() => setModalOpen(true)} className="text-green-600 text-2xl" title="הוסף קישור">
+        <button 
+          onClick={() => setModalOpen(true)} 
+          className="text-green-600 text-2xl" 
+          title="הוסף קישור"
+        >
           📎+
         </button>
 
+        {/* Modal */}
         {modalOpen && (
           <div className="absolute top-16 left-1/2 transform -translate-x-1/2 bg-white shadow-xl p-4 border rounded z-50 w-64">
             <input
