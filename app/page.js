@@ -78,6 +78,9 @@ import TaskManager from "@/components/TaskManager";
 
 import { useToast } from "@/components/ui/use-toast"
 
+// Add to imports
+import { TaskTabs } from "@/components/TaskTabs";
+
 
 /*
 import { initializeApp, getApps, getApp } from "firebase/app";
@@ -366,44 +369,44 @@ useEffect(() => {
   
 
 const [selectedDate, setSelectedDate] = useState(new Date());
-  const [view, setView] = useState("month");
-  const [isFullView, setIsFullView] = useState(false);
-  const [mounted, setMounted] = useState(false);
-  const [currentDateTime, setCurrentDateTime] = useState('');
-  const defaultBlockOrder = { TM: 1, Calendar: 2, Leads: 3 };
-  const [blockOrder, setBlockOrder] = useState(defaultBlockOrder);
+  const [view, setView] = useState("month");
+  const [isFullView, setIsFullView] = useState(false);
+  const [mounted, setMounted] = useState(false);
+  const [currentDateTime, setCurrentDateTime] = useState('');
+  const defaultBlockOrder = { TM: 1, Calendar: 2, Leads: 3 };
+  const [blockOrder, setBlockOrder] = useState(defaultBlockOrder);
 
 
-  const [showNLPModal, setShowNLPModal] = useState(false);
-  const [nlpInput, setNlpInput] = useState("");
-  const [showReturnModal, setShowReturnModal] = useState(false);
-  const [returnTaskId, setReturnTaskId] = useState(null);
-  const [returnComment, setReturnComment] = useState("");
-  const [returnNewAssignee, setReturnNewAssignee] = useState("");
-  const [showHistoryModal, setShowHistoryModal] = useState(false);
-  const [showAddLeadModal, setShowAddLeadModal] = useState(false);
-  const [newLeadFullName, setNewLeadFullName] = useState("");
-  const [newLeadPhone, setNewLeadPhone] = useState("");
-  const [newLeadMessage, setNewLeadMessage] = useState("");
-  const [newLeadStatus, setNewLeadStatus] = useState("חדש");
-  const [newLeadSource, setNewLeadSource] = useState("");
+  const [showNLPModal, setShowNLPModal] = useState(false);
+  const [nlpInput, setNlpInput] = useState("");
+  const [showReturnModal, setShowReturnModal] = useState(false);
+  const [returnTaskId, setReturnTaskId] = useState(null);
+  const [returnComment, setReturnComment] = useState("");
+  const [returnNewAssignee, setReturnNewAssignee] = useState("");
+  const [showHistoryModal, setShowHistoryModal] = useState(false);
+  const [showAddLeadModal, setShowAddLeadModal] = useState(false);
+  const [newLeadFullName, setNewLeadFullName] = useState("");
+  const [newLeadPhone, setNewLeadPhone] = useState("");
+  const [newLeadMessage, setNewLeadMessage] = useState("");
+  const [newLeadStatus, setNewLeadStatus] = useState("חדש");
+  const [newLeadSource, setNewLeadSource] = useState("");
 
 
-  const [taskFilter, setTaskFilter] = useState("הכל");
-  const [taskPriorityFilter, setTaskPriorityFilter] = useState("all");
-  const [selectedTaskCategories, setSelectedTaskCategories] = useState([]);
-  const [taskSearchTerm, setTaskSearchTerm] = useState("");
-  const [isTMFullView, setIsTMFullView] = useState(false);
-  const [showDoneTasks, setShowDoneTasks] = useState(false);
-  const [userHasSortedTasks, setUserHasSortedTasks] = useState(false);
-  const [editingTaskId, setEditingTaskId] = useState(null);
-  const [editingAssignTo, setEditingAssignTo] = useState("");
-  const [editingTitle, setEditingTitle] = useState("");
-  const [editingSubtitle, setEditingSubtitle] = useState("");
-  const [editingPriority, setEditingPriority] = useState("רגיל");
-  const [editingCategory, setEditingCategory] = useState(taskCategories[0] || "");
-  const [editingDueDate, setEditingDueDate] = useState("");
-  const [editingDueTime, setEditingDueTime] = useState("");
+  const [taskFilter, setTaskFilter] = useState("הכל");
+  const [taskPriorityFilter, setTaskPriorityFilter] = useState("all");
+  const [selectedTaskCategories, setSelectedTaskCategories] = useState([]);
+  const [taskSearchTerm, setTaskSearchTerm] = useState("");
+  const [isTMFullView, setIsTMFullView] = useState(false);
+  const [showDoneTasks, setShowDoneTasks] = useState(false);
+  const [userHasSortedTasks, setUserHasSortedTasks] = useState(false);
+  const [editingTaskId, setEditingTaskId] = useState(null);
+  const [editingAssignTo, setEditingAssignTo] = useState("");
+  const [editingTitle, setEditingTitle] = useState("");
+  const [editingSubtitle, setEditingSubtitle] = useState("");
+  const [editingPriority, setEditingPriority] = useState("רגיל");
+  const [editingCategory, setEditingCategory] = useState(taskCategories[0] || "");
+  const [editingDueDate, setEditingDueDate] = useState("");
+  const [editingDueTime, setEditingDueTime] = useState("");
 
   // Add task creation state variables
   const [showTaskModal, setShowTaskModal] = useState(false);
@@ -710,7 +713,6 @@ const [selectedDate, setSelectedDate] = useState(new Date());
 
   // Update the task rendering to show replies
   const renderTask = (task) => {
-    // If we're in new task mode, render the form with new task states
     if (!task) {
       return (
         <div className="p-3 border rounded bg-blue-50 shadow-md">
@@ -877,6 +879,15 @@ const [selectedDate, setSelectedDate] = useState(new Date());
                 {task.subtitle}
               </p>
             )}
+            <div className="text-xs text-gray-500 mt-1 space-x-2 space-x-reverse">
+              <span>🗓️ {formatDateTime(task.dueDate)}</span>
+              <span>👤 {assignableUsers.find(u => u.email === task.assignTo)?.alias || task.assignTo}</span>
+              {task.creatorAlias && <span className="font-medium">📝 {task.creatorAlias}</span>}
+              <span>🏷️ {task.category}</span>
+              <span>{task.priority === 'דחוף' ? '🔥' : task.priority === 'נמוך' ? '⬇️' : '➖'} {task.priority}</span>
+            </div>
+            {/* Add TaskTabs component */}
+            <TaskTabs taskId={task.id} currentUser={currentUser} />
           </div>
           
           <div className="flex items-center gap-1">
@@ -950,13 +961,6 @@ const [selectedDate, setSelectedDate] = useState(new Date());
             )}
           </div>
         </div>
-        <div className="text-xs text-gray-500 mt-1 space-x-2 space-x-reverse">
-          <span>🗓️ {formatDateTime(task.dueDate)}</span>
-          <span>👤 מוקצה ל: {assignableUsers.find(u => u.id === task.assignTo)?.alias || assignableUsers.find(u => u.email === task.assignTo)?.alias || task.assignTo}</span>
-          {task.creatorAlias && <span className="font-medium">📝 נוצר ע״י: {task.creatorAlias}</span>}
-          <span>🏷️ {task.category}</span>
-          <span>{task.priority === 'דחוף' ? '🔥' : task.priority === 'נמוך' ? '⬇️' : '➖'} {task.priority}</span>
-        </div>
             
         {/* Replies section */}
         {sortedReplies.length > 0 && (
@@ -1027,32 +1031,32 @@ const [selectedDate, setSelectedDate] = useState(new Date());
     { id: 'lead-3', createdAt: new Date(new Date().setDate(new Date().getDate() - 2)), fullName: "בני גנץ", phoneNumber: "0509876543", message: "לא היה מענה", status: "חדש", source: "אתר אינטרנט", conversationSummary: [], expanded: false, appointmentDateTime: null, },
     { id: 'lead-4', createdAt: new Date(new Date().setDate(new Date().getDate() - 1)), fullName: "דנה לוי", phoneNumber: "0541122334", message: "קבעה פגישה לשבוע הבא", status: "תור נקבע", source: "המלצה", conversationSummary: [ { text: "שיחה ראשונית, עניין רב.", timestamp: new Date(new Date().setDate(new Date().getDate() - 1)) }, { text: "נקבעה פגישת ייעוץ ל-15/4.", timestamp: new Date(new Date().setDate(new Date().getDate() - 1)) }, ], expanded: false, appointmentDateTime: new Date(2025, 3, 15, 10, 30).toISOString(), }, */
   ]); 
-  const [editingLeadId, setEditingLeadId] = useState(null);
-  const [editLeadFullName, setEditLeadFullName] = useState("");
-  const [editLeadPhone, setEditLeadPhone] = useState("");
-  const [editLeadMessage, setEditLeadMessage] = useState("");
-  const [editLeadStatus, setEditLeadStatus] = useState("חדש");
-  const [editLeadSource, setEditLeadSource] = useState("");
-  const [editLeadAppointmentDateTime, setEditLeadAppointmentDateTime] = useState("");
-  const [editLeadNLP, setEditLeadNLP] = useState("");
-  const [newConversationText, setNewConversationText] = useState("");
-  const [showConvUpdate, setShowConvUpdate] = useState(null);
-  const [leadSortBy, setLeadSortBy] = useState("priority");
-  const [leadTimeFilter, setLeadTimeFilter] = useState("all");
-  const [leadFilterFrom, setLeadFilterFrom] = useState("");
-  const [leadFilterTo, setLeadFilterTo] = useState("");
-  const [leadSearchTerm, setLeadSearchTerm] = useState("");
+  const [editingLeadId, setEditingLeadId] = useState(null);
+  const [editLeadFullName, setEditLeadFullName] = useState("");
+  const [editLeadPhone, setEditLeadPhone] = useState("");
+  const [editLeadMessage, setEditLeadMessage] = useState("");
+  const [editLeadStatus, setEditLeadStatus] = useState("חדש");
+  const [editLeadSource, setEditLeadSource] = useState("");
+  const [editLeadAppointmentDateTime, setEditLeadAppointmentDateTime] = useState("");
+  const [editLeadNLP, setEditLeadNLP] = useState("");
+  const [newConversationText, setNewConversationText] = useState("");
+  const [showConvUpdate, setShowConvUpdate] = useState(null);
+  const [leadSortBy, setLeadSortBy] = useState("priority");
+  const [leadTimeFilter, setLeadTimeFilter] = useState("all");
+  const [leadFilterFrom, setLeadFilterFrom] = useState("");
+  const [leadFilterTo, setLeadFilterTo] = useState("");
+  const [leadSearchTerm, setLeadSearchTerm] = useState("");
 
 
-  const [showAnalytics, setShowAnalytics] = useState(false);
-  const [analyticsTimeFilter, setAnalyticsTimeFilter] = useState("month");
-  const [analyticsFilterFrom, setAnalyticsFilterFrom] = useState("");
-  const [analyticsFilterTo, setAnalyticsFilterTo] = useState("");
+  const [showAnalytics, setShowAnalytics] = useState(false);
+  const [analyticsTimeFilter, setAnalyticsTimeFilter] = useState("month");
+  const [analyticsFilterFrom, setAnalyticsFilterFrom] = useState("");
+  const [analyticsFilterTo, setAnalyticsFilterTo] = useState("");
 
 
 
-  const [activeId, setActiveId] = useState(null);
-  const [prefillCategory, setPrefillCategory] = useState(null);
+  const [activeId, setActiveId] = useState(null);
+  const [prefillCategory, setPrefillCategory] = useState(null);
 
 
   
@@ -1223,12 +1227,12 @@ useEffect(() => {
 
 
 
-  const sensors = useSensors(
-    useSensor(PointerSensor, {
-      activationConstraint: { distance: 8 },
-    }),
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates, })
-  );
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: { distance: 8 },
+    }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates, })
+  );
 
 
 
@@ -2134,64 +2138,74 @@ const handleNLPSubmit = useCallback(async (e) => {
     setActiveId(event.active.id);
   }, [setActiveId]);
 
-  const handleDragEnd = useCallback((event) => {
+  const handleDragEnd = useCallback(async (event) => {
     const { active, over } = event;
     setActiveId(null);
-    if (!over || !active || active.id === over.id) return;
 
-    const activeTaskId = typeof active.id === 'string' && active.id.startsWith('task-') 
-      ? active.id.replace('task-', '') 
-      : null;
+    if (!over || !active) return;
 
-    if (!activeTaskId) {
-      console.error("Dragged item ID is not a valid task ID:", active.id);
-      return;
-    }
+    // Get the task ID and data
+    const taskId = active.id.replace('task-', '');
+    const task = tasks.find(t => t.id === taskId);
+    if (!task) return;
 
-    const activeTask = tasks.find(t => t.id === activeTaskId);
-    if (!activeTask) {
-        console.error("Cannot find dragged task in state:", activeTaskId);
-        return;
-    }
+    // Find the target category by traversing up the DOM
+    let targetElement = over.data.current?.droppableContainer?.node;
+    let targetCategory = null;
 
-    if (over.id === "calendar-dropzone") {
-      const currentDueDate = new Date(activeTask.dueDate);
-      const newDueDate = new Date(selectedDate);
-      if (!isNaN(currentDueDate.getTime())) {
-        newDueDate.setHours(currentDueDate.getHours(), currentDueDate.getMinutes(), 0, 0);
-      } else {
-        newDueDate.setHours(12, 0, 0, 0);
+    // Keep looking up the DOM tree until we find the category container
+    while (targetElement && !targetCategory) {
+      targetCategory = targetElement.dataset?.category;
+      if (!targetCategory) {
+        targetElement = targetElement.parentElement;
       }
-      setTasks(prevTasks => prevTasks.map(task => 
-        task.id === activeTask.id ? { ...task, dueDate: newDueDate } : task
-      ));
-      return;
     }
 
-    const overContainerId = over.data?.current?.sortable?.containerId;
-    const activeContainerId = active.data?.current?.sortable?.containerId;
+    console.log("Drag end:", {
+      taskId,
+      currentCategory: task.category,
+      targetCategory,
+      overData: over.data.current,
+      targetElement
+    });
 
-    if (activeContainerId && overContainerId && activeContainerId !== overContainerId) {
-        if (taskCategories.includes(overContainerId)) {
-        setTasks(prevTasks => prevTasks.map(task => 
-          task.id === activeTask.id ? { ...task, category: overContainerId } : task
-        ));
-        }
-    } else if (active.id !== over.id) {
-      const overTaskId = typeof over.id === 'string' && over.id.startsWith('task-') 
-        ? over.id.replace('task-', '') 
-        : null;
-      const oldIndex = tasks.findIndex(t => t.id === activeTaskId);
-      const newIndex = tasks.findIndex(t => t.id === overTaskId);
+    // If we found a valid category and it's different from the current one
+    if (targetCategory && targetCategory !== task.category) {
+      try {
+        console.log(`Updating task ${taskId} category from ${task.category} to ${targetCategory}`);
+        
+        // Update Firestore first
+        const taskRef = doc(db, 'tasks', taskId);
+        await updateDoc(taskRef, {
+          category: targetCategory,
+          updatedAt: serverTimestamp()
+        });
 
-        if (oldIndex !== -1 && newIndex !== -1) {
-        setTasks(items => arrayMove(items, oldIndex, newIndex));
-        if (!isTMFullView) {
-          setUserHasSortedTasks(true);
-        }
-        }
+        // Then update local state
+        setTasks(prevTasks => 
+          prevTasks.map(t => 
+            t.id === taskId 
+              ? { 
+                  ...t, 
+                  category: targetCategory,
+                  updatedAt: new Date() // Local timestamp for immediate UI update
+                }
+              : t
+          )
+        );
+
+        console.log("Task category updated successfully");
+      } catch (error) {
+        console.error("Error updating task category:", error);
+        alert("שגיאה בעדכון קטגוריית המשימה");
+      }
+    } else {
+      console.log("No category change needed:", {
+        currentCategory: task.category,
+        targetCategory
+      });
     }
-  }, [tasks, selectedDate, isTMFullView, taskCategories]);
+  }, [tasks]);
 
 
 
@@ -2517,7 +2531,7 @@ const calculatedAnalytics = useMemo(() => {
 
   
   <div className="w-48 text-left text-sm text-gray-500 flex flex-col justify-end gap-1">
-    <span>{'Version 5.4'}</span>
+    <span>{'Version 5.5'}</span>
     <button
       className="text-xs text-red-600 underline ml-2"
       onClick={() => {
@@ -2646,7 +2660,12 @@ const calculatedAnalytics = useMemo(() => {
     {taskCategories.map((category) => {
       const categoryTasks = sortedAndFilteredTasks.filter(task => task.category === category);
       return (
-        <div key={category} className="bg-gray-100 rounded-lg p-2 flex flex-col">
+        <div 
+          key={category} 
+          className="bg-gray-100 rounded-lg p-2 flex flex-col"
+          data-category={category}
+          data-droppable="true"
+        >
           <div className="flex justify-between items-center mb-2 sticky top-0 bg-gray-100 py-1 px-1 z-10">
             <h3 className="font-semibold text-center flex-grow">{category} ({categoryTasks.length})</h3>
             <Button 
@@ -2662,13 +2681,27 @@ const calculatedAnalytics = useMemo(() => {
               <span role="img" aria-label="Add">➕</span>
             </Button>
           </div>
-          <div className="flex-1 overflow-y-auto">
-            {showTaskModal && newTaskCategory === category && renderTask(null)}
-            {categoryTasks.map((task) => (
-              <div key={task.id} className="mb-2">
-                {renderTask(task)}
-              </div>
-            ))}
+          <div 
+            className="flex-1 overflow-y-auto"
+            data-category={category}
+            data-droppable="true"
+          >
+            <SortableContext 
+              items={categoryTasks.map(t => `task-${t.id}`)} 
+              strategy={verticalListSortingStrategy}
+            >
+              {showTaskModal && newTaskCategory === category && renderTask(null)}
+              {categoryTasks.map((task) => (
+                <SortableItem key={`task-${task.id}`} id={`task-${task.id}`}>
+                  <div 
+                    className="mb-2 cursor-grab active:cursor-grabbing"
+                    data-task-id={task.id}
+                  >
+                    {renderTask(task)}
+                  </div>
+                </SortableItem>
+              ))}
+            </SortableContext>
           </div>
         </div>
       );
@@ -2684,7 +2717,6 @@ const calculatedAnalytics = useMemo(() => {
       {sortedAndFilteredTasks.map((task) => {
         const overdue = isTaskOverdue(task);
         const overdue12h = isTaskOverdue12h(task);
-        const canReply = !task.done;
 
         return (
           <SortableItem key={task.uniqueId} id={`task-${task.id}`}>
@@ -3283,7 +3315,8 @@ const calculatedAnalytics = useMemo(() => {
                            {activeTaskForOverlay.subtitle && (<p className={`text-xs mt-0.5 ${activeTaskForOverlay.done ? "line-through text-gray-400" : "text-gray-600"}`}>{activeTaskForOverlay.subtitle}</p>)}
                            <div className="text-xs text-gray-500 mt-1 space-x-2 space-x-reverse">
                                <span>🗓️ {formatDateTime(activeTaskForOverlay.dueDate)}</span>
-                               <span>👤 {activeTaskForOverlay.assignTo}</span>
+                               <span>👤 {assignableUsers.find(u => u.email === activeTaskForOverlay.assignTo)?.alias || activeTaskForOverlay.assignTo}</span>
+                               {activeTaskForOverlay.creatorAlias && <span className="font-medium">📝 {activeTaskForOverlay.creatorAlias}</span>}
                                <span>🏷️ {activeTaskForOverlay.category}</span>
                                <span>{activeTaskForOverlay.priority === 'דחוף' ? '🔥' : activeTaskForOverlay.priority === 'נמוך' ? '⬇️' : '➖'} {activeTaskForOverlay.priority}</span>
                            </div>
