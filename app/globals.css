@@ -2,12 +2,8 @@
 @tailwind components;
 @tailwind utilities;
 
-@import "tailwindcss";
-@import "tw-animate-css";
-
-@custom-variant dark (&:is(.dark *));
-
-@theme inline {
+/* Map color variables to maintain v5.4 compatibility */
+:root {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
@@ -122,7 +118,41 @@
   }
   
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground antialiased;
+    font-family: var(--font-geist-sans);
+    background: #abd3d4 !important;
+  }
+
+  .dark * {
+    @apply text-foreground bg-background;
+  }
+
+  .card, [data-slot="card"] {
+    background: #fff !important;
+    border: 1px solid #e5e7eb !important;
+    box-shadow: 0 2px 8px 0 rgba(0,0,0,0.07), 0 1.5px 4px 0 rgba(0,0,0,0.03) !important;
+    border-radius: 1rem !important;
+  }
+
+  /* Dropdown menu styles */
+  [data-radix-popper-content-wrapper] {
+    background: white !important;
+  }
+
+  [role="listbox"],
+  [role="menu"] {
+    background: white !important;
+    border: 1px solid #e5e7eb !important;
+    box-shadow: 0 2px 8px 0 rgba(0,0,0,0.07), 0 1.5px 4px 0 rgba(0,0,0,0.03) !important;
+    border-radius: 0.5rem !important;
+  }
+
+  .select-content,
+  .dropdown-menu-content {
+    background: white !important;
+    border: 1px solid #e5e7eb !important;
+    box-shadow: 0 2px 8px 0 rgba(0,0,0,0.07), 0 1.5px 4px 0 rgba(0,0,0,0.03) !important;
+    border-radius: 0.5rem !important;
   }
 }
 
@@ -130,3 +160,18 @@
 .rbc-event-label {
   display: none !important;
 }
+
+/* Additional layout styles from v5.4 */
+.layout-grid {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 1rem;
+  min-height: 100vh;
+}
+
+.sidebar {
+  background-color: var(--sidebar);
+  color: var(--sidebar-foreground);
+  border-right: 1px solid var(--sidebar-border);
+  padding: 1rem;
+} 

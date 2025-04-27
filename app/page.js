@@ -819,25 +819,36 @@ const [selectedDate, setSelectedDate] = useState(new Date());
           <form onSubmit={handleSaveTask} className="space-y-2">
             <div>
               <Label className="text-xs">מוקצה ל:</Label>
-              <select value={editingAssignTo} onChange={(e) => setEditingAssignTo(e.target.value)} className="h-8 text-sm w-full border rounded">
-                <option value="">בחר משתמש</option>
-                {assignableUsers.map((user) => (
-                  <option key={user.id} value={user.alias || user.email}>
-                    {user.alias || user.email}
-                  </option>
-                ))}
-              </select>
+              <Select value={editingAssignTo} onValueChange={setEditingAssignTo}>
+                <SelectTrigger className="h-8 text-sm">
+                  <SelectValue placeholder="בחר משתמש" />
+                </SelectTrigger>
+                <SelectContent>
+                  {assignableUsers.map((user) => (
+                    <SelectItem key={user.id} value={user.email}>
+                      {user.alias || user.email}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div><Label className="text-xs">כותרת:</Label><Input type="text" value={editingTitle} onChange={(e) => setEditingTitle(e.target.value)} className="h-8 text-sm" required /></div>
             <div><Label className="text-xs">תיאור:</Label><Textarea value={editingSubtitle} onChange={(e) => setEditingSubtitle(e.target.value)} rows={2} className="text-sm" /></div>
             <div className="flex gap-2">
-              <div className="flex-1"><Label className="text-xs">עדיפות:</Label>
+              <div className="flex-1">
+                <Label className="text-xs">עדיפות:</Label>
                 <Select value={editingPriority} onValueChange={setEditingPriority}>
                   <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
                   <SelectContent>{taskPriorities.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
-              <div className="flex-1"><Label className="text-xs">קטגוריה:</Label><Input type="text" value={editingCategory} readOnly disabled className="h-8 text-sm bg-gray-100"/></div>
+              <div className="flex-1">
+                <Label className="text-xs">קטגוריה:</Label>
+                <Select value={editingCategory} onValueChange={setEditingCategory}>
+                  <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
+                  <SelectContent>{taskCategories.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
             </div>
             <div className="flex gap-2">
               <div className="flex-1"><Label className="text-xs">תאריך:</Label><Input type="date" value={editingDueDate} onChange={(e) => setEditingDueDate(e.target.value)} className="h-8 text-sm" required /></div>
@@ -1561,7 +1572,7 @@ const handleNLPSubmit = useCallback(async (e) => {
   * Combines date and time inputs into a Date object.
   * @param {React.FormEvent} e - The form submission event.
   */
-  const handleSaveTask = useCallback((e) => {
+  const handleSaveTask = useCallback(async (e) => {
     e.preventDefault();
     if (!editingTaskId) return;
 
@@ -1582,6 +1593,23 @@ const handleNLPSubmit = useCallback(async (e) => {
         console.error("Error creating due date from inputs:", editingDueDate, editingDueTime, error);
     }
 
+    // Update Firestore
+    try {
+      const taskRef = doc(db, "tasks", editingTaskId);
+      await updateDoc(taskRef, {
+        assignTo: editingAssignTo,
+        title: editingTitle,
+        subtitle: editingSubtitle,
+        priority: editingPriority,
+        category: editingCategory,
+        dueDate: dueDateTime,
+        updatedAt: serverTimestamp(),
+      });
+    } catch (error) {
+      console.error("Error updating task in Firestore:", error);
+      alert("שגיאה בעדכון המשימה בשרת");
+    }
+
     setTasks((prevTasks) =>
         prevTasks.map((task) =>
             task.id === editingTaskId
@@ -1593,8 +1621,8 @@ const handleNLPSubmit = useCallback(async (e) => {
                     subtitle: editingSubtitle,
                     priority: editingPriority,
                     category: editingCategory,
-                    dueDate: dueDateTime
-                }
+                    dueDate: dueDateTime,
+                  }
                 : task
         )
     );
@@ -1607,12 +1635,7 @@ const handleNLPSubmit = useCallback(async (e) => {
     setEditingCategory(taskCategories[0] || "");
     setEditingDueDate("");
     setEditingDueTime("");
-}, [
-    editingTaskId, editingAssignTo, editingTitle, editingSubtitle,
-    editingPriority, editingCategory, editingDueDate, editingDueTime,
-    setTasks, setEditingTaskId, setEditingAssignTo, setEditingTitle, setEditingSubtitle,
-    setEditingPriority, setEditingCategory, setEditingDueDate, setEditingDueTime
-]);
+  }, [editingTaskId, editingAssignTo, editingTitle, editingSubtitle, editingPriority, editingCategory, editingDueDate, editingDueTime, setTasks, setEditingTaskId, setEditingAssignTo, setEditingTitle, setEditingSubtitle, setEditingPriority, setEditingCategory, setEditingDueDate, setEditingDueTime, currentUser]);
 
   /**
   * Cancels the task editing process and clears the editing form state.

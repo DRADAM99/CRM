@@ -1,6 +1,6 @@
 import * as React from "react"
 import { Slot } from "@radix-ui/react-slot"
-import { cva } from "class-variance-authority"; // Removed 'type VariantProps' import
+import { cva } from "class-variance-authority";
 
 import { cn } from "@/lib/utils"
 
@@ -10,16 +10,17 @@ const buttonVariants = cva(
     variants: {
       variant: {
         default:
-          "bg-primary text-primary-foreground shadow-xs hover:bg-primary/90",
+          "bg-primary text-primary-foreground shadow-md hover:bg-primary/90 focus-visible:ring-2 focus-visible:ring-primary/40",
         destructive:
-          "bg-destructive text-white shadow-xs hover:bg-destructive/90 focus-visible:ring-destructive/20 dark:focus-visible:ring-destructive/40 dark:bg-destructive/60",
+          "bg-destructive text-white shadow-md hover:bg-destructive/90 focus-visible:ring-2 focus-visible:ring-destructive/30 dark:focus-visible:ring-destructive/40 dark:bg-destructive/60",
         outline:
-          "border bg-background shadow-xs hover:bg-accent hover:text-accent-foreground dark:bg-input/30 dark:border-input dark:hover:bg-input/50",
+          "border bg-background shadow-md border-gray-400 hover:bg-accent hover:text-accent-foreground focus-visible:ring-2 focus-visible:ring-primary/30 dark:bg-input/30 dark:border-input dark:hover:bg-input/50",
         secondary:
-          "bg-secondary text-secondary-foreground shadow-xs hover:bg-secondary/80",
+          "bg-secondary text-secondary-foreground shadow-md hover:bg-secondary/80",
         ghost:
           "hover:bg-accent hover:text-accent-foreground dark:hover:bg-accent/50",
         link: "text-primary underline-offset-4 hover:underline",
+        filteractive: "bg-black text-white shadow-md border border-black hover:bg-gray-900 focus-visible:ring-2 focus-visible:ring-black/40",
       },
       size: {
         default: "h-9 px-4 py-2 has-[>svg]:px-3",
@@ -35,21 +36,18 @@ const buttonVariants = cva(
   }
 )
 
-// Removed TypeScript interface 'ButtonProps'
-
-// --- CORRECTED: Use React.forwardRef (without TS types) ---
 const Button = React.forwardRef(
-  ({ className, variant, size, asChild = false, ...props }, ref) => { // Removed TS types from parameters/ref
+  ({ className, variant, size, asChild = false, ...props }, ref) => {
     const Comp = asChild ? Slot : "button"
     return (
       <Comp
         className={cn(buttonVariants({ variant, size, className }))}
-        ref={ref} // Pass the ref here
+        ref={ref}
         {...props}
       />
     )
   }
 )
-Button.displayName = "Button" // Add display name
+Button.displayName = "Button"
 
 export { Button, buttonVariants }
