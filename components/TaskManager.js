@@ -17,7 +17,7 @@ import { Label } from "@/components/ui/label";
 import { toast } from "@/components/ui/use-toast";
 
 // Task Categories and Priorities
-const TASK_CATEGORIES = ["לקבוע סדרה", "דוחות", "תשלומים", "להתקשר", "אדם", "אחר"];
+const TASK_CATEGORIES = ["לקבוע סדרה", "דוחות", "תשלומים", "להתקשר", "תוכנית טיפול", "אחר"];
 const TASK_PRIORITIES = ["דחוף", "רגיל", "נמוך"];
 
 // Utility Functions

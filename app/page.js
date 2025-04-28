@@ -1,4 +1,4 @@
-// Version 5.2 - Working Task Assignment
+// Version 5.5.1 - Working Task Assignment
 "use client";
 
 import React, { useState, useEffect, useMemo, useCallback } from "react";
@@ -159,7 +159,7 @@ const leadColorTab = (status) => leadStatusConfig[status]?.color || leadStatusCo
 const leadPriorityValue = (status) => leadStatusConfig[status]?.priority || leadStatusConfig.Default.priority;
 
 
-const taskCategories = ["לקבוע סדרה", "דוחות", "תשלומים", "להתקשר", "אדם", "אחר"];
+const taskCategories = ["לקבוע סדרה", "דוחות", "תשלומים", "להתקשר", "תוכנית טיפול", "אחר"];
 const taskPriorities = ["דחוף", "רגיל", "נמוך"];
 
 

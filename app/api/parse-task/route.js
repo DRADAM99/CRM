@@ -26,7 +26,7 @@ export async function POST(req) {
           content: `Please extract the following structured fields from this Hebrew task sentence:
 
 - title (without date/time or category)
-- category (choose from one of the known categories: לקבוע סדרה, דוחות, תשלומים, להתקשר, אדם, אחר)
+- category (choose from one of the known categories: לקבוע סדרה, דוחות, תשלומים, להתקשר, תוכנית טיפול, אחר)
 - date (ISO format: YYYY-MM-DD)
 - time (24h format: HH:mm)
 
