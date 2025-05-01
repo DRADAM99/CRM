@@ -1,4 +1,4 @@
-// Version 5.2 - Working Task Assignment
+// Version 5.6 - Working Task Assignment with Improved Tag Management
 "use client";
 
 import React, { useState, useEffect, useMemo, useCallback } from "react";
@@ -2554,7 +2554,7 @@ const calculatedAnalytics = useMemo(() => {
 
   
   <div className="w-48 text-left text-sm text-gray-500 flex flex-col justify-end gap-1">
-    <span>{'Version 5.5'}</span>
+    <span>{'Version 5.6'}</span>
     <button
       className="text-xs text-red-600 underline ml-2"
       onClick={() => {
