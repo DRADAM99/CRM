@@ -81,6 +81,56 @@ import { useToast } from "@/components/ui/use-toast"
 // Add to imports
 import { TaskTabs } from "@/components/TaskTabs";
 
+// Add this import at the top with other imports
+import { Switch as MuiSwitch } from '@mui/material';
+import { styled } from '@mui/material/styles';
+
+// Add this styled component definition before the Dashboard component
+const IOSSwitch = styled((props) => (
+  <MuiSwitch focusVisibleClassName=".Mui-focusVisible" disableRipple {...props} />
+))(({ theme }) => ({
+  width: 42,
+  height: 26,
+  padding: 0,
+  '& .MuiSwitch-switchBase': {
+    padding: 0,
+    margin: 2,
+    transitionDuration: '300ms',
+    '&.Mui-checked': {
+      transform: 'translateX(16px)',
+      color: '#fff',
+      '& + .MuiSwitch-track': {
+        backgroundColor: '#2196f3',
+        opacity: 1,
+        border: 0,
+      },
+      '&.Mui-disabled + .MuiSwitch-track': {
+        opacity: 0.5,
+      },
+    },
+    '&.Mui-focusVisible .MuiSwitch-thumb': {
+      color: '#33cf4d',
+      border: '6px solid #fff',
+    },
+    '&.Mui-disabled .MuiSwitch-thumb': {
+      color: '#E9E9EA',
+    },
+    '&.Mui-disabled + .MuiSwitch-track': {
+      opacity: 0.7,
+    },
+  },
+  '& .MuiSwitch-thumb': {
+    boxSizing: 'border-box',
+    width: 22,
+    height: 22,
+  },
+  '& .MuiSwitch-track': {
+    borderRadius: 26 / 2,
+    backgroundColor: '#E9E9EA',
+    opacity: 1,
+    transition: 'background-color 500ms',
+  },
+}));
 
 /*
 import { initializeApp, getApps, getApp } from "firebase/app";
@@ -181,6 +231,7 @@ export default function Dashboard() {
   // Single tasks state declaration
   const [tasks, setTasks] = useState([]);
   const [replyingToTaskId, setReplyingToTaskId] = useState(null);
+  const [showOverdueEffects, setShowOverdueEffects] = useState(true);
 
   // Redirect if not logged in
   useEffect(() => {
@@ -871,7 +922,7 @@ const [selectedDate, setSelectedDate] = useState(new Date());
     const sortedReplies = task.replies?.sort((a, b) => b.timestamp - a.timestamp) || [];
 
     return (
-      <div key={task.id} className={`p-3 rounded-lg shadow-sm border ${bgColor} relative`}>
+      <div key={task.id} className={`w-full p-3 rounded-lg shadow-sm border ${bgColor} relative`}>
         <div className="flex items-start justify-between gap-2">
           <div className="flex-grow">
             <div className="flex items-center gap-2 mb-1">
@@ -2529,12 +2580,16 @@ const calculatedAnalytics = useMemo(() => {
     <TooltipProvider>
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
         
-      <header dir="rtl" className="flex items-center justify-between p-4 border-b bg-white shadow-sm sticky top-0 z-20 h-[90px]">
-  <div className="w-48 text-right text-sm text-gray-600">{currentDateTime || 'טוען תאריך...'}</div>
+      <header dir="rtl" className="flex flex-col sm:flex-row items-center justify-between p-2 sm:p-4 border-b bg-white shadow-sm sticky top-0 z-20 min-h-[90px]">
+  <div className="w-full sm:w-48 text-center sm:text-right text-sm text-gray-600 flex flex-col items-center sm:items-start sm:mr-0">
+    <div className="w-full text-center sm:text-right">{currentDateTime || 'טוען תאריך...'}</div>
+    {alias && (
+      <div className="text-xs text-gray-700 w-full text-center sm:text-right">{`שלום, ${alias}`}</div>
+    )}
+  </div>
 
-  <div className="flex-1 flex items-center justify-center relative">
-    {/* Favorite Links - left of logo */}
-    <div className="absolute right-2 flex gap-2">
+  <div className="flex-1 flex items-center justify-center relative px-4">
+    <div className="absolute right-2 hidden sm:flex gap-2">
       <NotesAndLinks section="links" />
     </div>
 
@@ -2543,20 +2598,18 @@ const calculatedAnalytics = useMemo(() => {
       alt="Logo"
       width={140}
       height={56}
-      className="h-14 inline-block"
+      className="h-10 sm:h-14 inline-block"
     />
 
-    {/* Sticky Notes - right of logo */}
-    <div className="absolute left-0 flex gap-2">
+    <div className="absolute left-0 hidden sm:flex gap-2">
       <NotesAndLinks section="notes" />
     </div>
   </div>
 
-  
-  <div className="w-48 text-left text-sm text-gray-500 flex flex-col justify-end gap-1">
-    <span>{'Version 5.6'}</span>
+  <div className="w-full sm:w-48 text-center sm:text-left text-sm text-gray-500 flex flex-col items-center sm:items-end sm:ml-0">
+    <span>{'Version 5.6.3'}</span>
     <button
-      className="text-xs text-red-600 underline ml-2"
+      className="text-xs text-red-600 underline"
       onClick={() => {
         import("firebase/auth").then(({ signOut }) =>
           signOut(auth).then(() => router.push("/login"))
@@ -2565,199 +2618,241 @@ const calculatedAnalytics = useMemo(() => {
     >
       התנתק
     </button>
-    {alias && (
-      <div className="text-xs text-gray-700">{`שלום, ${alias}`}</div>
-    )}
-
-    {false && (
-      <div className="text-xs">
-        <input
-          type="text"
-          value={alias}
-          onChange={(e) => setAlias(e.target.value)}
-          placeholder="הכינוי שלך"
-          className="border px-1 py-0.5 w-full rounded text-xs"
-        />
-        <button onClick={handleAliasUpdate} className="text-blue-600 text-xs mt-1">שמור כינוי</button>
-      </div>
-    )}
   </div>
-
 </header>
 
 
         
-        <div dir="rtl" className="grid grid-cols-12 gap-4 p-4 bg-gray-50 min-h-[calc(100vh-73px)]">
-
+        <div dir="rtl" className="grid grid-cols-1 lg:grid-cols-12 gap-2 sm:gap-4 p-2 sm:p-4 bg-gray-50 min-h-[calc(100vh-90px)]">
           
-          <div style={{ order: blockOrder.TM }} className={`col-span-12 transition-all duration-300 ease-in-out ${ isTMFullView ? "lg:col-span-12" : "lg:col-span-4" }`} >
+          <div style={{ order: blockOrder.TM }} className={`col-span-1 ${isTMFullView ? "lg:col-span-12" : "lg:col-span-4"} transition-all duration-300 ease-in-out`}>
             <Card className="h-full flex flex-col">
-              <CardHeader>
-                 
-                 <div className="flex justify-between items-center mb-3">
-                    <CardTitle>{'מנהל משימות'}</CardTitle>
-                    <div className="flex items-center gap-2">
-                        
-                        <Button variant="outline" size="sm" onClick={() => setIsTMFullView(!isTMFullView)} title={isTMFullView ? "עבור לתצוגה מקוצרת" : "עבור לתצוגת קנבן"}>
-                            {isTMFullView ? "תצוגה מוקטנת" : "תצוגה מלאה"}
-                        </Button>
-                        
-                        <Button size="xs" onClick={() => toggleBlockOrder("TM")} title="שנה מיקום בלוק"> {'מיקום: '}{blockOrder.TM} </Button>
-                    </div>
+              <CardHeader className="space-y-3">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+                  <CardTitle>{'מנהל משימות'}</CardTitle>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      onClick={() => setIsTMFullView(!isTMFullView)} 
+                      title={isTMFullView ? "עבור לתצוגה מקוצרת" : "עבור לתצוגת קנבן"}
+                      className="w-full sm:w-auto"
+                    >
+                      {isTMFullView ? "תצוגה מוקטנת" : "תצוגה מלאה"}
+                    </Button>
+                    <Button 
+                      size="xs" 
+                      onClick={() => toggleBlockOrder("TM")} 
+                      title="שנה מיקום בלוק"
+                      className="w-full sm:w-auto"
+                    >
+                      {'מיקום: '}{blockOrder.TM}
+                    </Button>
+                  </div>
                 </div>
-                
+
                 <div className="flex flex-col gap-3">
-                    <div className="flex flex-wrap justify-between items-center gap-2">
-                       <div className="flex space-x-2 space-x-reverse">
-                           <Button variant={taskFilter === 'הכל' ? 'default' : 'outline'} size="sm" onClick={() => setTaskFilter('הכל')}>{'הכל'}</Button>
-                           <Button variant={taskFilter === 'שלי' ? 'default' : 'outline'} size="sm" onClick={() => setTaskFilter('שלי')}>{'שלי'}</Button>
-                           <Button variant={taskFilter === 'אחרים' ? 'default' : 'outline'} size="sm" onClick={() => setTaskFilter('אחרים')}>{'אחרים'}</Button>
-                       </div>
-                       <div className="flex items-center space-x-2 space-x-reverse">
-                           <Switch id="show-done-tasks" checked={showDoneTasks} onCheckedChange={setShowDoneTasks} aria-label="הצג משימות שבוצעו" />
-                           <Label htmlFor="show-done-tasks" className="text-sm cursor-pointer select-none"> {'הצג בוצעו'} </Label>
-                           {!isTMFullView && userHasSortedTasks && (
-                               /* Reset Sort Button without Tooltip */
-                               <Button variant="ghost" size="icon" className="w-8 h-8" title="אפס סדר ידני" onClick={() => setUserHasSortedTasks(false)}> <RotateCcw className="h-4 w-4" /> </Button>
-                           )}
-                       </div>
+                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+                    <div className="flex flex-wrap gap-2">
+                      <Button variant={taskFilter === 'הכל' ? 'default' : 'outline'} size="sm" onClick={() => setTaskFilter('הכל')}>{'הכל'}</Button>
+                      <Button variant={taskFilter === 'שלי' ? 'default' : 'outline'} size="sm" onClick={() => setTaskFilter('שלי')}>{'שלי'}</Button>
+                      <Button variant={taskFilter === 'אחרים' ? 'default' : 'outline'} size="sm" onClick={() => setTaskFilter('אחרים')}>{'אחרים'}</Button>
                     </div>
-                    
-                    <div className="flex flex-wrap justify-between items-center gap-2 border-t pt-3">
-                        <div className="flex flex-wrap items-center gap-2">
-                           <Select value={taskPriorityFilter} onValueChange={setTaskPriorityFilter}>
-                               <SelectTrigger className="h-8 text-sm w-[100px]"><SelectValue placeholder="סינון עדיפות..." /></SelectTrigger>
-                               <SelectContent>
-                                   <SelectItem value="all">{'כל העדיפויות'}</SelectItem>
-                                   {taskPriorities.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}
-                               </SelectContent>
-                           </Select>
-                           <DropdownMenu>
-                               <DropdownMenuTrigger asChild>
-                                   <Button variant="outline" size="sm" className="h-8 text-sm w-[140px] justify-between">
-                                       <span>
-                                           {selectedTaskCategories.length === 0 ? "כל הקטגוריות" : selectedTaskCategories.length === 1 ? selectedTaskCategories[0] : `${selectedTaskCategories.length} נבחרו`}
-                                       </span>
-                                       <ChevronDown className="h-4 w-4 opacity-50" />
-                                   </Button>
-                               </DropdownMenuTrigger>
-                               <DropdownMenuContent className="w-[140px]">
-                                   <DropdownMenuLabel>{'סינון קטגוריה'}</DropdownMenuLabel><DropdownMenuSeparator />
-                                   {taskCategories.map((category) => (
-                                       <DropdownMenuCheckboxItem key={category} checked={selectedTaskCategories.includes(category)} onCheckedChange={() => handleCategoryToggle(category)} onSelect={(e) => e.preventDefault()}> {category} </DropdownMenuCheckboxItem>
-                                   ))}
-                               </DropdownMenuContent>
-                           </DropdownMenu>
-                           <div className="relative">
-                               <Search className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-                               <Input type="search" placeholder="חפש משימות..." className="h-8 text-sm pl-8 w-[180px]" value={taskSearchTerm} onChange={(e) => setTaskSearchTerm(e.target.value)} />
-                           </div>
-                        </div>
-                        <div className="flex items-center space-x-2 space-x-reverse">
-                           
-                           <Button variant="outline" size="icon" className="w-8 h-8 text-red-600 hover:bg-red-50 hover:text-red-700" title="מחק משימות שבוצעו" onClick={handleClearDoneTasks} disabled={!tasks.some(task => task.done)}> <span role="img" aria-label="Clear Done">🧹</span> </Button>
-                           
-                           <Button variant="outline" size="sm" title="היסטוריית משימות" onClick={() => setShowHistoryModal(true)}> <span role="img" aria-label="History">📜</span> </Button>
-                           <Button 
-  size="sm" 
-  onClick={() => {
-    setNewTaskTitle("");
-    setNewTaskSubtitle("");
-    setNewTaskPriority("רגיל");
-    setNewTaskCategory(taskCategories[0] || "");
-    setNewTaskDueDate("");
-    setNewTaskDueTime("");
-    setNewTaskAssignTo("");
-    setShowTaskModal(true);
-  }}
->
-  {'+ משימה'}
-</Button>
-                        </div>
+                    <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2">
+                        <IOSSwitch
+                          checked={showDoneTasks}
+                          onChange={(e) => setShowDoneTasks(e.target.checked)}
+                          inputProps={{ 'aria-label': 'הצג בוצעו' }}
+                        />
+                        <Label className="text-sm font-medium cursor-pointer select-none">{'הצג בוצעו'}</Label>
+                      </div>
+                      <div className="flex items-center gap-2 mr-4 pr-4 border-r">
+                        <IOSSwitch
+                          checked={showOverdueEffects}
+                          onChange={(e) => setShowOverdueEffects(e.target.checked)}
+                          inputProps={{ 'aria-label': 'הצג חיווי איחור' }}
+                        />
+                        <Label className="text-sm font-medium cursor-pointer select-none">{'הצג חיווי איחור'}</Label>
+                      </div>
+                      {!isTMFullView && userHasSortedTasks && (
+                        <Button variant="ghost" size="icon" className="w-8 h-8" title="אפס סדר ידני" onClick={() => setUserHasSortedTasks(false)}>
+                          <RotateCcw className="h-4 w-4" />
+                        </Button>
+                      )}
                     </div>
+                  </div>
+
+                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 border-t pt-3">
+                    <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+                      <Select value={taskPriorityFilter} onValueChange={setTaskPriorityFilter}>
+                        <SelectTrigger className="h-8 text-sm w-full sm:w-[100px]">
+                          <SelectValue placeholder="סינון עדיפות..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">{'כל העדיפויות'}</SelectItem>
+                          {taskPriorities.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="outline" size="sm" className="h-8 text-sm w-full sm:w-[140px] justify-between">
+                            <span>
+                              {selectedTaskCategories.length === 0 ? "כל הקטגוריות" : selectedTaskCategories.length === 1 ? selectedTaskCategories[0] : `${selectedTaskCategories.length} נבחרו`}
+                            </span>
+                            <ChevronDown className="h-4 w-4 opacity-50" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent className="w-[140px]">
+                          <DropdownMenuLabel>{'סינון קטגוריה'}</DropdownMenuLabel>
+                          <DropdownMenuSeparator />
+                          {taskCategories.map((category) => (
+                            <DropdownMenuCheckboxItem 
+                              key={category} 
+                              checked={selectedTaskCategories.includes(category)} 
+                              onCheckedChange={() => handleCategoryToggle(category)} 
+                              onSelect={(e) => e.preventDefault()}
+                            >
+                              {category}
+                            </DropdownMenuCheckboxItem>
+                          ))}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+
+                      <div className="relative w-full sm:w-auto">
+                        <Search className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                        <Input 
+                          type="search" 
+                          placeholder="חפש משימות..." 
+                          className="h-8 text-sm pl-8 w-full sm:w-[180px]" 
+                          value={taskSearchTerm} 
+                          onChange={(e) => setTaskSearchTerm(e.target.value)} 
+                        />
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+                      <Button 
+                        variant="outline" 
+                        size="icon" 
+                        className="w-8 h-8 text-red-600 hover:bg-red-50 hover:text-red-700" 
+                        title="מחק משימות שבוצעו" 
+                        onClick={handleClearDoneTasks} 
+                        disabled={!tasks.some(task => task.done)}
+                      >
+                        <span role="img" aria-label="Clear Done">🧹</span>
+                      </Button>
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        title="היסטוריית משימות" 
+                        onClick={() => setShowHistoryModal(true)}
+                      >
+                        <span role="img" aria-label="History">📜</span>
+                      </Button>
+                      <Button 
+                        size="sm"
+                        className="w-full sm:w-auto" 
+                        onClick={() => {
+                          setNewTaskTitle("");
+                          setNewTaskSubtitle("");
+                          setNewTaskPriority("רגיל");
+                          setNewTaskCategory(taskCategories[0] || "");
+                          setNewTaskDueDate("");
+                          setNewTaskDueTime("");
+                          setNewTaskAssignTo("");
+                          setShowTaskModal(true);
+                        }}
+                      >
+                        {'+ משימה'}
+                      </Button>
+                    </div>
+                  </div>
                 </div>
               </CardHeader>
               <CardContent className="flex-grow overflow-hidden">
                 {isTMFullView ? (
-  <div className={`grid grid-cols-1 md:grid-cols-3 lg:grid-cols-${Math.max(1, taskCategories.length)} gap-3 h-[calc(100vh-340px)] overflow-x-auto`}>
-    {taskCategories.map((category) => {
-      const categoryTasks = sortedAndFilteredTasks.filter(task => task.category === category);
-      return (
-        <div 
-          key={category} 
-          className="bg-gray-100 rounded-lg p-2 flex flex-col"
-          data-category={category}
-          data-droppable="true"
-        >
-          <div className="flex justify-between items-center mb-2 sticky top-0 bg-gray-100 py-1 px-1 z-10">
-            <h3 className="font-semibold text-center flex-grow">{category} ({categoryTasks.length})</h3>
-            <Button 
-              variant="ghost" 
-              size="icon" 
-              className="w-6 h-6 text-gray-500 hover:text-blue-600 shrink-0" 
-              title={`הוסף ל${category}`} 
-              onClick={() => {
-                setNewTaskCategory(category);
-                setShowTaskModal(true);
-              }}
-            >
-              <span role="img" aria-label="Add">➕</span>
-            </Button>
-          </div>
-          <div 
-            className="flex-1 overflow-y-auto"
-            data-category={category}
-            data-droppable="true"
-          >
-            <SortableContext 
-              items={categoryTasks.map(t => `task-${t.id}`)} 
-              strategy={verticalListSortingStrategy}
-            >
-              {showTaskModal && newTaskCategory === category && renderTask(null)}
-              {categoryTasks.map((task) => (
-                <SortableItem key={`task-${task.id}`} id={`task-${task.id}`}>
-                  <div 
-                    className="mb-2 cursor-grab active:cursor-grabbing"
-                    data-task-id={task.id}
-                  >
-                    {renderTask(task)}
+                  <div className={`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-${Math.min(6, Math.max(1, taskCategories.length))} gap-3 h-[calc(100vh-340px)] overflow-x-auto`}>
+                    {taskCategories.map((category) => {
+                      const categoryTasks = sortedAndFilteredTasks.filter(task => task.category === category);
+                      return (
+                        <div 
+                          key={category} 
+                          className="bg-gray-100 rounded-lg p-2 flex flex-col min-w-[280px]"
+                          data-category={category}
+                          data-droppable="true"
+                        >
+                          <div className="flex justify-between items-center mb-2 sticky top-0 bg-gray-100 py-1 px-1 z-10">
+                            <h3 className="font-semibold text-center flex-grow">{category} ({categoryTasks.length})</h3>
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              className="w-6 h-6 text-gray-500 hover:text-blue-600 shrink-0" 
+                              title={`הוסף ל${category}`} 
+                              onClick={() => {
+                                setNewTaskCategory(category);
+                                setShowTaskModal(true);
+                              }}
+                            >
+                              <span role="img" aria-label="Add">➕</span>
+                            </Button>
+                          </div>
+                          <div 
+                            className="flex-1 overflow-y-auto"
+                            data-category={category}
+                            data-droppable="true"
+                          >
+                            <div className="space-y-2">
+                              {showTaskModal && newTaskCategory === category && renderTask(null)}
+                              {categoryTasks.map((task) => (
+                                <SortableItem key={`task-${task.id}`} id={`task-${task.id}`}>
+                                  <div 
+                                    className="cursor-grab active:cursor-grabbing"
+                                    data-task-id={task.id}
+                                  >
+                                    {renderTask(task)}
+                                  </div>
+                                </SortableItem>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
-                </SortableItem>
-              ))}
-            </SortableContext>
-          </div>
-        </div>
-      );
-    })}
-  </div>
-) : (
-  <SortableContext items={sortedAndFilteredTasks.map((t) => `task-${t.id}`)} strategy={verticalListSortingStrategy}>
-    <ul className="space-y-3 h-[calc(100vh-340px)] overflow-y-auto pr-2">
-      {showTaskModal && <li>{renderTask(null)}</li>}
-      {sortedAndFilteredTasks.length === 0 && !showTaskModal && (
-        <li className="text-center text-gray-500 py-4">{'אין משימות להצגה'}</li>
-      )}
-      {sortedAndFilteredTasks.map((task) => {
-        const overdue = isTaskOverdue(task);
-        const overdue12h = isTaskOverdue12h(task);
-
-        return (
-          <SortableItem key={task.uniqueId} id={`task-${task.id}`}>
-            <div className={`flex items-start justify-between p-2 border rounded shadow-sm cursor-grab active:cursor-grabbing ${task.done ? 'bg-gray-100 opacity-70' : 'bg-white'} ${overdue ? 'border-l-4 border-red-500' : 'border-l-4 border-transparent'} ${overdue12h ? 'animate-pulse bg-yellow-50' : ''}`}>
-              {renderTask(task)}
-            </div>
-          </SortableItem>
-        );
-      })}
-    </ul>
-  </SortableContext>
-)}
+                ) : (
+                  <div className="h-[calc(100vh-340px)] overflow-y-auto pr-2">
+                    <div className="space-y-2 w-full">
+                      {showTaskModal && <div className="w-full">{renderTask(null)}</div>}
+                      {sortedAndFilteredTasks.length === 0 && !showTaskModal && (
+                        <div className="text-center text-gray-500 py-4 w-full">{'אין משימות להצגה'}</div>
+                      )}
+                      {sortedAndFilteredTasks.map((task) => {
+                        const overdue = isTaskOverdue(task);
+                        const overdue12h = isTaskOverdue12h(task);
+                        return (
+                          <SortableItem key={task.uniqueId} id={`task-${task.id}`}>
+                            <div 
+                              className={`w-full flex items-start justify-between p-2 cursor-grab active:cursor-grabbing 
+                                ${task.done ? 'bg-gray-100 opacity-70' : ''} 
+                                ${overdue && showOverdueEffects ? 'after:content-[""] after:absolute after:top-0 after:bottom-0 after:right-0 after:w-1 after:bg-red-500 relative' : ''} 
+                                ${overdue12h && showOverdueEffects ? 'animate-pulse bg-yellow-50' : ''}`}
+                            >
+                              {renderTask(task)}
+                            </div>
+                          </SortableItem>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </div>
 
           
-          <div style={{ order: blockOrder.Calendar }} className="col-span-12 lg:col-span-4" >
+          <div style={{ order: blockOrder.Calendar }} className="col-span-1 lg:col-span-4" >
              <Card className="h-full flex flex-col">
               <CardHeader>
                 <div className="flex justify-between items-center">
@@ -2834,7 +2929,7 @@ const calculatedAnalytics = useMemo(() => {
           </div>
 
           
-          <div style={{ order: blockOrder.Leads }} className={`col-span-12 transition-all duration-300 ease-in-out ${ isFullView ? "lg:col-span-8" : "lg:col-span-4" }`} >
+          <div style={{ order: blockOrder.Leads }} className={`col-span-1 ${isFullView ? "lg:col-span-8" : "lg:col-span-4"} transition-all duration-300 ease-in-out`} >
               <Card className="h-full flex flex-col">
                <CardHeader>
                  
