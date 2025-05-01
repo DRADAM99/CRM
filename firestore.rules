@@ -163,16 +163,18 @@ service cloud.firestore {
                request.resource.data.addedBy is string;
       }
 
-      // Users can only read their own links
-      allow read: if isAuthenticated() && 
-        resource.data.addedBy == request.auth.email;
+      // Allow all authenticated users to read links
+      allow read: if isAuthenticated();
 
       // Allow create if user is authenticated and link data is valid
       allow create: if isAuthenticated() && isValidLink() && 
         request.resource.data.addedBy == request.auth.email;
 
-      // Allow update/delete only for the link owner
-      allow update, delete: if isAuthenticated() && 
+      // Allow all authenticated users to delete links
+      allow delete: if isAuthenticated();
+
+      // Allow update only for the link owner
+      allow update: if isAuthenticated() && 
         resource.data.addedBy == request.auth.email;
     }
 
