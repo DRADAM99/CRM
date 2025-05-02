@@ -2368,36 +2368,36 @@ const events = useMemo(() => {
     })
     .map((task) => {
       const start = task.dueDate instanceof Date ? task.dueDate : new Date(task.dueDate);
-      const end = new Date(start.getTime() + 60 * 60 * 1000); // 1 hour duration
-          return {
+      const end = new Date(start.getTime() + 15 * 60 * 1000); // 15 minutes duration
+      return {
         id: `task-${task.id}`,
         title: task.title,
-              start,
-              end,
+        start,
+        end,
         resource: { type: 'task', data: task },
         isDone: task.done || false
-          };
-      });
+      };
+    });
 
   const leadAppointmentEvents = leads
     .filter(lead => lead.status === 'תור נקבע' && lead.appointmentDateTime)
     .map(lead => {
-            try {
+      try {
         const start = new Date(lead.appointmentDateTime);
         if (isNaN(start.getTime())) return null;
-        const end = new Date(start.getTime() + 60 * 60 * 1000);
-            return {
+        const end = new Date(start.getTime() + 15 * 60 * 1000); // 15 minutes duration
+        return {
           id: `lead-${lead.id}`,
           title: `פגישה: ${lead.fullName}`,
-                start,
-                end,
+          start,
+          end,
           resource: { type: 'lead', data: lead }
-            };
+        };
       } catch (error) {
         console.error('Error creating lead event:', error);
         return null;
       }
-        })
+    })
     .filter(Boolean);
 
   return [...taskEvents, ...leadAppointmentEvents];
@@ -2852,39 +2852,19 @@ const calculatedAnalytics = useMemo(() => {
           </div>
 
           
-          <div style={{ order: blockOrder.Calendar }} className="col-span-1 lg:col-span-4" >
+          <div style={{ order: blockOrder.Calendar }} className="col-span-1 lg:col-span-4 h-full">
              <Card className="h-full flex flex-col">
               <CardHeader>
                 <div className="flex justify-between items-center">
                     <CardTitle>{'לוח שנה'}</CardTitle>
-                    
                     <Tooltip><TooltipTrigger asChild>
                         <Button size="xs" onClick={() => toggleBlockOrder("Calendar")}> {'מיקום: '}{blockOrder.Calendar} </Button>
                     </TooltipTrigger><TooltipContent>{'שנה מיקום בלוק'}</TooltipContent></Tooltip>
                 </div>
                 
-                <div className="flex justify-between items-center mt-2 border-t pt-2">
-                    <div className="flex gap-1">
-                         
-                        <Tooltip><TooltipTrigger asChild><Button variant="outline" size="sm" onClick={() => setSelectedDate(new Date())}>{'היום'}</Button></TooltipTrigger><TooltipContent>{'עבור להיום'}</TooltipContent></Tooltip>
-                        <Tooltip><TooltipTrigger asChild><Button variant="outline" size="icon" className="w-8 h-8" onClick={() => setSelectedDate(moment(selectedDate).subtract(1, view === 'month' ? 'month' : view === 'week' ? 'week' : 'day').toDate())} title="תקופה קודמת">{'<'}</Button></TooltipTrigger><TooltipContent>{'תקופה קודמת'}</TooltipContent></Tooltip>
-                        <Tooltip><TooltipTrigger asChild><Button variant="outline" size="icon" className="w-8 h-8" onClick={() => setSelectedDate(moment(selectedDate).add(1, view === 'month' ? 'month' : view === 'week' ? 'week' : 'day').toDate())} title="תקופה באה">{'>'}</Button></TooltipTrigger><TooltipContent>{'תקופה באה'}</TooltipContent></Tooltip>
-                    </div>
-                    <span className="font-semibold text-sm">
-                        
-                        {moment(selectedDate).format(view === 'month' ? 'MMMM YYYY' : 'D MMMM YYYY')}
-                    </span>
-                    <div className="flex gap-1">
-                        <Button variant={view === 'month' ? 'default' : 'outline'} size="sm" onClick={() => setView('month')}>{'חודש'}</Button>
-                        <Button variant={view === 'week' ? 'default' : 'outline'} size="sm" onClick={() => setView('week')}>{'שבוע'}</Button>
-                        <Button variant={view === 'day' ? 'default' : 'outline'} size="sm" onClick={() => setView('day')}>{'יום'}</Button>
-                    </div>
-                </div>
               </CardHeader>
-              <CardContent className="flex-grow relative">
-                 
-                 <div className="h-[calc(100vh-300px)] min-h-[400px]">
-                   
+              <CardContent className="flex flex-col flex-grow h-full">
+                 <div className="flex-1 min-h-[400px] h-full">
                    <DroppableCalendar
           selectedDate={selectedDate}
           setSelectedDate={setSelectedDate}
@@ -2903,7 +2883,6 @@ const calculatedAnalytics = useMemo(() => {
                   localStorage.setItem("calendarView", newView);
                 }}
                        onSelectEvent={event => {
-
                            const taskId = event.id.startsWith('task-') ? event.id.replace('task-', '') : null;
                            const taskData = taskId ? tasks.find(t => t.id === taskId) : null;
                            if (taskData) {
@@ -2922,6 +2901,10 @@ const calculatedAnalytics = useMemo(() => {
                        style={{ height: '100%' }}
                        className="rbc-calendar-rtl"
                        selectable={true}
+                       step={15}
+                       timeslots={1}
+                       components={{ event: CustomEvent }}
+                       currentUser={currentUser} // <-- pass currentUser here
                    />
                  </div>
               </CardContent>
@@ -3645,6 +3628,20 @@ const renderNewTaskForm = () => {
           </Button>
         </div>
       </form>
+    </div>
+  );
+};
+
+// Add a custom event component for the calendar
+const CustomEvent = ({ event }) => {
+  // Format the start time as HH:mm
+  const startTime = event.start instanceof Date
+    ? event.start.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit', hour12: false })
+    : '';
+  return (
+    <div style={{ fontSize: '0.95em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', lineHeight: 1.2, direction: 'rtl' }}>
+      <span style={{ fontWeight: 'normal', marginLeft: 4 }}>{startTime}</span>
+      <strong>{event.title}</strong>
     </div>
   );
 };

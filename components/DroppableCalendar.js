@@ -48,9 +48,25 @@ export default function DroppableCalendar({
   selectedDate,
   setSelectedDate,
   onEventDrop,
+  components: customComponents,
+  currentUser,
+  messages,
 }) {
   const calendarRef = useRef(null);
   const [currentView, setCurrentView] = useState(view || "week");
+  const [showOnlyMine, setShowOnlyMine] = useState(true);
+
+  // Helper: get user identifiers
+  const getUserIdentifiers = () => {
+    if (!currentUser) return [];
+    return [currentUser.email, currentUser.alias].filter(Boolean);
+  };
+  const userIdentifiers = getUserIdentifiers();
+
+  // Filter events if toggle is ON
+  const filteredEvents = showOnlyMine && userIdentifiers.length > 0
+    ? events.filter(event => userIdentifiers.includes(event.assignTo))
+    : events;
 
   useEffect(() => {
     const savedView = localStorage.getItem("calendarView");
@@ -82,42 +98,95 @@ export default function DroppableCalendar({
     }
   };
 
+  // Default components if not provided
+  const defaultComponents = {
+    event: CustomEvent,
+    eventWrapper: CustomEventWrapper
+  };
+  const components = customComponents ? { ...defaultComponents, ...customComponents } : defaultComponents;
+
+  // Color logic for others' tasks
+  const eventPropGetter = (event) => {
+    const isMine = userIdentifiers.includes(event.assignTo);
+    return {
+      style: {
+        textAlign: "right",
+        direction: "rtl",
+        backgroundColor: event.resource?.type === "task"
+          ? event.isDone
+            ? "#a1a1aa"
+            : isMine
+              ? "#3b82f6" // blue for mine
+              : "#f59e42" // orange for others
+          : isMine ? "#10b981" : "#f59e42", // green for mine, orange for others
+        opacity: event.resource?.type === "task" && event.isDone ? 0.7 : 1,
+        borderRadius: "5px",
+        color: "white",
+        border: "0px",
+        display: "block",
+        padding: "4px",
+        fontSize: "0.85rem"
+      },
+    };
+  };
+
+  // Working hours
+  const WORK_START = 8;
+  const WORK_END = 20;
+  const minTime = new Date();
+  minTime.setHours(WORK_START, 0, 0, 0);
+  const maxTime = new Date();
+  maxTime.setHours(WORK_END, 0, 0, 0);
+
+  // Style non-working hours
+  const slotPropGetter = (date) => {
+    const hour = date.getHours();
+    if (hour < WORK_START || hour >= WORK_END) {
+      return {
+        style: {
+          backgroundColor: '#f3f4f6', // light gray
+        },
+      };
+    }
+    return {};
+  };
+
   return (
-    <div ref={calendarRef} style={{ height: "100%", maxHeight: "100%", overflowY: "auto" }}>
-      <Calendar
-        localizer={localizer}
-        events={events}
-        startAccessor="start"
-        endAccessor="end"
-        defaultView={currentView}
-        view={currentView}
-        onView={handleViewChange}
-        date={selectedDate}
-        onNavigate={(date) => setSelectedDate(date)}
-        draggableAccessor={() => true}
-        onEventDrop={handleEventDrop}
-        style={{ direction: "rtl" }}
-        eventPropGetter={(event) => ({
-          style: {
-            textAlign: "right",
-            direction: "rtl",
-            backgroundColor: event.resource?.type === "task"
-              ? event.isDone ? "#a1a1aa" : "#3b82f6"
-              : "#10b981",
-            opacity: event.resource?.type === "task" && event.isDone ? 0.7 : 1,
-            borderRadius: "5px",
-            color: "white",
-            border: "0px",
-            display: "block",
-            padding: "4px",
-            fontSize: "0.85rem"
-          },
-        })}
-        components={{
-          event: CustomEvent,
-          eventWrapper: CustomEventWrapper  // ✅ plugs in the separate, working override
-        }}
-      />
+    <div style={{ height: "100%", display: "flex", flexDirection: "column", position: "relative" }}>
+      {/* Toggle Switch - absolutely positioned higher, label right, checkbox left */}
+      <div style={{ position: "absolute", top: -32, right: 0, display: "flex", alignItems: "center", flexDirection: "row", zIndex: 2 }}>
+        <label style={{ fontWeight: 500 }}>
+          הצג רק משימות שלי
+        </label>
+        <input
+          type="checkbox"
+          checked={showOnlyMine}
+          onChange={() => setShowOnlyMine(v => !v)}
+          style={{ width: 20, height: 20, marginRight: 8 }}
+        />
+      </div>
+      <div ref={calendarRef} style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
+        <Calendar
+          localizer={localizer}
+          events={filteredEvents}
+          startAccessor="start"
+          endAccessor="end"
+          defaultView={currentView}
+          view={currentView}
+          onView={handleViewChange}
+          date={selectedDate}
+          onNavigate={(date) => setSelectedDate(date)}
+          draggableAccessor={() => true}
+          onEventDrop={handleEventDrop}
+          style={{ direction: "rtl" }}
+          eventPropGetter={eventPropGetter}
+          components={components}
+          min={minTime}
+          max={maxTime}
+          slotPropGetter={slotPropGetter}
+          messages={messages}
+        />
+      </div>
     </div>
   );
 }
