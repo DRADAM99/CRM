@@ -192,6 +192,7 @@ export function TaskTabs({ taskId, currentUser }) {
                         }
                       }
                     }}
+                    onKeyDown={e => { if (e.key === ' ' || e.code === 'Space') e.stopPropagation(); }}
                   />
                   <div className="flex gap-1">
                     {Object.entries(COLORS).map(([color, bgClass]) => (
@@ -250,6 +251,7 @@ export function TaskTabs({ taskId, currentUser }) {
                   placeholder="שם התגית"
                   className="h-7 text-sm"
                   autoFocus
+                  onKeyDown={e => { if (e.key === ' ' || e.code === 'Space') e.stopPropagation(); }}
                 />
                 <div className="flex gap-1">
                   {Object.entries(COLORS).map(([color, bgClass]) => (

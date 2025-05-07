@@ -1,5 +1,19 @@
-// Version 5.6 - Working Task Assignment with Improved Tag Management
+// Version 5.6.7 - DnD Spacebar Input Fixes
 "use client";
+
+// Utility functions for layout persistence
+function saveLayoutPref(key, value) {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch (e) { /* ignore */ }
+}
+function getLayoutPref(key, defaultValue) {
+  try {
+    const val = localStorage.getItem(key);
+    if (val !== null) return JSON.parse(val);
+  } catch (e) { /* ignore */ }
+  return defaultValue;
+}
 
 import React, { useState, useEffect, useMemo, useCallback } from "react";
 import Image from 'next/image';
@@ -20,7 +34,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Search, RotateCcw, Bell, ChevronDown, Pencil, MessageCircle } from 'lucide-react';
+import { Search, RotateCcw, Bell, ChevronDown, Pencil, MessageCircle, Check, X } from 'lucide-react';
 import NotesAndLinks from "@/components/NotesAndLinks";
 import {
   collection,
@@ -232,6 +246,7 @@ export default function Dashboard() {
   const [tasks, setTasks] = useState([]);
   const [replyingToTaskId, setReplyingToTaskId] = useState(null);
   const [showOverdueEffects, setShowOverdueEffects] = useState(true);
+  const [replyInputValue, setReplyInputValue] = useState("");
 
   // Redirect if not logged in
   useEffect(() => {
@@ -314,9 +329,22 @@ export default function Dashboard() {
           isRead: reply.isRead || false
         })).sort((a, b) => b.timestamp - a.timestamp) : [];
 
+        // --- FIX: Always parse dueDate as Date object ---
+        let dueDate = null;
+        if (data.dueDate) {
+          if (typeof data.dueDate.toDate === 'function') {
+            dueDate = data.dueDate.toDate();
+          } else if (typeof data.dueDate === 'string') {
+            dueDate = new Date(data.dueDate);
+          } else if (data.dueDate instanceof Date) {
+            dueDate = data.dueDate;
+          }
+        }
+
         return {
           id: doc.id,
           ...data,
+          dueDate,
           replies,
           uniqueId: `task-${doc.id}-${Date.now()}`
         };
@@ -421,11 +449,11 @@ useEffect(() => {
 
 const [selectedDate, setSelectedDate] = useState(new Date());
   const [view, setView] = useState("month");
-  const [isFullView, setIsFullView] = useState(false);
+  const [isFullView, setIsFullView] = useState(() => getLayoutPref('dashboard_isFullView', false));
   const [mounted, setMounted] = useState(false);
   const [currentDateTime, setCurrentDateTime] = useState('');
   const defaultBlockOrder = { TM: 1, Calendar: 2, Leads: 3 };
-  const [blockOrder, setBlockOrder] = useState(defaultBlockOrder);
+  const [blockOrder, setBlockOrder] = useState(() => getLayoutPref('dashboard_blockOrder', defaultBlockOrder));
 
 
   const [showNLPModal, setShowNLPModal] = useState(false);
@@ -447,7 +475,7 @@ const [selectedDate, setSelectedDate] = useState(new Date());
   const [taskPriorityFilter, setTaskPriorityFilter] = useState("all");
   const [selectedTaskCategories, setSelectedTaskCategories] = useState([]);
   const [taskSearchTerm, setTaskSearchTerm] = useState("");
-  const [isTMFullView, setIsTMFullView] = useState(false);
+  const [isTMFullView, setIsTMFullView] = useState(() => getLayoutPref('dashboard_isTMFullView', false));
   const [showDoneTasks, setShowDoneTasks] = useState(false);
   const [userHasSortedTasks, setUserHasSortedTasks] = useState(false);
   const [editingTaskId, setEditingTaskId] = useState(null);
@@ -472,6 +500,14 @@ const [selectedDate, setSelectedDate] = useState(new Date());
   // First, add a new state for showing the new task form
   const [showNewTaskForm, setShowNewTaskForm] = useState(false);
 
+  useEffect(() => {
+    saveLayoutPref('dashboard_isFullView', isFullView);
+  }, [isFullView]);
+  
+  useEffect(() => {
+    saveLayoutPref('dashboard_isTMFullView', isTMFullView);
+  }, [isTMFullView]);
+ 
   // Update task creation to use consistent user identifiers
   const handleCreateTask = async (e) => {
     e.preventDefault();
@@ -629,6 +665,36 @@ const [selectedDate, setSelectedDate] = useState(new Date());
       alert('שגיאה בהוספת תגובה');
     }
   };
+  // Add state to track which lead is being confirmed for deletion
+  const [confirmingDeleteLeadId, setConfirmingDeleteLeadId] = useState(null);
+  // ... existing code ...
+  // Update handleDeleteLead to remove window.confirm and use inline confirmation
+  const handleDeleteLead = async (leadId) => {
+    if (!(currentUser?.role === "admin" || role === "admin")) {
+      alert("רק אדמין יכול למחוק לידים");
+      return;
+    }
+    // Only delete if confirmingDeleteLeadId matches
+    if (confirmingDeleteLeadId !== leadId) {
+      setConfirmingDeleteLeadId(leadId);
+      return;
+    }
+    try {
+      await deleteDoc(doc(db, "leads", leadId));
+      toast({ title: "הליד נמחק", description: "הליד הוסר מהמערכת." });
+      setConfirmingDeleteLeadId(null);
+    } catch (error) {
+      console.error("שגיאה במחיקת ליד:", error);
+      alert("שגיאה במחיקת ליד");
+      setConfirmingDeleteLeadId(null);
+    }
+  };
+  // ... existing code ...
+  // In the expanded lead row and compact list, update the delete button:
+  // Replace the delete button with inline confirmation if confirmingDeleteLeadId === lead.id
+  // ... existing code ...
+  // In the compact list, do the same for the delete icon button:
+  // ... existing code ...
 
   const handleMarkReplyAsRead = async (taskId) => {
     try {
@@ -883,8 +949,12 @@ const [selectedDate, setSelectedDate] = useState(new Date());
                 </SelectContent>
               </Select>
             </div>
-            <div><Label className="text-xs">כותרת:</Label><Input type="text" value={editingTitle} onChange={(e) => setEditingTitle(e.target.value)} className="h-8 text-sm" required /></div>
-            <div><Label className="text-xs">תיאור:</Label><Textarea value={editingSubtitle} onChange={(e) => setEditingSubtitle(e.target.value)} rows={2} className="text-sm" /></div>
+            <div><Label className="text-xs">כותרת:</Label><Input type="text" value={editingTitle} onChange={(e) => setEditingTitle(e.target.value)} className="h-8 text-sm" required 
+              onKeyDown={e => { if (e.key === ' ' || e.code === 'Space') e.stopPropagation(); }}
+            />
+            <Textarea value={editingSubtitle} onChange={(e) => setEditingSubtitle(e.target.value)} rows={2} className="text-sm"
+              onKeyDown={e => { if (e.key === ' ' || e.code === 'Space') e.stopPropagation(); }}
+            /></div>
             <div className="flex gap-2">
               <div className="flex-1">
                 <Label className="text-xs">עדיפות:</Label>
@@ -987,7 +1057,10 @@ const [selectedDate, setSelectedDate] = useState(new Date());
                   variant="ghost"
                   size="icon"
                   className="h-8 w-8 relative"
-                  onClick={() => setReplyingToTaskId(task.id)}
+                  onClick={() => {
+                    setReplyingToTaskId(task.id);
+                    setReplyInputValue("");
+                  }}
                 >
                   <MessageCircle className="h-4 w-4" />
                   {hasUnreadReplies && (
@@ -1051,16 +1124,25 @@ const [selectedDate, setSelectedDate] = useState(new Date());
               placeholder="הוסף תגובה..."
               className="w-full text-sm border rounded p-1 rtl"
               autoFocus
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && e.target.value.trim()) {
-                  handleTaskReply(task.id, e.target.value.trim());
-                  e.target.value = '';
+              value={replyInputValue}
+              onChange={e => setReplyInputValue(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === ' ' || e.code === 'Space') {
+                  e.stopPropagation(); // Prevent DnD from hijacking spacebar in input
+                }
+                if (e.key === 'Enter' && replyInputValue.trim()) {
+                  handleTaskReply(task.id, replyInputValue.trim());
+                  setReplyInputValue("");
                   setReplyingToTaskId(null);
                 } else if (e.key === 'Escape') {
                   setReplyingToTaskId(null);
+                  setReplyInputValue("");
                 }
               }}
-              onBlur={() => setReplyingToTaskId(null)}
+              onBlur={() => {
+                setReplyingToTaskId(null);
+                setReplyInputValue("");
+              }}
             />
           </div>
         )}
@@ -1165,11 +1247,21 @@ const [selectedDate, setSelectedDate] = useState(new Date());
       const tasksData = snapshot.docs
         .map(doc => {
           const data = doc.data();
-          console.log("Processing task:", { id: doc.id, assignTo: data.assignTo, creatorId: data.creatorId });
+          // --- FIX: Always parse dueDate as Date object ---
+          let dueDate = null;
+          if (data.dueDate) {
+            if (typeof data.dueDate.toDate === 'function') {
+              dueDate = data.dueDate.toDate();
+            } else if (typeof data.dueDate === 'string') {
+              dueDate = new Date(data.dueDate);
+            } else if (data.dueDate instanceof Date) {
+              dueDate = data.dueDate;
+            }
+          }
           return {
             id: doc.id,
             ...data,
-            // Ensure we have a unique, clean ID for React keys
+            dueDate,
             uniqueId: `task-${doc.id}-${Date.now()}`
           };
         })
@@ -1357,7 +1449,10 @@ useEffect(() => {
           newOrder[keyToSwap] = currentPosition;
       }
       if (mounted) {
-        try { localStorage.setItem("dashboardBlockOrder", JSON.stringify(newOrder)); }
+        try { 
+          // localStorage.setItem("dashboardBlockOrder", JSON.stringify(newOrder));
+          saveLayoutPref('dashboard_blockOrder', newOrder);
+        }
         catch (error) { console.error("Failed to save block order:", error); }
       }
       return newOrder;
@@ -1653,8 +1748,12 @@ const handleNLPSubmit = useCallback(async (e) => {
         subtitle: editingSubtitle,
         priority: editingPriority,
         category: editingCategory,
-        dueDate: dueDateTime,
+        dueDate: dueDateTime ? dueDateTime.toISOString() : null,
+        done: false, // Always reset to not done on edit, or use the previous value if you want to preserve
+        completedBy: null,
+        completedAt: null,
         updatedAt: serverTimestamp(),
+        // Add any other fields you want to always persist
       });
     } catch (error) {
       console.error("Error updating task in Firestore:", error);
@@ -1662,20 +1761,23 @@ const handleNLPSubmit = useCallback(async (e) => {
     }
 
     setTasks((prevTasks) =>
-        prevTasks.map((task) =>
-            task.id === editingTaskId
-                ? {
-                    ...task,
-                    creatorId: currentUser?.uid || task.creatorId,
-                    assignTo: editingAssignTo,
-                    title: editingTitle,
-                    subtitle: editingSubtitle,
-                    priority: editingPriority,
-                    category: editingCategory,
-                    dueDate: dueDateTime,
-                  }
-                : task
-        )
+      prevTasks.map((task) =>
+        task.id === editingTaskId
+          ? {
+              ...task,
+              creatorId: currentUser?.uid || task.creatorId,
+              assignTo: editingAssignTo,
+              title: editingTitle,
+              subtitle: editingSubtitle,
+              priority: editingPriority,
+              category: editingCategory,
+              dueDate: dueDateTime ? dueDateTime.toISOString() : null,
+              done: false,
+              completedBy: null,
+              completedAt: null,
+            }
+          : task
+      )
     );
     
     setEditingTaskId(null);
@@ -2360,24 +2462,31 @@ const sortedAndFilteredTasks = useMemo(() => {
 
 const events = useMemo(() => {
   const taskEvents = tasks
-    .filter(task => {
-      // Ensure we have a valid date
-      const dueDate = task.dueDate instanceof Date ? task.dueDate : 
-                     typeof task.dueDate === 'string' ? new Date(task.dueDate) : null;
-      return dueDate && !isNaN(dueDate.getTime());
-    })
     .map((task) => {
-      const start = task.dueDate instanceof Date ? task.dueDate : new Date(task.dueDate);
+      let dueDate = null;
+      if (task.dueDate) {
+        if (typeof task.dueDate.toDate === 'function') {
+          dueDate = task.dueDate.toDate();
+        } else if (typeof task.dueDate === 'string') {
+          dueDate = new Date(task.dueDate);
+        } else if (task.dueDate instanceof Date) {
+          dueDate = task.dueDate;
+        }
+      }
+      if (!dueDate || isNaN(dueDate.getTime())) return null;
+      const start = dueDate;
       const end = new Date(start.getTime() + 15 * 60 * 1000); // 15 minutes duration
       return {
         id: `task-${task.id}`,
         title: task.title,
         start,
         end,
+        assignTo: task.assignTo, // <-- Add this line for filtering and coloring
         resource: { type: 'task', data: task },
         isDone: task.done || false
       };
-    });
+    })
+    .filter(Boolean);
 
   const leadAppointmentEvents = leads
     .filter(lead => lead.status === 'תור נקבע' && lead.appointmentDateTime)
@@ -2391,6 +2500,7 @@ const events = useMemo(() => {
           title: `פגישה: ${lead.fullName}`,
           start,
           end,
+          assignTo: currentUser?.email || "", // <-- Add this line for filtering
           resource: { type: 'lead', data: lead }
         };
       } catch (error) {
@@ -2607,7 +2717,7 @@ const calculatedAnalytics = useMemo(() => {
   </div>
 
   <div className="w-full sm:w-48 text-center sm:text-left text-sm text-gray-500 flex flex-col items-center sm:items-end sm:ml-0">
-    <span>{'Version 5.6.3'}</span>
+    <span>{'Version 5.6.7'}</span>
     <button
       className="text-xs text-red-600 underline"
       onClick={() => {
@@ -2761,7 +2871,8 @@ const calculatedAnalytics = useMemo(() => {
                           setNewTaskCategory(taskCategories[0] || "");
                           setNewTaskDueDate("");
                           setNewTaskDueTime("");
-                          setNewTaskAssignTo("");
+                          const myUser = assignableUsers.find(u => u.email === currentUser?.email || u.alias === currentUser?.alias);
+                          setNewTaskAssignTo(myUser ? (myUser.alias || myUser.email) : (currentUser?.alias || currentUser?.email || ""));
                           setShowTaskModal(true);
                         }}
                       >
@@ -2922,7 +3033,7 @@ const calculatedAnalytics = useMemo(() => {
                             <CardTitle>{'ניהול לידים (מלא)'}</CardTitle>
                             <div className="flex gap-2">
                                 <Button size="sm" onClick={() => setShowAddLeadModal(true)}>{'+ הוסף ליד'}</Button>
-                                <Button onClick={() => setIsFullView(false)} size="sm" variant="outline">{'תצוגה מקוצרת'}</Button>
+                                <Button onClick={() => setIsFullView(true)} size="sm" variant="outline">{'תצוגה מקוצרת'}</Button>
                                 
                                 <Tooltip><TooltipTrigger asChild><Button size="xs" onClick={() => toggleBlockOrder("Leads")}> {'מיקום: '}{blockOrder.Leads} </Button></TooltipTrigger><TooltipContent>{'שנה מיקום בלוק'}</TooltipContent></Tooltip>
                             </div>
@@ -3088,6 +3199,11 @@ const calculatedAnalytics = useMemo(() => {
                                                            <div className="flex gap-2 justify-end border-t pt-3 mt-4">
                                                                <Button type="submit" size="sm">{'שמור שינויים'}</Button>
                                                                <Button type="button" variant="outline" size="sm" onClick={() => handleCollapseLead(lead.id)}>{'סגור'}</Button>
+                                                               {(currentUser?.role === 'admin' || role === 'admin') && (
+                                                                 <Button type="button" variant="destructive" size="sm" onClick={() => handleDeleteLead(lead.id)}>
+                                                                   {'מחק ליד'}
+                                                                 </Button>
+                                                               )}
                                                            </div>
                                                        </form>
                                                    </td>
@@ -3116,8 +3232,19 @@ const calculatedAnalytics = useMemo(() => {
                                     <div className="flex items-center gap-0.5 shrink-0">
                                          
                                         <Button size="icon" variant="ghost" className="w-7 h-7 text-gray-500 hover:text-blue-600" title="פתח לעריכה" onClick={() => handleEditLead(lead)}><span role="img" aria-label="Edit">✎</span></Button>
-                                        <Tooltip><TooltipTrigger asChild><a href={`https: wa.me/${lead.phoneNumber}`} target="_blank" rel="noopener noreferrer"><Button size="icon" variant="ghost" className="w-7 h-7 text-green-600 hover:text-green-700"><span role="img" aria-label="WhatsApp">💬</span></Button></a></TooltipTrigger><TooltipContent>{'שלח וואטסאפ'}</TooltipContent></Tooltip> 
+                                        <Tooltip><TooltipTrigger asChild><a href={`https://wa.me/${lead.phoneNumber}`} target="_blank" rel="noopener noreferrer"><Button size="icon" variant="ghost" className="w-7 h-7 text-green-600 hover:text-green-700"><span role="img" aria-label="WhatsApp">💬</span></Button></a></TooltipTrigger><TooltipContent>{'שלח וואטסאפ'}</TooltipContent></Tooltip> 
                                         <a href={`tel:${lead.phoneNumber}`}><Button size="icon" variant="ghost" className="w-7 h-7 text-blue-600 hover:text-blue-700" title="התקשר"><span role="img" aria-label="Call">📞</span></Button></a>
+                                        {/* Admin-only delete button */}
+                                        {(currentUser?.role === 'admin' || role === 'admin') && (
+                                          <Tooltip>
+                                            <TooltipTrigger asChild>
+                                              <Button size="icon" variant="destructive" className="w-7 h-7 text-red-600 hover:text-red-700" onClick={() => handleDeleteLead(lead.id)} title="מחק ליד">
+                                                <span role="img" aria-label="Delete">🗑️</span>
+                                              </Button>
+                                            </TooltipTrigger>
+                                            <TooltipContent>מחק ליד</TooltipContent>
+                                          </Tooltip>
+                                        )}
                                     </div>
                                 </li>
                             );
@@ -3645,6 +3772,8 @@ const CustomEvent = ({ event }) => {
     </div>
   );
 };
+
+  
 
 
 

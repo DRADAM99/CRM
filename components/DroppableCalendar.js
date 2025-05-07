@@ -41,6 +41,31 @@ const CustomEventWrapper = ({ children }) => (
   </div>
 );
 
+// Color palette for users
+const userColors = [
+  '#f59e42', // orange
+  '#10b981', // green
+  '#6366f1', // indigo
+  '#e11d48', // red
+  '#fbbf24', // yellow
+  '#3b82f6', // blue
+  '#8b5cf6', // violet
+  '#14b8a6', // teal
+  '#f472b6', // pink
+  '#a3e635', // lime
+  '#f87171', // rose
+  '#0ea5e9', // sky
+];
+// Hash function to assign a color index
+function getUserColor(assignTo) {
+  if (!assignTo) return userColors[0];
+  let hash = 0;
+  for (let i = 0; i < assignTo.length; i++) {
+    hash = assignTo.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  return userColors[Math.abs(hash) % userColors.length];
+}
+
 export default function DroppableCalendar({
   events,
   view,
@@ -108,24 +133,30 @@ export default function DroppableCalendar({
   // Color logic for others' tasks
   const eventPropGetter = (event) => {
     const isMine = userIdentifiers.includes(event.assignTo);
+    let backgroundColor;
+    if (event.resource?.type === 'task') {
+      if (event.isDone) {
+        backgroundColor = '#a1a1aa'; // gray for done
+      } else if (isMine) {
+        backgroundColor = '#3b82f6'; // blue for mine
+      } else {
+        backgroundColor = getUserColor(event.assignTo);
+      }
+    } else {
+      backgroundColor = isMine ? '#10b981' : getUserColor(event.assignTo);
+    }
     return {
       style: {
-        textAlign: "right",
-        direction: "rtl",
-        backgroundColor: event.resource?.type === "task"
-          ? event.isDone
-            ? "#a1a1aa"
-            : isMine
-              ? "#3b82f6" // blue for mine
-              : "#f59e42" // orange for others
-          : isMine ? "#10b981" : "#f59e42", // green for mine, orange for others
-        opacity: event.resource?.type === "task" && event.isDone ? 0.7 : 1,
-        borderRadius: "5px",
-        color: "white",
-        border: "0px",
-        display: "block",
-        padding: "4px",
-        fontSize: "0.85rem"
+        textAlign: 'right',
+        direction: 'rtl',
+        backgroundColor,
+        opacity: event.resource?.type === 'task' && event.isDone ? 0.7 : 1,
+        borderRadius: '5px',
+        color: 'white',
+        border: '0px',
+        display: 'block',
+        padding: '4px',
+        fontSize: '0.85rem',
       },
     };
   };
@@ -152,9 +183,9 @@ export default function DroppableCalendar({
   };
 
   return (
-    <div style={{ height: "100%", display: "flex", flexDirection: "column", position: "relative" }}>
+    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', position: 'relative' }}>
       {/* Toggle Switch - absolutely positioned higher, label right, checkbox left */}
-      <div style={{ position: "absolute", top: -32, right: 0, display: "flex", alignItems: "center", flexDirection: "row", zIndex: 2 }}>
+      <div style={{ position: 'absolute', top: -32, right: 0, display: 'flex', alignItems: 'center', flexDirection: 'row', zIndex: 2 }}>
         <label style={{ fontWeight: 500 }}>
           הצג רק משימות שלי
         </label>
@@ -165,7 +196,7 @@ export default function DroppableCalendar({
           style={{ width: 20, height: 20, marginRight: 8 }}
         />
       </div>
-      <div ref={calendarRef} style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
+      <div ref={calendarRef} style={{ flex: 1, minHeight: 0, overflowY: 'hidden' }}>
         <Calendar
           localizer={localizer}
           events={filteredEvents}
@@ -178,7 +209,7 @@ export default function DroppableCalendar({
           onNavigate={(date) => setSelectedDate(date)}
           draggableAccessor={() => true}
           onEventDrop={handleEventDrop}
-          style={{ direction: "rtl" }}
+          style={{ direction: 'rtl', height: '100%' }}
           eventPropGetter={eventPropGetter}
           components={components}
           min={minTime}
