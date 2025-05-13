@@ -22,7 +22,9 @@ import { auth, db } from "../firebase";
 import { FaWhatsapp } from "react-icons/fa";
 import { or, query, where, orderBy, arrayUnion } from "firebase/firestore";
 import { useAuth } from "./context/AuthContext";  // Updated import path
-
+import FullCalendarDemo from "../components/FullCalendarDemo";
+// ואז ברנדר:
+// <FullCalendarDemo />
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -67,8 +69,6 @@ import {
 
 
 import SortableItem from "../components/ui/sortable-item";
-
-import DroppableCalendar from "../components/DroppableCalendar";
 
 
 import moment from 'moment-timezone';
@@ -223,7 +223,7 @@ const leadColorTab = (status) => leadStatusConfig[status]?.color || leadStatusCo
 const leadPriorityValue = (status) => leadStatusConfig[status]?.priority || leadStatusConfig.Default.priority;
 
 
-const taskCategories = ["לקבוע סדרה", "דוחות", "תשלומים", "להתקשר", "תוכנית טיפול", "אחר"];
+const taskCategories = ["לקבוע סדרה", "דוחות", "תשלומים וזיכויים", "להתקשר", "תוכנית טיפול", "אחר"];
 const taskPriorities = ["דחוף", "רגיל", "נמוך"];
 
 
@@ -500,10 +500,19 @@ const [selectedDate, setSelectedDate] = useState(new Date());
   // First, add a new state for showing the new task form
   const [showNewTaskForm, setShowNewTaskForm] = useState(false);
 
+  // Add state for calendar full view
+  const [isCalendarFullView, setIsCalendarFullView] = useState(() => getLayoutPref('dashboard_isCalendarFullView', false));
+
+  // Persist calendar full view preference
   useEffect(() => {
-    saveLayoutPref('dashboard_isFullView', isFullView);
-  }, [isFullView]);
-  
+    saveLayoutPref('dashboard_isCalendarFullView', isCalendarFullView);
+  }, [isCalendarFullView]);
+
+  // Persist block order preference
+  useEffect(() => {
+    saveLayoutPref('dashboard_blockOrder', blockOrder);
+  }, [blockOrder]);
+
   useEffect(() => {
     saveLayoutPref('dashboard_isTMFullView', isTMFullView);
   }, [isTMFullView]);
@@ -1448,16 +1457,10 @@ useEffect(() => {
       if (keyToSwap && keyToSwap !== key) {
           newOrder[keyToSwap] = currentPosition;
       }
-      if (mounted) {
-        try { 
-          // localStorage.setItem("dashboardBlockOrder", JSON.stringify(newOrder));
-          saveLayoutPref('dashboard_blockOrder', newOrder);
-        }
-        catch (error) { console.error("Failed to save block order:", error); }
-      }
+      saveLayoutPref('dashboard_blockOrder', newOrder);
       return newOrder;
     });
-  }, [mounted]);
+  }, []);
 
 
 
@@ -2735,7 +2738,7 @@ const calculatedAnalytics = useMemo(() => {
         
         <div dir="rtl" className="grid grid-cols-1 lg:grid-cols-12 gap-2 sm:gap-4 p-2 sm:p-4 bg-gray-50 min-h-[calc(100vh-90px)]">
           
-          <div style={{ order: blockOrder.TM }} className={`col-span-1 ${isTMFullView ? "lg:col-span-12" : "lg:col-span-4"} transition-all duration-300 ease-in-out`}>
+          <div style={{ order: blockOrder.TM }} className={`col-span-1 ${isTMFullView ? 'lg:col-span-12' : 'lg:col-span-4'} transition-all duration-300 ease-in-out`}>
             <Card className="h-full flex flex-col">
               <CardHeader className="space-y-3">
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
@@ -2963,20 +2966,28 @@ const calculatedAnalytics = useMemo(() => {
           </div>
 
           
-          <div style={{ order: blockOrder.Calendar }} className="col-span-1 lg:col-span-4 h-full">
+          <div style={{ order: blockOrder.Calendar }} className={`col-span-1 ${isCalendarFullView ? 'lg:col-span-12' : 'lg:col-span-4'} transition-all duration-300 ease-in-out`}>
              <Card className="h-full flex flex-col">
               <CardHeader>
                 <div className="flex justify-between items-center">
                     <CardTitle>{'לוח שנה'}</CardTitle>
-                    <Tooltip><TooltipTrigger asChild>
-                        <Button size="xs" onClick={() => toggleBlockOrder("Calendar")}> {'מיקום: '}{blockOrder.Calendar} </Button>
-                    </TooltipTrigger><TooltipContent>{'שנה מיקום בלוק'}</TooltipContent></Tooltip>
+                    <div className="flex gap-2">
+                      <Button size="sm" onClick={() => setIsCalendarFullView(v => !v)} variant="outline">
+                        {isCalendarFullView ? 'תצוגה מקוצרת' : 'תצוגה מלאה'}
+                      </Button>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button size="xs" onClick={() => toggleBlockOrder("Calendar")}> {'מיקום: '}{blockOrder.Calendar} </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>{'שנה מיקום בלוק'}</TooltipContent>
+                      </Tooltip>
+                    </div>
                 </div>
                 
               </CardHeader>
               <CardContent className="flex flex-col flex-grow h-full">
                  <div className="flex-1 min-h-[400px] h-full">
-                   <DroppableCalendar
+                   <FullCalendarDemo
           selectedDate={selectedDate}
           setSelectedDate={setSelectedDate}
                 scrollToTime={new Date()}
@@ -3016,6 +3027,7 @@ const calculatedAnalytics = useMemo(() => {
                        timeslots={1}
                        components={{ event: CustomEvent }}
                        currentUser={currentUser} // <-- pass currentUser here
+                       isCalendarFullView={isCalendarFullView}
                    />
                  </div>
               </CardContent>
@@ -3023,7 +3035,7 @@ const calculatedAnalytics = useMemo(() => {
           </div>
 
           
-          <div style={{ order: blockOrder.Leads }} className={`col-span-1 ${isFullView ? "lg:col-span-8" : "lg:col-span-4"} transition-all duration-300 ease-in-out`} >
+          <div style={{ order: blockOrder.Leads }} className={`col-span-1 ${isFullView ? 'lg:col-span-8' : 'lg:col-span-4'} transition-all duration-300 ease-in-out`} >
               <Card className="h-full flex flex-col">
                <CardHeader>
                  
@@ -3033,7 +3045,7 @@ const calculatedAnalytics = useMemo(() => {
                             <CardTitle>{'ניהול לידים (מלא)'}</CardTitle>
                             <div className="flex gap-2">
                                 <Button size="sm" onClick={() => setShowAddLeadModal(true)}>{'+ הוסף ליד'}</Button>
-                                <Button onClick={() => setIsFullView(true)} size="sm" variant="outline">{'תצוגה מקוצרת'}</Button>
+                                <Button onClick={() => setIsFullView(false)} size="sm" variant="outline">{'תצוגה מקוצרת'}</Button>
                                 
                                 <Tooltip><TooltipTrigger asChild><Button size="xs" onClick={() => toggleBlockOrder("Leads")}> {'מיקום: '}{blockOrder.Leads} </Button></TooltipTrigger><TooltipContent>{'שנה מיקום בלוק'}</TooltipContent></Tooltip>
                             </div>
