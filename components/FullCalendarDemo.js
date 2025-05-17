@@ -9,6 +9,7 @@ import listPlugin from '@fullcalendar/list';
 import { formatISO, parseISO } from 'date-fns';
 import { db } from '../firebase';
 import { collection, onSnapshot, doc, getDoc, updateDoc, serverTimestamp, arrayUnion } from 'firebase/firestore';
+import { ChevronDown } from 'lucide-react';
 
 // Use the same categories and priorities as the main app
 const taskCategories = ["לקבוע סדרה", "דוחות", "תשלומים", "להתקשר", "תוכנית טיפול", "אחר"];
@@ -138,6 +139,60 @@ function UserMultiSelectDropdown({ users, value, onChange, currentUser, alias, u
                   </span>
                 ))}
               </div>
+            </label>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// 1. Add a CategoryDropdown component for category filter
+function CategoryDropdown({ categories, selected, onChange, categoryColors }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef();
+  useEffect(() => {
+    function handleClick(e) {
+      if (ref.current && !ref.current.contains(e.target)) setOpen(false);
+    }
+    if (open) document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [open]);
+  const toggle = cat => {
+    if (selected.includes(cat)) onChange(selected.filter(c => c !== cat));
+    else onChange([...selected, cat]);
+  };
+  return (
+    <div ref={ref} style={{ position: 'relative', minWidth: 120, direction: 'rtl' }}>
+      <button
+        style={{ border: '1px solid #e0e0e0', borderRadius: 6, padding: '8px 16px', fontSize: 15, background: '#fff', cursor: 'pointer', minWidth: 120, minHeight: 36, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}
+        onClick={() => setOpen(o => !o)}
+        type="button"
+      >
+        <span>
+          {selected.length === categories.length
+            ? 'כל הקטגוריות'
+            : selected.length === 1
+              ? categories.find(cat => cat === selected[0])
+              : `${selected.length} נבחרו`}
+        </span>
+        <ChevronDown style={{ width: 18, height: 18, opacity: 0.6 }} />
+      </button>
+      {open && (
+        <div style={{ position: 'absolute', top: '110%', right: 0, background: '#fff', border: '1px solid #e0e0e0', borderRadius: 8, boxShadow: '0 2px 8px #0002', zIndex: 10, minWidth: 180, padding: 8, direction: 'rtl' }}>
+          <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 6 }}>סינון קטגוריה</div>
+          {categories.map(cat => (
+            <label key={cat} style={{ display: 'flex', flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between', gap: 8, cursor: 'pointer', padding: '6px 0', fontSize: 15 }}>
+              <input
+                type="checkbox"
+                checked={selected.includes(cat)}
+                onChange={() => toggle(cat)}
+                style={{ accentColor: categoryColors[cat], marginLeft: 8 }}
+              />
+              <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span style={{ display: 'inline-block', width: 16, height: 16, borderRadius: 8, background: categoryColors[cat], marginLeft: 4, border: '1px solid #ccc' }} />
+                {cat}
+              </span>
             </label>
           ))}
         </div>
@@ -538,86 +593,131 @@ export default function FullCalendarDemo({ isCalendarFullView }) {
         transition: 'max-width 0.3s',
         fontSize: isTouch ? 18 : 15,
         order: blockOrder,
+        position: 'relative',
       }}
     >
+      {/* Broom icon at the very top left of the card */}
+      {!isCalendarFullView && (
+        <button
+          style={{ position: 'absolute', left: 8, top: 8, background: 'none', border: 'none', color: '#d32f2f', fontSize: 22, cursor: 'pointer', padding: 4, zIndex: 10 }}
+          onClick={handleDeleteAllDone}
+          title="מחק משימות שבוצעו"
+        >🧹</button>
+      )}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
         <h2 style={{ textAlign: 'center', fontWeight: 700, color: '#3b3b3b', fontSize: 28, margin: 0 }}>
           יומן ניהול משימות
         </h2>
       </div>
       {/* Control bar */}
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: isTouch ? 18 : 12, alignItems: 'center', marginBottom: 18, overflowX: isTouch ? 'auto' : 'visible', WebkitOverflowScrolling: 'touch' }}>
-        {/* View buttons always visible and working */}
-        <div style={{ display: 'flex', gap: isTouch ? 10 : 4 }}>
+      {isCalendarFullView ? (
+        // Full view: keep current layout
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: isTouch ? 18 : 12, alignItems: 'center', marginBottom: 18, overflowX: isTouch ? 'auto' : 'visible', WebkitOverflowScrolling: 'touch' }}>
+          {/* View buttons always visible and working */}
+          <div style={{ display: 'flex', gap: isTouch ? 10 : 4 }}>
+            <button
+              style={{ background: currentView === 'timeGridDay' ? '#a7c7e7' : '#eee', color: '#222', border: 'none', borderRadius: 8, padding: isTouch ? '12px 20px' : '6px 14px', fontWeight: 600, fontSize: isTouch ? 18 : 15, cursor: 'pointer', minWidth: 44, minHeight: 44 }}
+              onClick={() => {
+                setCurrentView('timeGridDay');
+                if (calendarRef.current) calendarRef.current.getApi().changeView('timeGridDay');
+              }}
+            >יום</button>
+            <button
+              style={{ background: currentView === 'timeGridWeek' ? '#a7c7e7' : '#eee', color: '#222', border: 'none', borderRadius: 8, padding: isTouch ? '12px 20px' : '6px 14px', fontWeight: 600, fontSize: isTouch ? 18 : 15, cursor: 'pointer', minWidth: 44, minHeight: 44 }}
+              onClick={() => {
+                setCurrentView('timeGridWeek');
+                if (calendarRef.current) calendarRef.current.getApi().changeView('timeGridWeek');
+              }}
+            >שבוע</button>
+            <button
+              style={{ background: currentView === 'dayGridMonth' ? '#a7c7e7' : '#eee', color: '#222', border: 'none', borderRadius: 8, padding: isTouch ? '12px 20px' : '6px 14px', fontWeight: 600, fontSize: isTouch ? 18 : 15, cursor: 'pointer', minWidth: 44, minHeight: 44 }}
+              onClick={() => {
+                setCurrentView('dayGridMonth');
+                if (calendarRef.current) calendarRef.current.getApi().changeView('dayGridMonth');
+              }}
+            >חודש</button>
+            <button
+              style={{ background: currentView === 'listWeek' ? '#a7c7e7' : '#eee', color: '#222', border: 'none', borderRadius: 8, padding: isTouch ? '12px 20px' : '6px 14px', fontWeight: 600, fontSize: isTouch ? 18 : 15, cursor: 'pointer', minWidth: 44, minHeight: 44 }}
+              onClick={() => {
+                setCurrentView('listWeek');
+                if (calendarRef.current) calendarRef.current.getApi().changeView('listWeek');
+              }}
+            >רשימה</button>
+          </div>
+          {/* Delete all done tasks */}
           <button
-            style={{ background: currentView === 'timeGridDay' ? '#a7c7e7' : '#eee', color: '#222', border: 'none', borderRadius: 8, padding: isTouch ? '12px 20px' : '6px 14px', fontWeight: 600, fontSize: isTouch ? 18 : 15, cursor: 'pointer', minWidth: 44, minHeight: 44 }}
-            onClick={() => {
-              setCurrentView('timeGridDay');
-              if (calendarRef.current) calendarRef.current.getApi().changeView('timeGridDay');
-            }}
-          >יום</button>
-          <button
-            style={{ background: currentView === 'timeGridWeek' ? '#a7c7e7' : '#eee', color: '#222', border: 'none', borderRadius: 8, padding: isTouch ? '12px 20px' : '6px 14px', fontWeight: 600, fontSize: isTouch ? 18 : 15, cursor: 'pointer', minWidth: 44, minHeight: 44 }}
-            onClick={() => {
-              setCurrentView('timeGridWeek');
-              if (calendarRef.current) calendarRef.current.getApi().changeView('timeGridWeek');
-            }}
-          >שבוע</button>
-          <button
-            style={{ background: currentView === 'dayGridMonth' ? '#a7c7e7' : '#eee', color: '#222', border: 'none', borderRadius: 8, padding: isTouch ? '12px 20px' : '6px 14px', fontWeight: 600, fontSize: isTouch ? 18 : 15, cursor: 'pointer', minWidth: 44, minHeight: 44 }}
-            onClick={() => {
-              setCurrentView('dayGridMonth');
-              if (calendarRef.current) calendarRef.current.getApi().changeView('dayGridMonth');
-            }}
-          >חודש</button>
-          <button
-            style={{ background: currentView === 'listWeek' ? '#a7c7e7' : '#eee', color: '#222', border: 'none', borderRadius: 8, padding: isTouch ? '12px 20px' : '6px 14px', fontWeight: 600, fontSize: isTouch ? 18 : 15, cursor: 'pointer', minWidth: 44, minHeight: 44 }}
-            onClick={() => {
-              setCurrentView('listWeek');
-              if (calendarRef.current) calendarRef.current.getApi().changeView('listWeek');
-            }}
-          >רשימה</button>
+            style={{ background: '#fbb', color: '#222', border: 'none', borderRadius: 6, padding: '6px 14px', fontWeight: 600, fontSize: 15, cursor: 'pointer' }}
+            onClick={handleDeleteAllDone}
+          >מחק משימות שבוצעו</button>
+          {/* Search input */}
+          <input
+            type="text"
+            value={searchTerm}
+            onChange={e => setSearchTerm(e.target.value)}
+            placeholder="חפש משימה..."
+            style={{ borderRadius: 8, padding: isTouch ? '12px 16px' : '6px 12px', fontSize: isTouch ? 17 : 15, border: '1px solid #e0e0e0', minWidth: 120, minHeight: 44 }}
+          />
+          {/* User filter dropdown */}
+          <UserMultiSelectDropdown
+            users={users}
+            value={userFilterMulti}
+            onChange={setUserFilterMulti}
+            currentUser={currentUser}
+            alias={alias}
+            userColors={userColors}
+            setUserColors={setUserColors}
+            isTouch={isTouch}
+          />
         </div>
-        {/* Delete all done tasks */}
-        <button
-          style={{ background: '#fbb', color: '#222', border: 'none', borderRadius: 6, padding: '6px 14px', fontWeight: 600, fontSize: 15, cursor: 'pointer' }}
-          onClick={handleDeleteAllDone}
-        >מחק משימות שבוצעו</button>
-        {/* Search input */}
-        <input
-          type="text"
-          value={searchTerm}
-          onChange={e => setSearchTerm(e.target.value)}
-          placeholder="חפש משימה..."
-          style={{ borderRadius: 8, padding: isTouch ? '12px 16px' : '6px 12px', fontSize: isTouch ? 17 : 15, border: '1px solid #e0e0e0', minWidth: 120, minHeight: 44 }}
-        />
-        {/* User filter dropdown */}
-        <UserMultiSelectDropdown
-          users={users}
-          value={userFilterMulti}
-          onChange={setUserFilterMulti}
-          currentUser={currentUser}
-          alias={alias}
-          userColors={userColors}
-          setUserColors={setUserColors}
-          isTouch={isTouch}
-        />
-      </div>
+      ) : (
+        // Compact view: condensed layout
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, flexWrap: 'wrap', position: 'relative', minHeight: 44 }}>
+          {/* View buttons and search input on the same line */}
+          <div style={{ display: 'flex', gap: 4, marginRight: 32, alignItems: 'center' }}>
+            <button
+              style={{ background: currentView === 'timeGridDay' ? '#a7c7e7' : '#eee', color: '#222', border: 'none', borderRadius: 8, padding: '6px 14px', fontWeight: 600, fontSize: 15, cursor: 'pointer', minWidth: 44, minHeight: 36 }}
+              onClick={() => {
+                setCurrentView('timeGridDay');
+                if (calendarRef.current) calendarRef.current.getApi().changeView('timeGridDay');
+              }}
+            >יום</button>
+            <button
+              style={{ background: currentView === 'listWeek' ? '#a7c7e7' : '#eee', color: '#222', border: 'none', borderRadius: 8, padding: '6px 14px', fontWeight: 600, fontSize: 15, cursor: 'pointer', minWidth: 44, minHeight: 36 }}
+              onClick={() => {
+                setCurrentView('listWeek');
+                if (calendarRef.current) calendarRef.current.getApi().changeView('listWeek');
+              }}
+            >רשימה</button>
+            {/* Search input immediately to the left of the buttons */}
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={e => setSearchTerm(e.target.value)}
+              placeholder="חפש משימה..."
+              style={{ borderRadius: 8, padding: '6px 12px', fontSize: 15, border: '1px solid #e0e0e0', minWidth: 100, minHeight: 36, marginRight: 8 }}
+            />
+          </div>
+          {/* Category dropdown */}
+          <CategoryDropdown
+            categories={taskCategories}
+            selected={selectedCategories}
+            onChange={setSelectedCategories}
+            categoryColors={CATEGORY_COLORS}
+          />
+          {/* User filter dropdown */}
+          <UserMultiSelectDropdown
+            users={users}
+            value={userFilterMulti}
+            onChange={setUserFilterMulti}
+            currentUser={currentUser}
+            alias={alias}
+            userColors={userColors}
+            setUserColors={setUserColors}
+            isTouch={isTouch}
+          />
+        </div>
+      )}
       <div style={{ marginBottom: 24, textAlign: 'center', display: 'flex', justifyContent: 'center', gap: 24, flexWrap: 'wrap' }}>
-        <div>
-          <label style={{ fontWeight: 500, marginLeft: 8 }}>סנן לפי קטגוריה:</label>
-          {taskCategories.map(cat => (
-            <label key={cat} style={{ margin: '0 8px', fontWeight: 400, color: '#444', cursor: 'pointer' }}>
-              <input
-                type="checkbox"
-                checked={selectedCategories.includes(cat)}
-                onChange={() => handleCategoryToggle(cat)}
-                style={{ accentColor: CATEGORY_COLORS[cat], marginLeft: 4 }}
-              />
-              {cat}
-            </label>
-          ))}
-        </div>
         <button
           style={{ background: '#b5ead7', color: '#222', border: 'none', borderRadius: 6, padding: '6px 18px', fontWeight: 600, fontSize: 16, boxShadow: '0 1px 4px #0001', cursor: 'pointer' }}
           onClick={() => {

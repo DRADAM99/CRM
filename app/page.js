@@ -218,7 +218,7 @@ const localizer = momentLocalizer(moment);
 const messages = { allDay: "כל היום", previous: "הקודם", next: "הבא", today: "היום", month: "חודש", week: "שבוע", day: "יום", agenda: "סדר יום", date: "תאריך", time: "זמן", event: "אירוע", noEventsInRange: "אין אירועים בטווח זה", showMore: (total) => `+ ${total} נוספים`, };
 
 
-const leadStatusConfig = { "חדש": { color: "bg-red-500", priority: 1 }, "מעקב": { color: "bg-orange-500", priority: 2 }, "ממתין ליעוץ עם אדם": { color: "bg-purple-500", priority: 3 }, "תור נקבע": { color: "bg-green-500", priority: 4 }, "בסדרת טיפולים": { color: "bg-emerald-400", priority: 6 }, "באג": { color: "bg-yellow-900", priority: 5 }, "לא מתאים": { color: "bg-gray-400", priority: 7 }, "אין מענה": { color: "bg-yellow-500", priority: 5 }, "Default": { color: "bg-gray-300", priority: 99 } };
+const leadStatusConfig = { "חדש": { color: "bg-red-500", priority: 1 }, "בבדיקת לקוח": { color: "bg-orange-500", priority: 2 }, "ממתין ליעוץ עם אדם": { color: "bg-purple-500", priority: 3 }, "נקבע יעוץ": { color: "bg-green-500", priority: 4 }, "בסדרת טיפולים": { color: "bg-emerald-400", priority: 6 }, "באג": { color: "bg-yellow-900", priority: 5 }, "לא מתאים": { color: "bg-gray-400", priority: 7 }, "אין מענה": { color: "bg-yellow-500", priority: 5 }, "Default": { color: "bg-gray-300", priority: 99 } };
 const leadColorTab = (status) => leadStatusConfig[status]?.color || leadStatusConfig.Default.color;
 const leadPriorityValue = (status) => leadStatusConfig[status]?.priority || leadStatusConfig.Default.priority;
 
@@ -1199,7 +1199,14 @@ const [selectedDate, setSelectedDate] = useState(new Date());
   const [leadFilterFrom, setLeadFilterFrom] = useState("");
   const [leadFilterTo, setLeadFilterTo] = useState("");
   const [leadSearchTerm, setLeadSearchTerm] = useState("");
+  const [leadSortDirection, setLeadSortDirection] = useState('desc');
+  const allLeadCategories = useMemo(() => Object.keys(leadStatusConfig).filter(k => k !== 'Default'), []);
+  const [selectedLeadCategories, setSelectedLeadCategories] = useState(() => getLayoutPref('dashboard_selectedLeadCategories', allLeadCategories));
 
+  // Persist selectedLeadCategories to localStorage whenever it changes
+  useEffect(() => {
+    saveLayoutPref('dashboard_selectedLeadCategories', selectedLeadCategories);
+  }, [selectedLeadCategories]);
 
   const [showAnalytics, setShowAnalytics] = useState(false);
   const [analyticsTimeFilter, setAnalyticsTimeFilter] = useState("month");
@@ -1407,24 +1414,25 @@ useEffect(() => {
 
   useEffect(() => {
     setMounted(true);
-    const savedOrder = localStorage.getItem("dashboardBlockOrder");
+    const savedOrder = localStorage.getItem("dashboard_blockOrder");
     if (savedOrder) {
       try {
         const parsedOrder = JSON.parse(savedOrder);
         if (parsedOrder.TM && parsedOrder.Calendar && parsedOrder.Leads) {
           setBlockOrder(parsedOrder);
         } else {
-           console.warn("Invalid block order found in localStorage, using default.");
-           localStorage.removeItem("dashboardBlockOrder");
-           setBlockOrder(defaultBlockOrder);
+          localStorage.removeItem("dashboard_blockOrder");
+          setBlockOrder(defaultBlockOrder);
+          saveLayoutPref('dashboard_blockOrder', defaultBlockOrder);
         }
       } catch (error) {
-        console.error("Failed to parse dashboard block order from localStorage:", error);
-        localStorage.removeItem("dashboardBlockOrder");
+        localStorage.removeItem("dashboard_blockOrder");
         setBlockOrder(defaultBlockOrder);
+        saveLayoutPref('dashboard_blockOrder', defaultBlockOrder);
       }
     } else {
-        setBlockOrder(defaultBlockOrder);
+      setBlockOrder(defaultBlockOrder);
+      saveLayoutPref('dashboard_blockOrder', defaultBlockOrder);
     }
   }, []);
 
@@ -2023,28 +2031,23 @@ const handleNLPSubmit = useCallback(async (e) => {
   /** Comparison function for sorting leads based on selected criteria */
   const compareLeads = useCallback((a, b) => {
     if (leadSortBy === "priority") {
-
-
       const priorityDiff = leadPriorityValue(a.status) - leadPriorityValue(b.status);
       if (priorityDiff !== 0) return priorityDiff;
       try {
-
-          const dateA = new Date(a.createdAt);
-          const dateB = new Date(b.createdAt);
-          if (isNaN(dateA.getTime()) || isNaN(dateB.getTime())) return 0;
-          return dateA.getTime() - dateB.getTime();
+        const dateA = new Date(a.createdAt);
+        const dateB = new Date(b.createdAt);
+        if (isNaN(dateA.getTime()) || isNaN(dateB.getTime())) return 0;
+        return leadSortDirection === 'asc' ? dateA.getTime() - dateB.getTime() : dateB.getTime() - dateA.getTime();
       } catch(e) { return 0; }
     } else {
-
       try {
-
-          const dateA = new Date(a.createdAt);
-          const dateB = new Date(b.createdAt);
-          if (isNaN(dateA.getTime()) || isNaN(dateB.getTime())) return 0;
-          return dateA.getTime() - dateB.getTime();
+        const dateA = new Date(a.createdAt);
+        const dateB = new Date(b.createdAt);
+        if (isNaN(dateA.getTime()) || isNaN(dateB.getTime())) return 0;
+        return leadSortDirection === 'asc' ? dateA.getTime() - dateB.getTime() : dateB.getTime() - dateA.getTime();
       } catch(e) { return 0; }
     }
-  }, [leadSortBy]);
+  }, [leadSortBy, leadSortDirection]);
 
   /** Populates the editing form state for a lead. */
   const handleEditLead = useCallback((lead) => {
@@ -2519,21 +2522,34 @@ const events = useMemo(() => {
 
 const leadsSorted = useMemo(() => {
     const lowerSearchTerm = leadSearchTerm.toLowerCase();
-    return leads
-        .filter(isLeadInTimeRange)
-        .filter(lead => {
-            if (!lowerSearchTerm) return true;
-
-            return (
-                lead.fullName?.toLowerCase().includes(lowerSearchTerm) ||
-                lead.phoneNumber?.includes(lowerSearchTerm) ||
-                lead.message?.toLowerCase().includes(lowerSearchTerm) ||
-                lead.source?.toLowerCase().includes(lowerSearchTerm) ||
-                lead.status?.toLowerCase().includes(lowerSearchTerm)
-            );
-        })
-        .sort(compareLeads);
-}, [ leads, leadSearchTerm, isLeadInTimeRange, compareLeads ]);
+    // Filter by time, search, and selected categories
+    let filtered = leads
+      .filter(isLeadInTimeRange)
+      .filter(lead => selectedLeadCategories.includes(lead.status))
+      .filter(lead => {
+        if (!lowerSearchTerm) return true;
+        return (
+          lead.fullName?.toLowerCase().includes(lowerSearchTerm) ||
+          lead.phoneNumber?.includes(lowerSearchTerm) ||
+          lead.message?.toLowerCase().includes(lowerSearchTerm) ||
+          lead.source?.toLowerCase().includes(lowerSearchTerm) ||
+          lead.status?.toLowerCase().includes(lowerSearchTerm)
+        );
+      });
+    // Group by status/category, sort within each group, then flatten
+    const grouped = {};
+    filtered.forEach(lead => {
+      if (!grouped[lead.status]) grouped[lead.status] = [];
+      grouped[lead.status].push(lead);
+    });
+    let result = [];
+    allLeadCategories.forEach(cat => {
+      if (grouped[cat]) {
+        result = result.concat(grouped[cat].sort(compareLeads));
+      }
+    });
+    return result;
+}, [leads, leadSearchTerm, isLeadInTimeRange, compareLeads, selectedLeadCategories, allLeadCategories]);
 
 
 const calculatedAnalytics = useMemo(() => {
@@ -2720,7 +2736,7 @@ const calculatedAnalytics = useMemo(() => {
   </div>
 
   <div className="w-full sm:w-48 text-center sm:text-left text-sm text-gray-500 flex flex-col items-center sm:items-end sm:ml-0">
-    <span>{'Version 5.6.7'}</span>
+    <span>{'Version 6.0'}</span>
     <button
       className="text-xs text-red-600 underline"
       onClick={() => {
@@ -3045,7 +3061,7 @@ const calculatedAnalytics = useMemo(() => {
                             <CardTitle>{'ניהול לידים (מלא)'}</CardTitle>
                             <div className="flex gap-2">
                                 <Button size="sm" onClick={() => setShowAddLeadModal(true)}>{'+ הוסף ליד'}</Button>
-                                <Button onClick={() => setIsFullView(false)} size="sm" variant="outline">{'תצוגה מקוצרת'}</Button>
+                                <Button onClick={() => setIsFullView(true)} size="sm" variant="outline">{'תצוגה מקוצרת'}</Button>
                                 
                                 <Tooltip><TooltipTrigger asChild><Button size="xs" onClick={() => toggleBlockOrder("Leads")}> {'מיקום: '}{blockOrder.Leads} </Button></TooltipTrigger><TooltipContent>{'שנה מיקום בלוק'}</TooltipContent></Tooltip>
                             </div>
@@ -3059,25 +3075,74 @@ const calculatedAnalytics = useMemo(() => {
                                    <SelectContent><SelectItem value="priority">{'עדיפות'}</SelectItem><SelectItem value="date">{'תאריך יצירה'}</SelectItem></SelectContent>
                                </Select>
                            </div>
+                           {/* Sort direction toggle */}
                            <div>
-                               <Label className="ml-1 text-sm font-medium">{'סנן זמן:'}</Label>
-                               <Select value={leadTimeFilter} onValueChange={setLeadTimeFilter}>
-                                   <SelectTrigger className="h-8 text-sm w-[130px]"><SelectValue /></SelectTrigger>
-                                   <SelectContent>
-                                       <SelectItem value="all">{'הכל'}</SelectItem><SelectItem value="week">{'שבוע אחרון'}</SelectItem>
-                                       <SelectItem value="month">{'חודש אחרון'}</SelectItem><SelectItem value="custom">{'טווח תאריכים'}</SelectItem>
-                                   </SelectContent>
-                               </Select>
+                             <Label className="ml-1 text-sm font-medium">{'כיוון:'}</Label>
+                             <Button
+                               size="sm"
+                               variant="outline"
+                               className="h-8 text-sm w-[40px] px-2"
+                               onClick={() => setLeadSortDirection(dir => dir === 'asc' ? 'desc' : 'asc')}
+                               title={leadSortDirection === 'asc' ? 'סדר עולה' : 'סדר יורד'}
+                             >
+                               {leadSortDirection === 'asc' ? '⬆️' : '⬇️'}
+                             </Button>
+                           </div>
+                           {/* Category multi-select dropdown */}
+                           <DropdownMenu>
+                             <DropdownMenuTrigger asChild>
+                               <Button variant="outline" size="sm" className="h-8 text-sm w-[160px] justify-between">
+                                 <span>
+                                   {selectedLeadCategories.length === allLeadCategories.length
+                                     ? "כל הקטגוריות"
+                                     : selectedLeadCategories.length === 1
+                                       ? allLeadCategories.find(cat => cat === selectedLeadCategories[0])
+                                       : `${selectedLeadCategories.length} נבחרו`}
+                                 </span>
+                                 <ChevronDown className="h-4 w-4 opacity-50" />
+                               </Button>
+                             </DropdownMenuTrigger>
+                             <DropdownMenuContent className="w-[160px]" dir="rtl">
+                               <DropdownMenuLabel>{'סינון קטגוריה'}</DropdownMenuLabel>
+                               <DropdownMenuSeparator />
+                               {allLeadCategories.map((category) => (
+                                 <DropdownMenuCheckboxItem
+                                   key={category}
+                                   checked={selectedLeadCategories.includes(category)}
+                                   onCheckedChange={() => {
+                                     setSelectedLeadCategories(prev =>
+                                       prev.includes(category)
+                                         ? prev.filter(c => c !== category)
+                                         : [...prev, category]
+                                     );
+                                   }}
+                                   onSelect={e => e.preventDefault()}
+                                   className="flex flex-row-reverse items-center justify-between"
+                                 >
+                                   {category}
+                                 </DropdownMenuCheckboxItem>
+                               ))}
+                             </DropdownMenuContent>
+                           </DropdownMenu>
+                           <div>
+                             <Label className="ml-1 text-sm font-medium">{'סנן זמן:'}</Label>
+                             <Select value={leadTimeFilter} onValueChange={setLeadTimeFilter}>
+                               <SelectTrigger className="h-8 text-sm w-[130px]"><SelectValue /></SelectTrigger>
+                               <SelectContent>
+                                 <SelectItem value="all">{'הכל'}</SelectItem><SelectItem value="week">{'שבוע אחרון'}</SelectItem>
+                                 <SelectItem value="month">{'חודש אחרון'}</SelectItem><SelectItem value="custom">{'טווח תאריכים'}</SelectItem>
+                               </SelectContent>
+                             </Select>
                            </div>
                            {leadTimeFilter === "custom" && (
-                               <div className="flex items-center gap-2 flex-wrap">
-                                   <Label className="text-sm">{'מ:'}</Label><Input type="date" value={leadFilterFrom} onChange={(e) => setLeadFilterFrom(e.target.value)} className="h-8 text-sm w-[140px]" />
-                                   <Label className="text-sm">{'עד:'}</Label><Input type="date" value={leadFilterTo} onChange={(e) => setLeadFilterTo(e.target.value)} className="h-8 text-sm w-[140px]" />
-                               </div>
+                             <div className="flex items-center gap-2 flex-wrap">
+                               <Label className="text-sm">{'מ:'}</Label><Input type="date" value={leadFilterFrom} onChange={(e) => setLeadFilterFrom(e.target.value)} className="h-8 text-sm w-[140px]" />
+                               <Label className="text-sm">{'עד:'}</Label><Input type="date" value={leadFilterTo} onChange={(e) => setLeadFilterTo(e.target.value)} className="h-8 text-sm w-[140px]" />
+                             </div>
                            )}
                            <div className="relative">
-                               <Search className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-                               <Input type="search" placeholder="חפש לידים..." className="h-8 text-sm pl-8 w-[180px]" value={leadSearchTerm} onChange={(e) => setLeadSearchTerm(e.target.value)} />
+                             <Search className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                             <Input type="search" placeholder="חפש לידים..." className="h-8 text-sm pl-8 w-[180px]" value={leadSearchTerm} onChange={(e) => setLeadSearchTerm(e.target.value)} />
                            </div>
                         </div>
                     </div>
@@ -3098,11 +3163,11 @@ const calculatedAnalytics = useMemo(() => {
                     </Button>
                  </div>
                </CardHeader>
-               <CardContent className="flex-grow overflow-hidden">
+               <CardContent className="flex-grow flex flex-col overflow-hidden">
                  
                  {isFullView ? (
 
-                    <div className="overflow-auto h-[calc(100vh-400px)] min-h-[300px]">
+                    <div className="flex-grow overflow-auto">
                         <table className="w-full table-fixed text-sm border-collapse">
                            <thead className="sticky top-0 bg-gray-100 z-10">
                                <tr>
