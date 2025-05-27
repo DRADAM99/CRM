@@ -2273,44 +2273,43 @@ const handleNLPSubmit = useCallback(async (e) => {
   }, [newConversationText, currentUser, alias]);
 
   /** Handles submission of the Add New Lead modal form. */
-  const handleAddNewLead = useCallback((e) => {
-      e.preventDefault();
+  const handleAddNewLead = useCallback(async (e) => {
+    e.preventDefault();
 
-      if (!newLeadFullName.trim() || !newLeadPhone.trim()) {
-          alert("אנא מלא שם מלא ומספר טלפון.");
-          return;
-      }
+    if (!newLeadFullName.trim() || !newLeadPhone.trim()) {
+        alert("אנא מלא שם מלא ומספר טלפון.");
+        return;
+    }
 
-
-      const newLead = {
-          id: `lead-${Date.now()}`,
-          createdAt: new Date(),
-          fullName: newLeadFullName.trim(),
-          phoneNumber: newLeadPhone.trim(),
-          message: newLeadMessage.trim(),
-          status: newLeadStatus,
-          source: newLeadSource.trim(),
-          conversationSummary: [],
-          expanded: false,
-          appointmentDateTime: null,
-      };
-
-
-      setLeads(prevLeads => [newLead, ...prevLeads]);
-
-
-      setNewLeadFullName("");
-      setNewLeadPhone("");
-      setNewLeadMessage("");
-      setNewLeadStatus("חדש");
-      setNewLeadSource("");
-      setShowAddLeadModal(false);
-
-  }, [
-      newLeadFullName, newLeadPhone, newLeadMessage,
-      newLeadStatus, newLeadSource,
-      setLeads, setNewLeadFullName, setNewLeadPhone, setNewLeadMessage, setNewLeadStatus, setNewLeadSource, setShowAddLeadModal
-  ]);
+    try {
+        const newLead = {
+            fullName: newLeadFullName.trim(),
+            phoneNumber: newLeadPhone.trim(),
+            message: newLeadMessage.trim(),
+            status: newLeadStatus,
+            source: newLeadSource.trim(),
+            conversationSummary: [],
+            expanded: false,
+            appointmentDateTime: null,
+            createdAt: serverTimestamp(),
+        };
+        await addDoc(collection(db, "leads"), newLead);
+        // No need to update local state, real-time listener will update leads
+        setNewLeadFullName("");
+        setNewLeadPhone("");
+        setNewLeadMessage("");
+        setNewLeadStatus("חדש");
+        setNewLeadSource("");
+        setShowAddLeadModal(false);
+    } catch (error) {
+        console.error("שגיאה בהוספת ליד חדש:", error);
+        alert("שגיאה בהוספת ליד חדש. נסה שוב.");
+    }
+}, [
+    newLeadFullName, newLeadPhone, newLeadMessage,
+    newLeadStatus, newLeadSource,
+    setNewLeadFullName, setNewLeadPhone, setNewLeadMessage, setNewLeadStatus, setNewLeadSource, setShowAddLeadModal
+]);
 
 
 
