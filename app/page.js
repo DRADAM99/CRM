@@ -1,4 +1,4 @@
-// Version 5.6.7 - DnD Spacebar Input Fixes
+// Version 6.2 - Lead Manager view persistence and toggle bugfix
 "use client";
 
 // Utility functions for layout persistence
@@ -516,6 +516,11 @@ const [selectedDate, setSelectedDate] = useState(new Date());
   useEffect(() => {
     saveLayoutPref('dashboard_isTMFullView', isTMFullView);
   }, [isTMFullView]);
+
+  // Persist lead manager full view preference
+  useEffect(() => {
+    saveLayoutPref('dashboard_isFullView', isFullView);
+  }, [isFullView]);
  
   // Update task creation to use consistent user identifiers
   const handleCreateTask = async (e) => {
@@ -2735,7 +2740,7 @@ const calculatedAnalytics = useMemo(() => {
   </div>
 
   <div className="w-full sm:w-48 text-center sm:text-left text-sm text-gray-500 flex flex-col items-center sm:items-end sm:ml-0">
-    <span>{'Version 6.0'}</span>
+    <span>{'Version 6.2'}</span>
     <button
       className="text-xs text-red-600 underline"
       onClick={() => {
@@ -3060,7 +3065,7 @@ const calculatedAnalytics = useMemo(() => {
                             <CardTitle>{'ניהול לידים (מלא)'}</CardTitle>
                             <div className="flex gap-2">
                                 <Button size="sm" onClick={() => setShowAddLeadModal(true)}>{'+ הוסף ליד'}</Button>
-                                <Button onClick={() => setIsFullView(true)} size="sm" variant="outline">{'תצוגה מקוצרת'}</Button>
+                                <Button onClick={() => setIsFullView(false)} size="sm" variant="outline">{'תצוגה מקוצרת'}</Button>
                                 
                                 <Tooltip><TooltipTrigger asChild><Button size="xs" onClick={() => toggleBlockOrder("Leads")}> {'מיקום: '}{blockOrder.Leads} </Button></TooltipTrigger><TooltipContent>{'שנה מיקום בלוק'}</TooltipContent></Tooltip>
                             </div>
