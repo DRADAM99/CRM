@@ -36,7 +36,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Search, RotateCcw, Bell, ChevronDown, Pencil, MessageCircle, Check, X } from 'lucide-react';
+import { Search, RotateCcw, Bell, ChevronDown, Pencil, MessageCircle, Check, X, ChevronLeft } from 'lucide-react';
 import NotesAndLinks from "@/components/NotesAndLinks";
 import {
   collection,
@@ -247,6 +247,54 @@ export default function Dashboard() {
   const [replyingToTaskId, setReplyingToTaskId] = useState(null);
   const [showOverdueEffects, setShowOverdueEffects] = useState(true);
   const [replyInputValue, setReplyInputValue] = useState("");
+  // --- Add Kanban collapsed state ---
+  const [kanbanCollapsed, setKanbanCollapsed] = useState({});
+  // --- Add per-task collapsed state ---
+  const [kanbanTaskCollapsed, setKanbanTaskCollapsed] = useState({});
+
+  // --- Add Kanban collapse/expand handler ---
+  const handleToggleKanbanCollapse = async (category) => {
+    setKanbanCollapsed((prev) => {
+      const updated = { ...prev, [category]: !prev[category] };
+      // Persist to Firestore
+      if (currentUser) {
+        const userRef = doc(db, 'users', currentUser.uid);
+        updateDoc(userRef, { kanbanCollapsed: updated });
+      }
+      return updated;
+    });
+  };
+
+  // --- Fetch per-task collapsed state from Firestore ---
+  useEffect(() => {
+    if (!currentUser) return;
+    const fetchTaskCollapsed = async () => {
+      try {
+        const userRef = doc(db, 'users', currentUser.uid);
+        const userSnap = await getDoc(userRef);
+        if (userSnap.exists()) {
+          const data = userSnap.data();
+          setKanbanTaskCollapsed(data.kanbanTaskCollapsed || {});
+        }
+      } catch (e) {
+        setKanbanTaskCollapsed({});
+      }
+    };
+    fetchTaskCollapsed();
+  }, [currentUser]);
+
+  // --- Handler for per-task collapse/expand ---
+  const handleToggleTaskCollapse = async (taskId) => {
+    setKanbanTaskCollapsed((prev) => {
+      const updated = { ...prev, [taskId]: !prev[taskId] };
+      // Persist to Firestore
+      if (currentUser) {
+        const userRef = doc(db, 'users', currentUser.uid);
+        updateDoc(userRef, { kanbanTaskCollapsed: updated });
+      }
+      return updated;
+    });
+  };
 
   // Redirect if not logged in
   useEffect(() => {
@@ -2913,11 +2961,24 @@ const calculatedAnalytics = useMemo(() => {
                       return (
                         <div 
                           key={category} 
-                          className="bg-gray-100 rounded-lg p-2 flex flex-col min-w-[280px]"
+                          className="bg-gray-100 rounded-lg p-2 flex flex-col min-w-[280px] box-border w-full min-w-0"
                           data-category={category}
                           data-droppable="true"
                         >
                           <div className="flex justify-between items-center mb-2 sticky top-0 bg-gray-100 py-1 px-1 z-10">
+                            {/* Collapse/expand chevron (RTL: left side) */}
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="w-6 h-6 text-gray-500 hover:text-blue-600 shrink-0 ml-2 rtl:ml-0 rtl:mr-2"
+                              title={kanbanCollapsed[category] ? 'הרחב קטגוריה' : 'צמצם קטגוריה'}
+                              onClick={() => handleToggleKanbanCollapse(category)}
+                              tabIndex={0}
+                              aria-label={kanbanCollapsed[category] ? 'הרחב קטגוריה' : 'צמצם קטגוריה'}
+                            >
+                              {/* Chevron points down when expanded, left when collapsed (RTL) */}
+                              {kanbanCollapsed[category] ? <ChevronLeft className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
+                            </Button>
                             <h3 className="font-semibold text-center flex-grow">{category} ({categoryTasks.length})</h3>
                             <Button 
                               variant="ghost" 
@@ -2932,20 +2993,110 @@ const calculatedAnalytics = useMemo(() => {
                               <span role="img" aria-label="Add">➕</span>
                             </Button>
                           </div>
-                          <div 
-                            className="flex-1 overflow-y-auto"
-                            data-category={category}
-                            data-droppable="true"
-                          >
-                            <div className="space-y-2">
+                          <div className="flex-1 overflow-y-auto w-full min-w-0 box-border" data-category={category} data-droppable="true">
+                            <div className="space-y-2 w-full min-w-0 box-border">
                               {showTaskModal && newTaskCategory === category && renderTask(null)}
                               {categoryTasks.map((task) => (
-                                <SortableItem key={`task-${task.id}`} id={`task-${task.id}`}>
-                                  <div 
-                                    className="cursor-grab active:cursor-grabbing"
-                                    data-task-id={task.id}
-                                  >
-                                    {renderTask(task)}
+                                <SortableItem key={`task-${task.id}`} id={`task-${task.id}`}> 
+                                  <div className="relative flex items-center group w-full min-w-0 box-border">
+                                    {/* Per-task collapse chevron (RTL: left) - always visible */}
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="w-6 h-6 text-gray-400 hover:text-blue-600 shrink-0 ml-2 rtl:ml-0 rtl:mr-2"
+                                      title={kanbanTaskCollapsed[task.id] ? 'הרחב משימה' : 'צמצם משימה'}
+                                      onClick={(e) => { e.stopPropagation(); handleToggleTaskCollapse(task.id); }}
+                                      tabIndex={0}
+                                      aria-label={kanbanTaskCollapsed[task.id] ? 'הרחב משימה' : 'צמצם משימה'}
+                                    >
+                                      {kanbanTaskCollapsed[task.id] ? <ChevronLeft className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                                    </Button>
+                                    {/* Category collapsed: always show collapsed block. Category expanded: show per-task state. */}
+                                    {kanbanCollapsed[category] || kanbanTaskCollapsed[task.id] ? (
+                                      <div className="flex-grow cursor-grab active:cursor-grabbing group w-full min-w-0 p-3 rounded-lg shadow-sm border bg-white flex items-center gap-2 min-h-[48px] box-border">
+                                        <Tooltip>
+                                          <TooltipTrigger asChild>
+                                            <div className="flex-grow truncate text-right">
+                                              <div className={`font-medium truncate ${task.done ? 'line-through text-gray-500' : ''}`}>{task.title}</div>
+                                              {task.subtitle && (
+                                                <div className={`text-xs text-gray-600 truncate ${task.done ? 'line-through' : ''}`}>{task.subtitle}</div>
+                                              )}
+                                            </div>
+                                          </TooltipTrigger>
+                                          <TooltipContent side="top" align="end" className="max-w-xs text-xs text-right whitespace-pre-line">
+                                            {`🗓️ ${formatDateTime(task.dueDate)}\n👤 ${assignableUsers.find(u => u.email === task.assignTo)?.alias || task.assignTo}\n${task.creatorAlias ? `📝 ${task.creatorAlias}\n` : ''}🏷️ ${task.category}\n${task.priority === 'דחוף' ? '🔥' : task.priority === 'נמוך' ? '⬇️' : '➖'} ${task.priority}`}
+                                          </TooltipContent>
+                                        </Tooltip>
+                                        {/* Action buttons remain visible */}
+                                        <div className="flex items-center gap-1">
+                                          <Tooltip>
+                                            <TooltipTrigger asChild>
+                                              <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                className="h-8 w-8"
+                                                onClick={() => {
+                                                  setEditingTaskId(task.id);
+                                                  setEditingTitle(task.title);
+                                                  setEditingSubtitle(task.subtitle || '');
+                                                  setEditingPriority(task.priority);
+                                                  setEditingCategory(task.category);
+                                                  if (task.dueDate) {
+                                                    const due = new Date(task.dueDate);
+                                                    if (!isNaN(due.getTime())) {
+                                                      setEditingDueDate(due.toLocaleDateString('en-CA'));
+                                                      setEditingDueTime(due.toTimeString().slice(0, 5));
+                                                    }
+                                                  }
+                                                  setEditingAssignTo(task.assignTo || '');
+                                                }}
+                                              >
+                                                <Pencil className="h-4 w-4" />
+                                              </Button>
+                                            </TooltipTrigger>
+                                            <TooltipContent>ערוך משימה</TooltipContent>
+                                          </Tooltip>
+                                          <Tooltip>
+                                            <TooltipTrigger asChild>
+                                              <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                className="h-8 w-8 relative"
+                                                onClick={() => {
+                                                  setReplyingToTaskId(task.id);
+                                                  setReplyInputValue("");
+                                                }}
+                                              >
+                                                <MessageCircle className="h-4 w-4" />
+                                              </Button>
+                                            </TooltipTrigger>
+                                            <TooltipContent>הוסף תגובה</TooltipContent>
+                                          </Tooltip>
+                                          {!task.done && (
+                                            <Tooltip>
+                                              <TooltipTrigger asChild>
+                                                <Button
+                                                  variant="ghost"
+                                                  size="icon"
+                                                  className="w-6 h-6 relative text-gray-400 hover:text-orange-600"
+                                                  title="שלח תזכורת"
+                                                  onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    handleNudgeTask(task.id);
+                                                  }}
+                                                  onPointerDown={(e) => e.stopPropagation()}
+                                                >
+                                                  <Bell className="h-4 w-4" />
+                                                </Button>
+                                              </TooltipTrigger>
+                                              <TooltipContent>שלח תזכורת</TooltipContent>
+                                            </Tooltip>
+                                          )}
+                                        </div>
+                                      </div>
+                                    ) : (
+                                      <div className="flex-grow w-full min-w-0 box-border">{renderTask(task)}</div>
+                                    )}
                                   </div>
                                 </SortableItem>
                               ))}
