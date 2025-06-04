@@ -960,6 +960,7 @@ const [selectedDate, setSelectedDate] = useState(new Date());
                 onChange={(e) => setNewTaskTitle(e.target.value)} 
                 className="h-8 text-sm" 
                 required 
+                onKeyDown={e => { if (e.key === ' ' || e.code === 'Space') e.stopPropagation(); }}
               />
             </div>
             <div>
@@ -969,6 +970,7 @@ const [selectedDate, setSelectedDate] = useState(new Date());
                 onChange={(e) => setNewTaskSubtitle(e.target.value)} 
                 rows={2} 
                 className="text-sm" 
+                onKeyDown={e => { if (e.key === ' ' || e.code === 'Space') e.stopPropagation(); }}
               />
             </div>
             <div className="flex gap-2">
@@ -3860,6 +3862,7 @@ const calculatedAnalytics = useMemo(() => {
                 onChange={(e) => setNewTaskTitle(e.target.value)} 
                 className="h-8 text-sm" 
                 required 
+                onKeyDown={e => { if (e.key === ' ' || e.code === 'Space') e.stopPropagation(); }}
               />
             </div>
             <div>
@@ -3869,6 +3872,7 @@ const calculatedAnalytics = useMemo(() => {
                 onChange={(e) => setNewTaskSubtitle(e.target.value)} 
                 rows={2} 
                 className="text-sm" 
+                onKeyDown={e => { if (e.key === ' ' || e.code === 'Space') e.stopPropagation(); }}
               />
             </div>
             <div className="flex gap-2">
@@ -3963,6 +3967,7 @@ const renderNewTaskForm = () => {
             onChange={(e) => setNewTaskTitle(e.target.value)} 
             className="h-8 text-sm" 
             required 
+            onKeyDown={e => { if (e.key === ' ' || e.code === 'Space') e.stopPropagation(); }}
           />
         </div>
         <div>
@@ -3972,6 +3977,7 @@ const renderNewTaskForm = () => {
             onChange={(e) => setNewTaskSubtitle(e.target.value)} 
             rows={2} 
             className="text-sm" 
+            onKeyDown={e => { if (e.key === ' ' || e.code === 'Space') e.stopPropagation(); }}
           />
         </div>
         <div className="flex gap-2">
