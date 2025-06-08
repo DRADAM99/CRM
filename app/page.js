@@ -268,6 +268,43 @@ const handleCategoryDragEnd = (event) => {
   const newOrder = arrayMove(taskCategories, oldIndex, newIndex);
   updateKanbanCategoryOrder(newOrder);
 };
+const handleClick2Call = async (phoneNumber) => {
+  const apiUrl = "https://master.ippbx.co.il/ippbx_api/v1.4/api/info/click2call";
+  const payload = {
+    token_id: "22K3TWfeifaCPUyA",
+    phone_number: phoneNumber,
+    extension_number: "104",
+    extension_password: "bdb307dc55bf1e679c296ee5c73215cb"
+  };
+  try {
+    const response = await fetch(apiUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(payload)
+    });
+    if (response.ok) {
+      toast({
+        title: "התקשרות מתבצעת",
+        description: `שיחה ל-${phoneNumber} הופעלה דרך המרכזיה.`
+      });
+    } else {
+      const errorText = await response.text();
+      toast({
+        title: "שגיאה בהפעלת שיחה",
+        description: errorText || "לא ניתן היה להפעיל שיחה דרך המרכזיה.",
+        variant: "destructive"
+      });
+    }
+  } catch (error) {
+    toast({
+      title: "שגיאה בהפעלת שיחה",
+      description: error.message || "לא ניתן היה להפעיל שיחה דרך המרכזיה.",
+      variant: "destructive"
+    });
+  }
+};
 
   // --- Add Kanban collapse/expand handler ---
   const handleToggleKanbanCollapse = async (category) => {
@@ -2349,7 +2386,7 @@ const handleNLPSubmit = useCallback(async (e) => {
       const leadRef = doc(db, 'leads', leadId);
       const newEntry = {
         text: newConversationText,
-        timestamp: serverTimestamp(),
+        timestamp: new Date(), // Use client time instead of serverTimestamp()
         userId: currentUser.uid,
         userAlias: alias || currentUser.email
       };
@@ -3416,7 +3453,7 @@ const calculatedAnalytics = useMemo(() => {
     </a>
   </TooltipTrigger>
   <TooltipContent>{'שלח וואטסאפ'}</TooltipContent>
-</Tooltip>                                                       <Tooltip><TooltipTrigger asChild><a href={`tel:${lead.phoneNumber}`}><Button size="icon" variant="ghost" className="w-7 h-7 text-blue-600 hover:text-blue-700"><span role="img" aria-label="Call">📞</span></Button></a></TooltipTrigger><TooltipContent>{'התקשר'}</TooltipContent></Tooltip>
+</Tooltip>                                                       <Tooltip><TooltipTrigger asChild><Button size="icon" variant="ghost" className="w-7 h-7 text-blue-600 hover:text-blue-700" onClick={() => handleClick2Call(lead.phoneNumber)}><span role="img" aria-label="Call">📞</span></Button></TooltipTrigger><TooltipContent>{'התקשר דרך המרכזיה'}</TooltipContent></Tooltip>
                                                    </div>
                                                </td>
                                            </tr>
@@ -3511,7 +3548,7 @@ const calculatedAnalytics = useMemo(() => {
                                          
                                         <Button size="icon" variant="ghost" className="w-7 h-7 text-gray-500 hover:text-blue-600" title="פתח לעריכה" onClick={() => handleEditLead(lead)}><span role="img" aria-label="Edit">✎</span></Button>
                                         <Tooltip><TooltipTrigger asChild><a href={`https://wa.me/${lead.phoneNumber}`} target="_blank" rel="noopener noreferrer"><Button size="icon" variant="ghost" className="w-7 h-7 text-green-600 hover:text-green-700"><span role="img" aria-label="WhatsApp">💬</span></Button></a></TooltipTrigger><TooltipContent>{'שלח וואטסאפ'}</TooltipContent></Tooltip> 
-                                        <a href={`tel:${lead.phoneNumber}`}><Button size="icon" variant="ghost" className="w-7 h-7 text-blue-600 hover:text-blue-700" title="התקשר"><span role="img" aria-label="Call">📞</span></Button></a>
+                                        <Button size="icon" variant="ghost" className="w-7 h-7 text-blue-600 hover:text-blue-700" title="התקשר דרך המרכזיה" onClick={() => handleClick2Call(lead.phoneNumber)}><span role="img" aria-label="Call">📞</span></Button>
                                         {/* Admin-only delete button */}
                                         {(currentUser?.role === 'admin' || role === 'admin') && (
                                           <Tooltip>
@@ -4055,6 +4092,7 @@ const CustomEvent = ({ event }) => {
   );
 };
 
+// Add this function for click2call
 
   
 
