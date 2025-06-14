@@ -92,6 +92,7 @@ function SelectLabel({
 function SelectItem({
   className,
   children,
+  showDefaultCheck = false,
   ...props
 }) {
   return (
@@ -102,11 +103,13 @@ function SelectItem({
         className
       )}
       {...props}>
-      <span className="absolute right-2 flex size-3.5 items-center justify-center">
-        <SelectPrimitive.ItemIndicator>
-          <CheckIcon className="size-4" />
-        </SelectPrimitive.ItemIndicator>
-      </span>
+      {showDefaultCheck && (
+        <span className="absolute right-2 flex size-3.5 items-center justify-center">
+          <SelectPrimitive.ItemIndicator>
+            <CheckIcon className="size-4" />
+          </SelectPrimitive.ItemIndicator>
+        </span>
+      )}
       <SelectPrimitive.ItemText>{children}</SelectPrimitive.ItemText>
     </SelectPrimitive.Item>
   );

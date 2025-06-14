@@ -15,7 +15,7 @@ function getLayoutPref(key, defaultValue) {
   return defaultValue;
 }
 
-import React, { useState, useEffect, useMemo, useCallback } from "react";
+import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import Image from 'next/image';
 import { useRouter } from "next/navigation";
 import { auth, db } from "../firebase";
@@ -211,14 +211,13 @@ const formatDuration = (ms) => {
   return "< דקה";
 };
 
-
 moment.locale('he');
 moment.tz.setDefault("Asia/Jerusalem");
 const localizer = momentLocalizer(moment);
 const messages = { allDay: "כל היום", previous: "הקודם", next: "הבא", today: "היום", month: "חודש", week: "שבוע", day: "יום", agenda: "סדר יום", date: "תאריך", time: "זמן", event: "אירוע", noEventsInRange: "אין אירועים בטווח זה", showMore: (total) => `+ ${total} נוספים`, };
 
 
-const leadStatusConfig = { "חדש": { color: "bg-red-500", priority: 1 }, "בבדיקת לקוח": { color: "bg-orange-500", priority: 2 }, "ממתין ליעוץ עם אדם": { color: "bg-purple-500", priority: 3 }, "נקבע יעוץ": { color: "bg-green-500", priority: 4 }, "בבדיקה לפני סדרה": { color: "bg-orange-400", priority: 4.5 }, "בסדרת טיפולים": { color: "bg-emerald-400", priority: 6 }, "באג": { color: "bg-yellow-900", priority: 5 }, "לא מתאים": { color: "bg-gray-400", priority: 7 }, "אין מענה": { color: "bg-yellow-500", priority: 5 }, "Default": { color: "bg-gray-300", priority: 99 } };
+const leadStatusConfig = { "חדש": { color: "bg-red-500", priority: 1 }, "בבדיקת לקוח": { color: "bg-orange-500", priority: 2 }, "ממתין לתשובה של ד״ר וינטר": { color: "bg-purple-500", priority: 3 }, "נקבע יעוץ": { color: "bg-green-500", priority: 4 }, "בסדרת טיפולים": { color: "bg-emerald-400", priority: 6 }, "באג": { color: "bg-yellow-900", priority: 5 }, "לא מתאים": { color: "bg-gray-400", priority: 7 }, "אין מענה": { color: "bg-yellow-500", priority: 5 }, "קורס": { color: "bg-blue-900", priority: 8 }, "ניתן מענה": { color: "bg-gray-500", priority: 9 }, "Default": { color: "bg-gray-300", priority: 99 } };
 const leadColorTab = (status) => leadStatusConfig[status]?.color || leadStatusConfig.Default.color;
 const leadPriorityValue = (status) => leadStatusConfig[status]?.priority || leadStatusConfig.Default.priority;
 
@@ -335,6 +334,71 @@ useEffect(() => {
   return () => unsubscribe();
 }, [currentUser]);
 
+// --- Follow-up phone icon logic ---
+const handleFollowUpClick = async (lead) => {
+  if (!currentUser) return;
+  if (holdLeadId === lead.id) return;
+  // Only activate if not already active and count is 0
+  if (!lead.followUpCall?.active && (!lead.followUpCall || lead.followUpCall.count === 0)) {
+    const leadRef = doc(db, 'leads', lead.id);
+    await updateDoc(leadRef, { followUpCall: { active: true, count: 1 } });
+  } else if (lead.followUpCall?.active) {
+    const leadRef = doc(db, 'leads', lead.id);
+    await updateDoc(leadRef, { followUpCall: { active: true, count: (lead.followUpCall.count || 1) + 1 } });
+  }
+};
+
+  const handleFollowUpReset = async (lead) => {
+    if (!currentUser) return;
+    const leadRef = doc(db, 'leads', lead.id);
+    await updateDoc(leadRef, { followUpCall: { active: false, count: 0 } });
+    // Show the completed ring for 200ms before clearing
+    setTimeout(() => {
+      setHoldLeadId(null);
+      setHoldProgress(0);
+    }, 200);
+  };
+
+  // --- Hold handlers for the button ---
+  const holdDelayTimeout = useRef();
+
+  const handleHoldStart = (lead) => {
+    setHoldLeadId(lead.id);
+    setHoldProgress(0);
+    // Start a 1-second delay before animating
+    holdDelayTimeout.current = setTimeout(() => {
+      const start = Date.now();
+      function animate() {
+        const elapsed = Date.now() - start;
+        const progress = Math.min(elapsed / 1500, 1); // 1.5s animation
+        setHoldProgress(progress);
+        if (progress < 1) {
+          holdAnimationRef.current = requestAnimationFrame(animate);
+        } else {
+          handleFollowUpReset(lead);
+        }
+      }
+      holdAnimationRef.current = requestAnimationFrame(animate);
+    }, 1000); // 1s delay before animation
+  };
+
+  const handleHoldEnd = () => {
+    setHoldLeadId(null);
+    setHoldProgress(0);
+    if (holdDelayTimeout.current) clearTimeout(holdDelayTimeout.current);
+    if (holdAnimationRef.current) cancelAnimationFrame(holdAnimationRef.current);
+  };
+
+const [holdLeadId, setHoldLeadId] = useState(null);
+const [holdProgress, setHoldProgress] = useState(0);
+const holdAnimationRef = useRef();
+const HOLD_DURATION = 1500;
+
+// When lead status changes, reset followUpCall
+const handleStatusChange = async (leadId, newStatus) => {
+  const leadRef = doc(db, 'leads', leadId);
+  await updateDoc(leadRef, { status: newStatus, followUpCall: { active: false, count: 0 } });
+};
 // Function to update Kanban category order in Firestore
 const updateKanbanCategoryOrder = async (newOrder) => {
   setTaskCategories(newOrder);
@@ -1476,6 +1540,7 @@ useEffect(() => {
         })) || [],
         appointmentDateTime: data.appointmentDateTime?.toDate?.() || null,
         expanded: false,
+        followUpCall: data.followUpCall || { active: false, count: 0 },
       };
     });
 
@@ -1510,6 +1575,7 @@ useEffect(() => {
         })) || [],
         appointmentDateTime: data.appointmentDateTime?.toDate?.() || null,
         expanded: false,
+        followUpCall: data.followUpCall || { active: false, count: 0 },
       };
     });
 
@@ -2318,6 +2384,10 @@ const handleNLPSubmit = useCallback(async (e) => {
         updatedAt: serverTimestamp(),
         updatedBy: currentUser.uid
       };
+      // Reset followUpCall if status changed
+      if (originalLead.status !== editLeadStatus) {
+        updateData.followUpCall = { active: false, count: 0 };
+      }
 
       await updateDoc(leadRef, updateData);
 
@@ -2868,7 +2938,7 @@ const calculatedAnalytics = useMemo(() => {
   </div>
 
   <div className="w-full sm:w-48 text-center sm:text-left text-sm text-gray-500 flex flex-col items-center sm:items-end sm:ml-0">
-    <span>{'Version 6.4'}</span>
+    <span>{'Version 6.5'}</span>
     <button
       className="text-xs text-red-600 underline"
       onClick={() => {
@@ -3415,6 +3485,7 @@ const calculatedAnalytics = useMemo(() => {
                                    <th className="px-2 py-2 text-right font-semibold w-32">{'טלפון'}</th>
                                    <th className="px-2 py-2 text-right font-semibold">{'הודעה'}</th>
                                    <th className="px-2 py-2 text-right font-semibold w-36">{'סטטוס'}</th>
+                                   <th className="px-2 py-2 text-center font-semibold w-16">{'פולואפ'}</th>
                                    <th className="px-2 py-2 text-right font-semibold w-28">{'פעולות'}</th>
                                </tr>
                            </thead>
@@ -3432,6 +3503,49 @@ const calculatedAnalytics = useMemo(() => {
                                                <td className="px-2 py-2 align-top whitespace-nowrap">{lead.phoneNumber}</td>
                                                <td className="px-2 py-2 align-top truncate" title={lead.message}>{lead.message}</td>
                                                <td className="px-2 py-2 align-top">{lead.status}</td>
+                                               <td className="px-2 py-2 align-top text-center">
+                                                 <button
+                                                   className="relative group"
+                                                   style={{ outline: 'none', border: 'none', background: 'none', cursor: 'pointer' }}
+                                                   onClick={() => {
+                                                     if (holdLeadId === lead.id) return;
+                                                     if (!lead.followUpCall?.active && (!lead.followUpCall || lead.followUpCall.count === 0)) {
+                                                       handleFollowUpClick(lead);
+                                                     } else if (lead.followUpCall?.active) {
+                                                       handleFollowUpClick(lead);
+                                                     }
+                                                   }}
+                                                   onMouseDown={() => handleHoldStart(lead)}
+                                                   onMouseUp={handleHoldEnd}
+                                                   onMouseLeave={handleHoldEnd}
+                                                   tabIndex={0}
+                                                   aria-label="סמן פולואפ טלפון"
+                                                 >
+                                                   <svg width="28" height="28" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                                     {/* Outline circle with animated stroke */}
+                                                     <circle
+                                                       cx="14" cy="14" r="13"
+                                                       stroke={lead.followUpCall?.active ? '#22c55e' : '#e5e7eb'}
+                                                       strokeWidth="2"
+                                                       fill={lead.followUpCall?.active ? '#22c55e' : 'white'}
+                                                     />
+                                                     {/* Progress ring for hold animation - always visible for debug */}
+                                                     <circle
+                                                       cx="14" cy="14" r="13"
+                                                       stroke="#22c55e"
+                                                       strokeWidth="3"
+                                                       fill="none"
+                                                       strokeDasharray={2 * Math.PI * 13}
+                                                       strokeDashoffset={(1 - (holdLeadId === lead.id ? holdProgress : 0)) * 2 * Math.PI * 13}
+                                                       style={{ transition: 'stroke-dashoffset 0.1s linear' }}
+                                                     />
+                                                     <path d="M19.5 17.5c-1.5 0-3-.5-4.5-2s-2-3-2-4.5c0-.5.5-1 1-1h2c.5 0 1 .5 1 1 0 .5.5 1 1 1s1-.5 1-1c0-2-1.5-3.5-3.5-3.5S9.5 9.5 9.5 11.5c0 4.5 3.5 8 8 8 .5 0 1-.5 1-1v-2c0-.5-.5-1-1-1z" fill={lead.followUpCall?.active ? 'white' : '#a3a3a3'} />
+                                                   </svg>
+                                                   {lead.followUpCall?.active && lead.followUpCall?.count > 1 && (
+                                                     <span className="absolute -top-1 -right-1 bg-green-600 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center border-2 border-white">{lead.followUpCall.count}</span>
+                                                   )}
+                                                 </button>
+                                               </td>
                                                <td className="px-2 py-2 align-top">
                                                    <div className="flex items-center justify-start gap-1">
                                                         
@@ -3472,8 +3586,14 @@ const calculatedAnalytics = useMemo(() => {
                                                                        <SelectTrigger className="mt-1 h-8 text-sm"><SelectValue placeholder="בחר..." /></SelectTrigger>
                                                                        <SelectContent className="text-right" dir="rtl">
                                                                            {Object.keys(leadStatusConfig).filter(k => k !== 'Default').map(status => (
-                                                                               <SelectItem key={status} value={status} className="flex items-center gap-2 text-right">
-                                                                                   <span className={`inline-block w-3 h-3 rounded ${leadStatusConfig[status].color}`}></span>
+                                                                               <SelectItem key={status} value={status} className="flex items-center gap-3 pl-2 text-right" showDefaultCheck={false}>
+                                                                                   <span className={`inline-flex items-center justify-center w-5 h-5 rounded ${leadStatusConfig[status].color} ml-2`}>
+                                                                                     {editLeadStatus === status && (
+                                                                                       <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" strokeWidth="3" viewBox="0 0 20 20">
+                                                                                         <path strokeLinecap="round" strokeLinejoin="round" d="M6 10l3 3 5-5" />
+                                                                                       </svg>
+                                                                                     )}
+                                                                                   </span>
                                                                                    <span>{status}</span>
                                                                                </SelectItem>
                                                                            ))}
