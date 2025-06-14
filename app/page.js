@@ -352,11 +352,11 @@ const handleFollowUpClick = async (lead) => {
     if (!currentUser) return;
     const leadRef = doc(db, 'leads', lead.id);
     await updateDoc(leadRef, { followUpCall: { active: false, count: 0 } });
-    // Show the completed ring for 200ms before clearing
+    // Minimal delay to show completed ring, then clear
     setTimeout(() => {
       setHoldLeadId(null);
       setHoldProgress(0);
-    }, 200);
+    }, 50);
   };
 
   // --- Hold handlers for the button ---
@@ -365,12 +365,12 @@ const handleFollowUpClick = async (lead) => {
   const handleHoldStart = (lead) => {
     setHoldLeadId(lead.id);
     setHoldProgress(0);
-    // Start a 1-second delay before animating
+    // Start a 0.3-second delay before animating
     holdDelayTimeout.current = setTimeout(() => {
       const start = Date.now();
       function animate() {
         const elapsed = Date.now() - start;
-        const progress = Math.min(elapsed / 1500, 1); // 1.5s animation
+        const progress = Math.min(elapsed / 1200, 1); // 1.2s animation
         setHoldProgress(progress);
         if (progress < 1) {
           holdAnimationRef.current = requestAnimationFrame(animate);
@@ -379,7 +379,7 @@ const handleFollowUpClick = async (lead) => {
         }
       }
       holdAnimationRef.current = requestAnimationFrame(animate);
-    }, 1000); // 1s delay before animation
+    }, 300); // 0.3s delay before animation
   };
 
   const handleHoldEnd = () => {
