@@ -1,4 +1,4 @@
-// Version 6.3 - Collapse/expand Kanban
+// Version 6.4 - Collapse/expand Kanban
 "use client";
 
 // Utility functions for layout persistence
@@ -218,7 +218,7 @@ const localizer = momentLocalizer(moment);
 const messages = { allDay: "כל היום", previous: "הקודם", next: "הבא", today: "היום", month: "חודש", week: "שבוע", day: "יום", agenda: "סדר יום", date: "תאריך", time: "זמן", event: "אירוע", noEventsInRange: "אין אירועים בטווח זה", showMore: (total) => `+ ${total} נוספים`, };
 
 
-const leadStatusConfig = { "חדש": { color: "bg-red-500", priority: 1 }, "בבדיקת לקוח": { color: "bg-orange-500", priority: 2 }, "ממתין ליעוץ עם אדם": { color: "bg-purple-500", priority: 3 }, "נקבע יעוץ": { color: "bg-green-500", priority: 4 }, "בסדרת טיפולים": { color: "bg-emerald-400", priority: 6 }, "באג": { color: "bg-yellow-900", priority: 5 }, "לא מתאים": { color: "bg-gray-400", priority: 7 }, "אין מענה": { color: "bg-yellow-500", priority: 5 }, "Default": { color: "bg-gray-300", priority: 99 } };
+const leadStatusConfig = { "חדש": { color: "bg-red-500", priority: 1 }, "בבדיקת לקוח": { color: "bg-orange-500", priority: 2 }, "ממתין ליעוץ עם אדם": { color: "bg-purple-500", priority: 3 }, "נקבע יעוץ": { color: "bg-green-500", priority: 4 }, "בבדיקה לפני סדרה": { color: "bg-orange-400", priority: 4.5 }, "בסדרת טיפולים": { color: "bg-emerald-400", priority: 6 }, "באג": { color: "bg-yellow-900", priority: 5 }, "לא מתאים": { color: "bg-gray-400", priority: 7 }, "אין מענה": { color: "bg-yellow-500", priority: 5 }, "Default": { color: "bg-gray-300", priority: 99 } };
 const leadColorTab = (status) => leadStatusConfig[status]?.color || leadStatusConfig.Default.color;
 const leadPriorityValue = (status) => leadStatusConfig[status]?.priority || leadStatusConfig.Default.priority;
 
@@ -2868,7 +2868,7 @@ const calculatedAnalytics = useMemo(() => {
   </div>
 
   <div className="w-full sm:w-48 text-center sm:text-left text-sm text-gray-500 flex flex-col items-center sm:items-end sm:ml-0">
-    <span>{'Version 6.3'}</span>
+    <span>{'Version 6.4'}</span>
     <button
       className="text-xs text-red-600 underline"
       onClick={() => {
@@ -3470,7 +3470,14 @@ const calculatedAnalytics = useMemo(() => {
                                                                <Label className="block"><span className="text-gray-700 text-sm font-medium">{'סטטוס:'}</span>
                                                                    <Select value={editLeadStatus} onValueChange={setEditLeadStatus}>
                                                                        <SelectTrigger className="mt-1 h-8 text-sm"><SelectValue placeholder="בחר..." /></SelectTrigger>
-                                                                       <SelectContent>{Object.keys(leadStatusConfig).filter(k => k !== 'Default').map(status => <SelectItem key={status} value={status}>{status}</SelectItem>)}</SelectContent>
+                                                                       <SelectContent className="text-right" dir="rtl">
+                                                                           {Object.keys(leadStatusConfig).filter(k => k !== 'Default').map(status => (
+                                                                               <SelectItem key={status} value={status} className="flex items-center gap-2 text-right">
+                                                                                   <span className={`inline-block w-3 h-3 rounded ${leadStatusConfig[status].color}`}></span>
+                                                                                   <span>{status}</span>
+                                                                               </SelectItem>
+                                                                           ))}
+                                                                       </SelectContent>
                                                                    </Select>
                                                                </Label>
                                                                <Label className="block"><span className="text-gray-700 text-sm font-medium">{'מקור:'}</span><Input type="text" className="mt-1 h-8 text-sm" value={editLeadSource} onChange={(ev) => setEditLeadSource(ev.target.value)} /></Label>
