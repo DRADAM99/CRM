@@ -8,11 +8,11 @@ import interactionPlugin from '@fullcalendar/interaction';
 import listPlugin from '@fullcalendar/list';
 import { formatISO, parseISO } from 'date-fns';
 import { db } from '../firebase';
-import { collection, onSnapshot, doc, getDoc, updateDoc, serverTimestamp, arrayUnion } from 'firebase/firestore';
+import { collection, onSnapshot, doc, getDoc, updateDoc, serverTimestamp, arrayUnion, setDoc, addDoc, deleteDoc } from 'firebase/firestore';
 import { ChevronDown } from 'lucide-react';
+import { getAuth, onAuthStateChanged } from 'firebase/auth';
 
 // Use the same categories and priorities as the main app
-const taskCategories = ["לקבוע סדרה", "דוחות", "תשלומים", "להתקשר", "תוכנית טיפול", "אחר"];
 const taskPriorities = ["דחוף", "רגיל", "נמוך"];
 const pastelColors = [
   "#eaccd8", // ורדרד
@@ -23,7 +23,7 @@ const pastelColors = [
   "#edccb4", // כתמתם
   "#bfb599", // זהבהב
 ];
-const CATEGORY_COLORS = Object.fromEntries(taskCategories.map((cat, i) => [cat, pastelColors[i % pastelColors.length]]));
+
 
 const USER_COLORS = [
   '#b5ead7', // green
@@ -75,76 +75,6 @@ function setBlockOrderToStorage(order) {
   try {
     localStorage.setItem('calendar_blockOrder', JSON.stringify(order));
   } catch {}
-}
-
-// Custom user filter dropdown with checkboxes and color pickers
-function UserMultiSelectDropdown({ users, value, onChange, currentUser, alias, userColors, setUserColors, isTouch }) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef();
-  useEffect(() => {
-    function handleClick(e) {
-      if (ref.current && !ref.current.contains(e.target)) setOpen(false);
-    }
-    if (open) document.addEventListener('mousedown', handleClick);
-    return () => document.removeEventListener('mousedown', handleClick);
-  }, [open]);
-  const toggle = v => {
-    if (v === 'all') {
-      onChange(['all']);
-    } else if (v === 'mine') {
-      onChange(['mine']);
-    } else {
-      let newVal = value.includes('all') || value.includes('mine') ? [] : [...value];
-      if (newVal.includes(v)) newVal = newVal.filter(x => x !== v);
-      else newVal.push(v);
-      onChange(newVal);
-    }
-  };
-  const checked = v => value.includes(v);
-  return (
-    <div ref={ref} style={{ position: 'relative', minWidth: 120 }}>
-      <button
-        style={{ border: '1px solid #e0e0e0', borderRadius: 6, padding: '12px 18px', fontSize: 17, background: '#fff', cursor: 'pointer', minWidth: 120, minHeight: 44 }}
-        onClick={() => setOpen(o => !o)}
-        type="button"
-      >
-        {value.includes('all') ? 'כל המשימות' : value.includes('mine') ? 'המשימות שלי' : value.length === 0 ? 'בחר משתמשים' : ''}
-      </button>
-      {open && (
-        <div style={{ position: 'absolute', top: '110%', right: 0, background: '#fff', border: '1px solid #e0e0e0', borderRadius: 8, boxShadow: '0 2px 8px #0002', zIndex: 10, minWidth: 240, padding: 8 }}>
-          <label style={{ display: 'block', padding: 8, cursor: 'pointer', minHeight: 44, fontSize: 16 }}>
-            <input type="checkbox" checked={checked('mine')} onChange={() => toggle('mine')} style={{ width: 22, height: 22, marginLeft: 8 }} /> המשימות שלי
-          </label>
-          <label style={{ display: 'block', padding: 8, cursor: 'pointer', minHeight: 44, fontSize: 16 }}>
-            <input type="checkbox" checked={checked('all')} onChange={() => toggle('all')} style={{ width: 22, height: 22, marginLeft: 8 }} /> כל המשימות
-          </label>
-          <div style={{ borderTop: '1px solid #eee', margin: '8px 0' }} />
-          {users.map(u => (
-            <label key={u.id} style={{ display: 'flex', alignItems: 'center', padding: 8, cursor: 'pointer', gap: 10, minHeight: 44, fontSize: 16 }}>
-              <input type="checkbox" checked={checked(u.email)} onChange={() => toggle(u.email)} style={{ width: 22, height: 22 }} />
-              <span>{u.alias ? u.alias : u.email}</span>
-              <div style={{ display: 'flex', gap: 4, marginRight: 8 }}>
-                {USER_COLORS.map(color => (
-                  <span
-                    key={color}
-                    onClick={e => { e.stopPropagation(); setUserColors(c => { const next = { ...c, [u.email]: color }; setUserColorsToStorage(next); return next; }); }}
-                    title={!isTouch ? (userColors[u.email] === color ? 'הצבע הנבחר' : 'בחר צבע') : undefined}
-                    style={{
-                      width: 28, height: 28, borderRadius: '50%', background: color, border: userColors[u.email] === color ? '3px solid #222' : '2px solid #ccc', cursor: 'pointer', display: 'inline-block', marginLeft: 4, boxShadow: userColors[u.email] === color ? '0 0 0 2px #a7c7e7' : 'none', transition: 'border 0.2s',
-                    }}
-                  >
-                    {isTouch && userColors[u.email] === color && (
-                      <span style={{ display: 'block', width: 12, height: 12, borderRadius: '50%', background: '#222', margin: 'auto', marginTop: 6 }} />
-                    )}
-                  </span>
-                ))}
-              </div>
-            </label>
-          ))}
-        </div>
-      )}
-    </div>
-  );
 }
 
 // 1. Add a CategoryDropdown component for category filter
@@ -201,16 +131,16 @@ function CategoryDropdown({ categories, selected, onChange, categoryColors }) {
   );
 }
 
-export default function FullCalendarDemo({ isCalendarFullView }) {
+export default function FullCalendarDemo({ isCalendarFullView, taskCategories: propTaskCategories, users: propUsers }) {
   const [events, setEvents] = useState([]);
-  const [users, setUsers] = useState([]);
+  const [users, setUsers] = useState(propUsers || []);
   const [currentUser, setCurrentUser] = useState(null);
   const [alias, setAlias] = useState("");
   const [editEvent, setEditEvent] = useState(null);
   const [editFields, setEditFields] = useState({});
   const [replyText, setReplyText] = useState("");
   const [userFilter, setUserFilter] = useState('all');
-  const [selectedCategories, setSelectedCategories] = useState(taskCategories);
+  const [selectedCategories, setSelectedCategories] = useState(propTaskCategories || []);
   const [currentView, setCurrentView] = useState('timeGridDay');
   const [searchTerm, setSearchTerm] = useState('');
   const [userFilterMulti, setUserFilterMulti] = useState(['mine']);
@@ -219,20 +149,56 @@ export default function FullCalendarDemo({ isCalendarFullView }) {
   const [isTouch, setIsTouch] = useState(false);
   const [blockOrder, setBlockOrder] = useState(() => getBlockOrderFromStorage());
   const calendarRef = useRef();
+  const [showUserFilterModal, setShowUserFilterModal] = useState(false);
+  const [pendingUserFilter, setPendingUserFilter] = useState(userFilterMulti);
+  const [showEventModal, setShowEventModal] = useState(false);
+  const [modalEvent, setModalEvent] = useState(null);
+  const [modalUpdating, setModalUpdating] = useState(false);
+  const [showTaskModal, setShowTaskModal] = useState(false);
+  const [newTaskTitle, setNewTaskTitle] = useState("");
+  const [newTaskSubtitle, setNewTaskSubtitle] = useState("");
+  const [newTaskPriority, setNewTaskPriority] = useState("רגיל");
+  const [newTaskCategory, setNewTaskCategory] = useState(propTaskCategories[0] || "");
+  const [newTaskDueDate, setNewTaskDueDate] = useState("");
+  const [newTaskDueTime, setNewTaskDueTime] = useState("");
+  const [newTaskAssignTo, setNewTaskAssignTo] = useState("");
+  const [modalEditing, setModalEditing] = useState(false);
+  const [modalEditTitle, setModalEditTitle] = useState("");
+  const [modalEditSubtitle, setModalEditSubtitle] = useState("");
+  const [modalEditCategory, setModalEditCategory] = useState(propTaskCategories[0] || "");
+  const [modalEditPriority, setModalEditPriority] = useState("רגיל");
+  const [modalEditDueDate, setModalEditDueDate] = useState("");
+  const [modalEditDueTime, setModalEditDueTime] = useState("");
+  const [modalEditAssignTo, setModalEditAssignTo] = useState("");
+  const [taskCategories, setTaskCategories] = useState(propTaskCategories || []);
+  useEffect(() => {
+    if (propTaskCategories) setTaskCategories(propTaskCategories);
+  }, [propTaskCategories]);
+  // Now define CATEGORY_COLORS after taskCategories is initialized
+  const CATEGORY_COLORS = Object.fromEntries((taskCategories || []).map((cat, i) => [cat, pastelColors[i % pastelColors.length]]));
 
-  // Fetch users
+  // Get Firebase Auth user
+  useEffect(() => {
+    const auth = getAuth();
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      setCurrentUser(user);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  // Fetch users from Firestore (for list, not for current user)
   useEffect(() => {
     const unsub = onSnapshot(collection(db, "users"), (snap) => {
       const usersData = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       setUsers(usersData);
-      // Simulate current user as first user for demo; replace with real auth in prod
-      if (!currentUser && usersData.length > 0) {
-        setCurrentUser(usersData[0]);
-        setAlias(usersData[0].alias || usersData[0].email);
+      // Set alias for current user if available
+      if (currentUser) {
+        const myUserDoc = usersData.find(u => u.id === currentUser.uid);
+        if (myUserDoc) setAlias(myUserDoc.alias || myUserDoc.email || "");
       }
     });
     return () => unsub();
-  }, []);
+  }, [currentUser]);
 
   // Fetch tasks and leads
   useEffect(() => {
@@ -326,7 +292,8 @@ export default function FullCalendarDemo({ isCalendarFullView }) {
       if (userFilterMulti.includes('all')) {
         // show all
       } else if (userFilterMulti.includes('mine')) {
-        if (ev.assignTo !== currentUser?.email) return false;
+        if (!currentUser) return false;
+        if (ev.assignTo !== currentUser.email && ev.assignTo !== currentUser.uid) return false;
       } else if (userFilterMulti.length > 0) {
         if (!userFilterMulti.some(email => ev.assignTo === email)) return false;
       }
@@ -343,17 +310,8 @@ export default function FullCalendarDemo({ isCalendarFullView }) {
   const handleEventClick = (info) => {
     const ev = events.find(e => e.id === info.event.id);
     if (!ev) return;
-    setEditEvent(ev);
-    if (ev.type === 'task') {
-      setEditFields({
-        ...ev,
-        date: ev.start ? formatISO(ev.start, { representation: 'date' }) : '',
-        time: ev.start ? ev.start.toTimeString().slice(0, 5) : '',
-      });
-    } else if (ev.type === 'lead') {
-      setEditFields({ ...ev });
-    }
-    setReplyText("");
+    setModalEvent(ev);
+    setShowEventModal(true);
   };
 
   // Minimal reply UI logic
@@ -457,102 +415,73 @@ export default function FullCalendarDemo({ isCalendarFullView }) {
     setEditEvent(null);
   };
 
-  // Pastel event rendering
-  function renderEventContent(eventInfo, createElement) {
+  // Replace renderEventContent with a compact version
+  function renderEventContent(eventInfo) {
     const { done, messageSent } = eventInfo.event.extendedProps;
-    const isWeekView = eventInfo.view && eventInfo.view.type === 'timeGridWeek';
-    const baseColor = CATEGORY_COLORS[eventInfo.event.extendedProps.category];
-    const bgColor = done ? hexToRgba(baseColor, 0.8) : baseColor;
-    const assignTo = eventInfo.event.extendedProps.assignTo;
-    const accentColor = userColors[assignTo] || '#e0e0e0';
+    const title = eventInfo.event.title || '';
+    // Only show title and icons, truncate if too long, text in black, center aligned
     return (
-      <div
-        style={{
-          background: bgColor,
-          borderRadius: 12,
-          padding: isTouch ? '8px 10px 8px 6px' : '2px 6px',
-          opacity: done ? 0.8 : 1,
-          border: 'none',
-          fontSize: isTouch ? 17 : 14,
-          color: done ? '#bbb' : '#222',
-          boxShadow: '0 1px 4px #0001',
-          marginBottom: isTouch ? 8 : 2,
-          pointerEvents: 'auto',
-          cursor: 'pointer',
-          boxSizing: 'border-box',
-          display: 'flex',
-          flexDirection: 'row',
-          alignItems: 'flex-start',
-          gap: isTouch ? 14 : 8,
-          position: 'relative',
-          minHeight: isTouch ? 56 : 0,
-        }}
-      >
-        {/* Accent bar for user color */}
-        <div style={{ position: 'absolute', top: isTouch ? 4 : 2, bottom: isTouch ? 4 : 2, right: isTouch ? 4 : 2, width: isTouch ? 10 : 6, borderRadius: 4, background: accentColor, zIndex: 2 }} />
-        {/* Icons area */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: isTouch ? 8 : 2, alignItems: 'center', marginTop: isTouch ? 6 : 2 }}>
-          {/* Checkmark SVG */}
-          <span
-            draggable={false}
-            onClick={e => {
-              e.stopPropagation();
-              e.preventDefault();
-              // Toggle done for this event
-              if (eventInfo.event.id && typeof handleTaskDone === 'function') {
-                handleTaskDone(eventInfo.event.id, !done);
-              }
-            }}
-            title={done ? 'סמן כלא הושלם' : 'סמן כהושלם'}
-            style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: isTouch ? 36 : 24, height: isTouch ? 36 : 24, cursor: 'pointer', background: 'none', border: 'none', borderRadius: 0, fontSize: isTouch ? 22 : 16 }}
-          >
-            {done ? (
-              <svg width={isTouch ? 28 : 18} height={isTouch ? 28 : 18} viewBox="0 0 24 24" fill="none" stroke="#4caf50" strokeWidth={isTouch ? 4 : 3} strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 10 18 4 12" /></svg>
-            ) : (
-              <svg width={isTouch ? 28 : 18} height={isTouch ? 28 : 18} viewBox="0 0 24 24" fill="none" stroke="#555" strokeWidth={isTouch ? 3.5 : 2.5} strokeLinecap="round" strokeLinejoin="round"><rect x="4" y="4" width="16" height="16" rx="4" /></svg>
-            )}
-          </span>
-          {/* Envelope SVG */}
-          <span
-            draggable={false}
-            onClick={e => {
-              e.stopPropagation();
-              e.preventDefault();
-              // Toggle messageSent for this event
-              if (eventInfo.event.id && typeof handleMessageSent === 'function') {
-                handleMessageSent(eventInfo.event.id, !messageSent);
-              }
-            }}
-            title={messageSent ? 'הודעה נשלחה' : 'סמן הודעה נשלחה'}
-            style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: isTouch ? 36 : 24, height: isTouch ? 36 : 24, cursor: 'pointer', background: 'none', border: 'none', borderRadius: 0, fontSize: isTouch ? 22 : 16 }}
-          >
-            <svg width={isTouch ? 28 : 18} height={isTouch ? 28 : 18} viewBox="0 0 24 24" 
-              fill={messageSent ? '#4caf50' : 'none'} 
-              stroke={messageSent ? '#111' : '#555'} 
-              strokeWidth={isTouch ? 3.5 : 2.5} strokeLinecap="round" strokeLinejoin="round">
-              <rect x="3" y="5" width="18" height="14" rx="3" />
-              <polyline points="3 7 12 13 21 7" />
-            </svg>
-          </span>
-        </div>
-        {/* Content area */}
-        <div style={{ display: 'flex', flexDirection: 'column', flex: 1, justifyContent: 'flex-start' }}>
-          <div style={{ fontWeight: 600, marginTop: isTouch ? 8 : 4 }}>{eventInfo.event.title}</div>
-          <div style={{ fontSize: isTouch ? 15 : 12, color: '#555' }}>{eventInfo.event.extendedProps.subtitle}</div>
-          <div style={{ fontSize: isTouch ? 13 : 11, color: '#888' }}>{eventInfo.event.extendedProps.category} | {eventInfo.event.extendedProps.priority}</div>
-        </div>
+      <div style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 15, fontWeight: 500, padding: '2px 4px', minHeight: 24, maxWidth: '100%', color: '#222',
+      }}>
+        <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: '#222', textAlign: 'center' }}>{title}</span>
+        {done && (
+          <span title="בוצע" style={{ color: '#222', fontSize: 16, marginLeft: 2, display: 'flex', alignItems: 'center' }}>✔️</span>
+        )}
+        {messageSent && (
+          <span title="הודעה נשלחה" style={{ color: '#2196f3', fontSize: 16, marginLeft: 2, display: 'flex', alignItems: 'center' }}>✉️</span>
+        )}
       </div>
     );
   }
 
   // Delete all done tasks
   const handleDeleteAllDone = async () => {
-    if (!window.confirm('למחוק את כל המשימות שבוצעו?')) return;
-    const doneTasks = events.filter(ev => ev.type === 'task' && ev.done);
-    for (const task of doneTasks) {
-      try {
-        await updateDoc(doc(db, 'tasks', task.id), { isArchived: true }); // or use deleteDoc if you want to delete
-      } catch (e) { /* ignore */ }
+    if (!currentUser) {
+      alert('משתמש לא מחובר.');
+      return;
+    }
+    // Only delete tasks the user owns/created/assigned
+    const doneTasks = events.filter(ev =>
+      ev.type === 'task' && ev.done && (
+        ev.userId === currentUser.uid ||
+        ev.creatorId === currentUser.uid ||
+        ev.assignTo === currentUser.email ||
+        ev.assignTo === currentUser.alias
+      )
+    );
+    if (doneTasks.length === 0) {
+      alert('אין משימות שבוצעו למחיקה.');
+      return;
+    }
+    if (!window.confirm('האם אתה בטוח שברצונך למחוק את כל המשימות שבוצעו? לא ניתן לשחזר פעולה זו.')) return;
+    try {
+      const archiveAndDeletePromises = doneTasks.map(async task => {
+        try {
+          const aliasToArchive = task.completedByAlias || task.completedBy || task.creatorAlias || task.creatorEmail || task.assignTo || alias || currentUser?.alias || currentUser?.email || '';
+          await setDoc(doc(db, 'archivedTasks', task.id), {
+            ...task,
+            completedByAlias: aliasToArchive,
+            archivedAt: new Date(),
+          });
+          await deleteDoc(doc(db, 'tasks', task.id));
+          return task.id;
+        } catch (error) {
+          return null;
+        }
+      });
+      const results = await Promise.allSettled(archiveAndDeletePromises);
+      const successfulDeletes = results
+        .filter(result => result.status === 'fulfilled' && result.value)
+        .map(result => result.value);
+      setEvents(prevEvents => prevEvents.filter(ev => !successfulDeletes.includes(ev.id)));
+      if (successfulDeletes.length < doneTasks.length) {
+        alert('חלק מהמשימות לא נמחקו עקב הרשאות חסרות');
+      } else {
+        alert('כל המשימות שבוצעו הועברו לארכיון.');
+      }
+    } catch (error) {
+      alert('שגיאה במחיקת המשימות שבוצעו.');
     }
   };
 
@@ -580,6 +509,213 @@ export default function FullCalendarDemo({ isCalendarFullView }) {
     } catch {}
     // eslint-disable-next-line
   }, []);
+
+  // Load user filter from Firestore for the Auth user
+  useEffect(() => {
+    if (!currentUser) return;
+    const userDocId = currentUser.uid;
+    if (!userDocId || typeof userDocId !== 'string') {
+      console.error('User doc ID is missing or invalid!', currentUser);
+      return;
+    }
+    const userRefLoad = doc(db, 'users', userDocId);
+    getDoc(userRefLoad).then(snap => {
+      if (snap.exists()) {
+        const data = snap.data();
+        if (Array.isArray(data.userFilterCalendar)) {
+          setUserFilterMulti(data.userFilterCalendar);
+          setPendingUserFilter(data.userFilterCalendar);
+        }
+      }
+    }).catch(err => {
+      console.error('Error loading user filter from Firestore:', err);
+    });
+  }, [currentUser]);
+
+  // When confirming the modal, persist the filter and update both states
+  const confirmUserFilterModal = () => {
+    setUserFilterMulti(pendingUserFilter);
+    setShowUserFilterModal(false);
+    // Persist immediately
+    if (currentUser && currentUser.uid && Array.isArray(pendingUserFilter)) {
+      const userRefSave = doc(db, 'users', currentUser.uid);
+      updateDoc(userRefSave, { userFilterCalendar: pendingUserFilter }).catch(err => {
+        console.error('Error saving user filter to Firestore:', err);
+      });
+    }
+  };
+  // When opening modal, copy current filter to pending
+  const openUserFilterModal = () => {
+    setPendingUserFilter(userFilterMulti);
+    setShowUserFilterModal(true);
+  };
+  // Cancel selection
+  const cancelUserFilterModal = () => {
+    setShowUserFilterModal(false);
+  };
+  // Toggle user in pending filter
+  const togglePendingUser = (email) => {
+    setPendingUserFilter(prev => prev.includes(email) ? prev.filter(e => e !== email) : [...prev, email]);
+  };
+  // Toggle 'mine' and 'all'
+  const toggleMine = () => {
+    setPendingUserFilter(['mine']);
+  };
+  const toggleAll = () => {
+    setPendingUserFilter(['all']);
+  };
+  // Set color for user
+  const setPendingUserColor = (email, color) => {
+    setUserColors(c => { const next = { ...c, [email]: color }; setUserColorsToStorage(next); return next; });
+  };
+
+  // Add handlers to update done and messageSent
+  const handleModalToggleDone = async () => {
+    if (!modalEvent) return;
+    setModalUpdating(true);
+    try {
+      const taskRef = doc(db, 'tasks', modalEvent.id);
+      await updateDoc(taskRef, { done: !modalEvent.done });
+      setModalEvent({ ...modalEvent, done: !modalEvent.done });
+      // Also update in events state
+      setEvents(prev => prev.map(ev => ev.id === modalEvent.id ? { ...ev, done: !modalEvent.done } : ev));
+    } catch (err) {
+      alert('שגיאה בעדכון סטטוס המשימה');
+    }
+    setModalUpdating(false);
+  };
+  const handleModalToggleMessageSent = async () => {
+    if (!modalEvent) return;
+    setModalUpdating(true);
+    try {
+      const taskRef = doc(db, 'tasks', modalEvent.id);
+      await updateDoc(taskRef, { messageSent: !modalEvent.messageSent });
+      setModalEvent({ ...modalEvent, messageSent: !modalEvent.messageSent });
+      setEvents(prev => prev.map(ev => ev.id === modalEvent.id ? { ...ev, messageSent: !modalEvent.messageSent } : ev));
+    } catch (err) {
+      alert('שגיאה בעדכון סטטוס הודעה');
+    }
+    setModalUpdating(false);
+  };
+
+  // Add support for dateClick to prefill new task modal
+  const handleDateClick = (arg) => {
+    // arg.date is a JS Date object
+    setShowTaskModal(true);
+    setNewTaskDueDate(arg.date.toISOString().slice(0, 10));
+    setNewTaskDueTime(arg.date.toTimeString().slice(0, 5));
+    setNewTaskTitle("");
+    setNewTaskSubtitle("");
+    setNewTaskPriority("רגיל");
+    setNewTaskCategory(propTaskCategories[0] || "");
+    setNewTaskAssignTo(currentUser?.email || "");
+  };
+
+  // Fix new task creation to save to Firestore
+  const handleCreateTask = async (e) => {
+    if (e) e.preventDefault();
+    if (!currentUser) {
+      alert("משתמש לא מחובר");
+      return;
+    }
+    try {
+      const taskRef = doc(collection(db, "tasks"));
+      const newTask = {
+        id: taskRef.id,
+        userId: currentUser.uid,
+        creatorId: currentUser.uid,
+        creatorAlias: alias || currentUser.email || "",
+        assignTo: newTaskAssignTo || currentUser.email,
+        title: newTaskTitle || "משימה חדשה",
+        subtitle: newTaskSubtitle,
+        priority: newTaskPriority,
+        category: newTaskCategory,
+        status: "פתוח",
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+        dueDate: newTaskDueDate && newTaskDueTime ? new Date(`${newTaskDueDate}T${newTaskDueTime}`).toISOString() : null,
+        replies: [],
+        isRead: false,
+        isArchived: false,
+        done: false,
+        completedBy: null,
+        completedAt: null,
+        messageSent: false,
+      };
+      await setDoc(taskRef, newTask);
+      setShowTaskModal(false);
+      setNewTaskTitle("");
+      setNewTaskSubtitle("");
+      setNewTaskPriority("רגיל");
+      setNewTaskCategory(propTaskCategories[0] || "");
+      setNewTaskDueDate("");
+      setNewTaskDueTime("");
+      setNewTaskAssignTo("");
+    } catch (error) {
+      alert("שגיאה ביצירת המשימה. נסה שוב.");
+    }
+  };
+
+  // When opening modal for edit, prefill fields
+  useEffect(() => {
+    if (modalEditing && modalEvent) {
+      setModalEditTitle(modalEvent.title || "");
+      setModalEditSubtitle(modalEvent.subtitle || "");
+      setModalEditCategory(modalEvent.category || propTaskCategories[0] || "");
+      setModalEditPriority(modalEvent.priority || "רגיל");
+      if (modalEvent.dueDate) {
+        const d = new Date(modalEvent.dueDate);
+        setModalEditDueDate(d.toLocaleDateString('en-CA'));
+        setModalEditDueTime(d.toTimeString().slice(0, 5));
+      } else {
+        setModalEditDueDate("");
+        setModalEditDueTime("");
+      }
+      setModalEditAssignTo(modalEvent.assignTo || "");
+    }
+  }, [modalEditing, modalEvent, propTaskCategories]);
+
+  // Handler to save edits
+  const handleModalEditSave = async (e) => {
+    e.preventDefault();
+    if (!modalEvent) return;
+    setModalUpdating(true);
+    try {
+      const taskRef = doc(db, 'tasks', modalEvent.id);
+      const dueDateISO = modalEditDueDate && modalEditDueTime ? new Date(`${modalEditDueDate}T${modalEditDueTime}`).toISOString() : null;
+      await updateDoc(taskRef, {
+        title: modalEditTitle,
+        subtitle: modalEditSubtitle,
+        category: modalEditCategory,
+        priority: modalEditPriority,
+        dueDate: dueDateISO,
+        assignTo: modalEditAssignTo,
+        updatedAt: serverTimestamp(),
+      });
+      setModalEvent({
+        ...modalEvent,
+        title: modalEditTitle,
+        subtitle: modalEditSubtitle,
+        category: modalEditCategory,
+        priority: modalEditPriority,
+        dueDate: dueDateISO,
+        assignTo: modalEditAssignTo,
+      });
+      setEvents(prev => prev.map(ev => ev.id === modalEvent.id ? {
+        ...ev,
+        title: modalEditTitle,
+        subtitle: modalEditSubtitle,
+        category: modalEditCategory,
+        priority: modalEditPriority,
+        dueDate: dueDateISO,
+        assignTo: modalEditAssignTo,
+      } : ev));
+      setModalEditing(false);
+    } catch (err) {
+      alert('שגיאה בעדכון המשימה');
+    }
+    setModalUpdating(false);
+  };
 
   return (
     <div
@@ -658,16 +794,7 @@ export default function FullCalendarDemo({ isCalendarFullView }) {
             style={{ borderRadius: 8, padding: isTouch ? '12px 16px' : '6px 12px', fontSize: isTouch ? 17 : 15, border: '1px solid #e0e0e0', minWidth: 120, minHeight: 44 }}
           />
           {/* User filter dropdown */}
-          <UserMultiSelectDropdown
-            users={users}
-            value={userFilterMulti}
-            onChange={setUserFilterMulti}
-            currentUser={currentUser}
-            alias={alias}
-            userColors={userColors}
-            setUserColors={setUserColors}
-            isTouch={isTouch}
-          />
+          <button onClick={openUserFilterModal} style={{ border: '1px solid #e0e0e0', borderRadius: 6, padding: isTouch ? '16px 24px' : '12px 18px', fontSize: isTouch ? 20 : 17, background: '#fff', cursor: 'pointer', minWidth: 180, minHeight: isTouch ? 56 : 44 }}>סנן לפי משתמשים</button>
         </div>
       ) : (
         // Compact view: condensed layout
@@ -699,22 +826,13 @@ export default function FullCalendarDemo({ isCalendarFullView }) {
           </div>
           {/* Category dropdown */}
           <CategoryDropdown
-            categories={taskCategories}
+            categories={propTaskCategories}
             selected={selectedCategories}
             onChange={setSelectedCategories}
             categoryColors={CATEGORY_COLORS}
           />
           {/* User filter dropdown */}
-          <UserMultiSelectDropdown
-            users={users}
-            value={userFilterMulti}
-            onChange={setUserFilterMulti}
-            currentUser={currentUser}
-            alias={alias}
-            userColors={userColors}
-            setUserColors={setUserColors}
-            isTouch={isTouch}
-          />
+          <button onClick={openUserFilterModal} style={{ border: '1px solid #e0e0e0', borderRadius: 6, padding: isTouch ? '16px 24px' : '12px 18px', fontSize: isTouch ? 20 : 17, background: '#fff', cursor: 'pointer', minWidth: 180, minHeight: isTouch ? 56 : 44 }}>סנן לפי משתמשים</button>
         </div>
       )}
       <div style={{ marginBottom: 24, textAlign: 'center', display: 'flex', justifyContent: 'center', gap: 24, flexWrap: 'wrap' }}>
@@ -722,7 +840,7 @@ export default function FullCalendarDemo({ isCalendarFullView }) {
           style={{ background: '#b5ead7', color: '#222', border: 'none', borderRadius: 6, padding: '6px 18px', fontWeight: 600, fontSize: 16, boxShadow: '0 1px 4px #0001', cursor: 'pointer' }}
           onClick={() => {
             setEditEvent({ id: '', isNew: true });
-            setEditFields({ title: '', subtitle: '', category: taskCategories[0], priority: taskPriorities[1], assignTo: currentUser?.email || '', date: '', time: '', done: false, messageSent: false });
+            setEditFields({ title: '', subtitle: '', category: propTaskCategories[0], priority: taskPriorities[1], assignTo: currentUser?.email || '', date: '', time: '', done: false, messageSent: false });
           }}
         >+ משימה חדשה</button>
       </div>
@@ -752,6 +870,7 @@ export default function FullCalendarDemo({ isCalendarFullView }) {
         }}
         dayHeaderClassNames={() => 'fc-pastel-header'}
         buttonText={{ today: 'היום' }}
+        dateClick={handleDateClick}
       />
       {/* Edit/Add Modal */}
       {editEvent && (
@@ -781,7 +900,7 @@ export default function FullCalendarDemo({ isCalendarFullView }) {
               <div style={{ flex: 1 }}>
                 <label style={{ fontWeight: 500 }}>קטגוריה:</label>
                 <select value={editFields.category} onChange={e => setEditFields(f => ({ ...f, category: e.target.value }))} style={{ width: '100%', border: '1px solid #e0e0e0', borderRadius: 6, padding: 6, marginTop: 4, fontSize: 15 }}>
-                  {taskCategories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+                  {propTaskCategories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
                 </select>
               </div>
               <div style={{ flex: 1 }}>
@@ -839,16 +958,183 @@ export default function FullCalendarDemo({ isCalendarFullView }) {
                 </form>
               </div>
             )}
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 18 }}>
-              <button onClick={() => setEditEvent(null)} style={{ background: '#eee', color: '#333', border: 'none', borderRadius: 6, padding: '6px 18px', fontWeight: 600, fontSize: 15, cursor: 'pointer' }}>ביטול</button>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12, marginTop: 18 }}>
+              <button onClick={() => setEditEvent(null)} style={{ background: '#eee', color: '#222', border: 'none', borderRadius: 6, padding: '8px 18px', fontWeight: 600, fontSize: 16, cursor: 'pointer' }}>ערוך</button>
               <button
                 onClick={editEvent.isNew ? handleAddNew : () => {
                   setEvents(prev => prev.map(ev => ev.id === editEvent.id ? { ...editFields, id: editEvent.id } : ev));
                   setEditEvent(null);
                 }}
-                style={{ background: '#a7c7e7', color: '#222', border: 'none', borderRadius: 6, padding: '6px 18px', fontWeight: 600, fontSize: 15, cursor: 'pointer' }}
+                style={{ background: '#2196f3', color: '#fff', border: 'none', borderRadius: 6, padding: '8px 18px', fontWeight: 600, fontSize: 16, cursor: 'pointer' }}
               >{editEvent.isNew ? 'הוסף' : 'שמור'}</button>
             </div>
+          </div>
+        </div>
+      )}
+      {showUserFilterModal && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: '#0006', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ background: '#fff', padding: 32, borderRadius: 12, minWidth: 340, maxWidth: 420, boxShadow: '0 2px 16px #0002', width: '90vw' }}>
+            <h3 style={{ marginBottom: 18, fontWeight: 600, fontSize: 20, textAlign: 'center' }}>סינון לפי משתמשים</h3>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 24 }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 17, fontWeight: 500 }}>
+                <input type="checkbox" checked={pendingUserFilter.includes('mine')} onChange={toggleMine} style={{ width: 22, height: 22 }} /> המשימות שלי
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 17, fontWeight: 500 }}>
+                <input type="checkbox" checked={pendingUserFilter.includes('all')} onChange={toggleAll} style={{ width: 22, height: 22 }} /> כל המשימות
+              </label>
+              <div style={{ borderTop: '1px solid #eee', margin: '8px 0' }} />
+              {users.map(u => (
+                <div key={u.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 0' }}>
+                  <input type="checkbox" checked={pendingUserFilter.includes(u.email)} onChange={() => togglePendingUser(u.email)} style={{ width: 22, height: 22 }} />
+                  <span style={{ flex: 1 }}>{u.alias ? u.alias : u.email}</span>
+                  <div style={{ display: 'flex', gap: 4 }}>
+                    {USER_COLORS.map(color => (
+                      <span
+                        key={color}
+                        onClick={() => setPendingUserColor(u.email, color)}
+                        title={userColors[u.email] === color ? 'הצבע הנבחר' : 'בחר צבע'}
+                        style={{ width: 28, height: 28, borderRadius: '50%', background: color, border: userColors[u.email] === color ? '3px solid #222' : '2px solid #ccc', cursor: 'pointer', display: 'inline-block', marginLeft: 4, boxShadow: userColors[u.email] === color ? '0 0 0 2px #a7c7e7' : 'none', transition: 'border 0.2s' }}
+                      />
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 16 }}>
+              <button onClick={confirmUserFilterModal} style={{ background: '#2196f3', color: '#fff', border: 'none', borderRadius: 6, padding: '8px 18px', fontWeight: 600, fontSize: 16, cursor: 'pointer' }}>אישור</button>
+              <button onClick={cancelUserFilterModal} style={{ background: '#eee', color: '#222', border: 'none', borderRadius: 6, padding: '8px 18px', fontWeight: 600, fontSize: 16, cursor: 'pointer' }}>ביטול</button>
+            </div>
+          </div>
+        </div>
+      )}
+      {showEventModal && modalEvent && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: '#0006', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setShowEventModal(false)}>
+          <div style={{ background: '#fff', padding: 32, borderRadius: 12, minWidth: 320, maxWidth: 420, boxShadow: '0 2px 16px #0002', width: '90vw' }} onClick={e => e.stopPropagation()}>
+            {!modalEditing ? (
+              <>
+                <h3 style={{ marginBottom: 12, fontWeight: 700, fontSize: 20 }}>{modalEvent.title}</h3>
+                {modalEvent.subtitle && <div style={{ marginBottom: 8, color: '#555' }}>{modalEvent.subtitle}</div>}
+                <div style={{ marginBottom: 8 }}><b>קטגוריה:</b> {modalEvent.category}</div>
+                <div style={{ marginBottom: 8 }}><b>עדיפות:</b> {modalEvent.priority}</div>
+                <div style={{ marginBottom: 8 }}><b>מוקצה ל:</b> {users.find(u => u.email === modalEvent.assignTo)?.alias || modalEvent.assignTo}</div>
+                <div style={{ marginBottom: 8 }}><b>תאריך יעד:</b> {modalEvent.dueDate ? formatDateTime(modalEvent.dueDate) : ''}</div>
+                <div style={{ marginBottom: 8, display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 500 }}>
+                    <input type="checkbox" checked={!!modalEvent.done} onChange={handleModalToggleDone} disabled={modalUpdating} /> בוצע
+                  </label>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 500 }}>
+                    <input type="checkbox" checked={!!modalEvent.messageSent} onChange={handleModalToggleMessageSent} disabled={modalUpdating} /> הודעה נשלחה
+                  </label>
+                  {modalUpdating && <span style={{ fontSize: 13, color: '#888' }}>מעדכן...</span>}
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12, marginTop: 18 }}>
+                  <button onClick={() => setModalEditing(true)} style={{ background: '#eee', color: '#222', border: 'none', borderRadius: 6, padding: '8px 18px', fontWeight: 600, fontSize: 16, cursor: 'pointer' }}>ערוך</button>
+                  <button onClick={() => setShowEventModal(false)} style={{ background: '#2196f3', color: '#fff', border: 'none', borderRadius: 6, padding: '8px 18px', fontWeight: 600, fontSize: 16, cursor: 'pointer' }}>סגור</button>
+                </div>
+              </>
+            ) : (
+              <form onSubmit={handleModalEditSave}>
+                <h3 style={{ marginBottom: 12, fontWeight: 700, fontSize: 20 }}>עריכת משימה</h3>
+                <div style={{ marginBottom: 10 }}>
+                  <label style={{ fontWeight: 500 }}>כותרת:</label>
+                  <input type="text" value={modalEditTitle} onChange={e => setModalEditTitle(e.target.value)} style={{ width: '100%', border: '1px solid #e0e0e0', borderRadius: 6, padding: 6, marginTop: 4, fontSize: 15 }} required />
+                </div>
+                <div style={{ marginBottom: 10 }}>
+                  <label style={{ fontWeight: 500 }}>תיאור:</label>
+                  <input type="text" value={modalEditSubtitle} onChange={e => setModalEditSubtitle(e.target.value)} style={{ width: '100%', border: '1px solid #e0e0e0', borderRadius: 6, padding: 6, marginTop: 4, fontSize: 15 }} />
+                </div>
+                <div style={{ marginBottom: 10, display: 'flex', gap: 10 }}>
+                  <div style={{ flex: 1 }}>
+                    <label style={{ fontWeight: 500 }}>עדיפות:</label>
+                    <select value={modalEditPriority} onChange={e => setModalEditPriority(e.target.value)} style={{ width: '100%', border: '1px solid #e0e0e0', borderRadius: 6, padding: 6, marginTop: 4, fontSize: 15 }}>
+                      {taskPriorities.map(p => <option key={p} value={p}>{p}</option>)}
+                    </select>
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <label style={{ fontWeight: 500 }}>קטגוריה:</label>
+                    <select value={modalEditCategory} onChange={e => setModalEditCategory(e.target.value)} style={{ width: '100%', border: '1px solid #e0e0e0', borderRadius: 6, padding: 6, marginTop: 4, fontSize: 15 }}>
+                      {taskCategories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+                    </select>
+                  </div>
+                </div>
+                <div style={{ marginBottom: 10, display: 'flex', gap: 10 }}>
+                  <div style={{ flex: 1 }}>
+                    <label style={{ fontWeight: 500 }}>תאריך:</label>
+                    <input type="date" value={modalEditDueDate} onChange={e => setModalEditDueDate(e.target.value)} style={{ width: '100%', border: '1px solid #e0e0e0', borderRadius: 6, padding: 6, marginTop: 4, fontSize: 15 }} required />
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <label style={{ fontWeight: 500 }}>שעה:</label>
+                    <input type="time" value={modalEditDueTime} onChange={e => setModalEditDueTime(e.target.value)} style={{ width: '100%', border: '1px solid #e0e0e0', borderRadius: 6, padding: 6, marginTop: 4, fontSize: 15 }} />
+                  </div>
+                </div>
+                <div style={{ marginBottom: 10 }}>
+                  <label style={{ fontWeight: 500 }}>מוקצה ל:</label>
+                  <select value={modalEditAssignTo} onChange={e => setModalEditAssignTo(e.target.value)} style={{ width: '100%', border: '1px solid #e0e0e0', borderRadius: 6, padding: 6, marginTop: 4, fontSize: 15 }}>
+                    {users.map(u => (
+                      <option key={u.id} value={u.email}>{u.alias || u.email}</option>
+                    ))}
+                  </select>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12, marginTop: 18 }}>
+                  <button type="button" onClick={() => setModalEditing(false)} style={{ background: '#eee', color: '#222', border: 'none', borderRadius: 6, padding: '8px 18px', fontWeight: 600, fontSize: 16, cursor: 'pointer' }}>ביטול</button>
+                  <button type="submit" disabled={modalUpdating} style={{ background: '#2196f3', color: '#fff', border: 'none', borderRadius: 6, padding: '8px 18px', fontWeight: 600, fontSize: 16, cursor: 'pointer' }}>{modalUpdating ? 'שומר...' : 'שמור'}</button>
+                </div>
+              </form>
+            )}
+          </div>
+        </div>
+      )}
+      {showTaskModal && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: '#0006', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setShowTaskModal(false)}>
+          <div style={{ background: '#fff', padding: 32, borderRadius: 12, minWidth: 320, maxWidth: 420, boxShadow: '0 2px 16px #0002', width: '90vw' }} onClick={e => e.stopPropagation()}>
+            <h3 style={{ marginBottom: 12, fontWeight: 700, fontSize: 20 }}>משימה חדשה</h3>
+            <form onSubmit={handleCreateTask}>
+              <div style={{ marginBottom: 10 }}>
+                <label style={{ fontWeight: 500 }}>כותרת:</label>
+                <input type="text" value={newTaskTitle} onChange={e => setNewTaskTitle(e.target.value)} style={{ width: '100%', border: '1px solid #e0e0e0', borderRadius: 6, padding: 6, marginTop: 4, fontSize: 15 }} required />
+              </div>
+              <div style={{ marginBottom: 10 }}>
+                <label style={{ fontWeight: 500 }}>תיאור:</label>
+                <input type="text" value={newTaskSubtitle} onChange={e => setNewTaskSubtitle(e.target.value)} style={{ width: '100%', border: '1px solid #e0e0e0', borderRadius: 6, padding: 6, marginTop: 4, fontSize: 15 }} />
+              </div>
+              <div style={{ marginBottom: 10, display: 'flex', gap: 10 }}>
+                <div style={{ flex: 1 }}>
+                  <label style={{ fontWeight: 500 }}>עדיפות:</label>
+                  <select value={newTaskPriority} onChange={e => setNewTaskPriority(e.target.value)} style={{ width: '100%', border: '1px solid #e0e0e0', borderRadius: 6, padding: 6, marginTop: 4, fontSize: 15 }}>
+                    {taskPriorities.map(p => <option key={p} value={p}>{p}</option>)}
+                  </select>
+                </div>
+                <div style={{ flex: 1 }}>
+                  <label style={{ fontWeight: 500 }}>קטגוריה:</label>
+                  <select value={newTaskCategory} onChange={e => setNewTaskCategory(e.target.value)} style={{ width: '100%', border: '1px solid #e0e0e0', borderRadius: 6, padding: 6, marginTop: 4, fontSize: 15 }}>
+                    {propTaskCategories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+                  </select>
+                </div>
+              </div>
+              <div style={{ marginBottom: 10, display: 'flex', gap: 10 }}>
+                <div style={{ flex: 1 }}>
+                  <label style={{ fontWeight: 500 }}>תאריך:</label>
+                  <input type="date" value={newTaskDueDate} onChange={e => setNewTaskDueDate(e.target.value)} style={{ width: '100%', border: '1px solid #e0e0e0', borderRadius: 6, padding: 6, marginTop: 4, fontSize: 15 }} required />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <label style={{ fontWeight: 500 }}>שעה:</label>
+                  <input type="time" value={newTaskDueTime} onChange={e => setNewTaskDueTime(e.target.value)} style={{ width: '100%', border: '1px solid #e0e0e0', borderRadius: 6, padding: 6, marginTop: 4, fontSize: 15 }} />
+                </div>
+              </div>
+              <div style={{ marginBottom: 10 }}>
+                <label style={{ fontWeight: 500 }}>מוקצה ל:</label>
+                <select value={newTaskAssignTo} onChange={e => setNewTaskAssignTo(e.target.value)} style={{ width: '100%', border: '1px solid #e0e0e0', borderRadius: 6, padding: 6, marginTop: 4, fontSize: 15 }}>
+                  <option value={currentUser?.email || ""}>{currentUser?.email || "עצמי"}</option>
+                  {users.filter(u => u.email !== currentUser?.email).map(u => (
+                    <option key={u.id} value={u.email}>{u.alias || u.email}</option>
+                  ))}
+                </select>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12, marginTop: 18 }}>
+                <button type="button" onClick={() => setShowTaskModal(false)} style={{ background: '#eee', color: '#222', border: 'none', borderRadius: 6, padding: '8px 18px', fontWeight: 600, fontSize: 16, cursor: 'pointer' }}>ביטול</button>
+                <button type="submit" style={{ background: '#2196f3', color: '#fff', border: 'none', borderRadius: 6, padding: '8px 18px', fontWeight: 600, fontSize: 16, cursor: 'pointer' }}>צור משימה</button>
+              </div>
+            </form>
           </div>
         </div>
       )}

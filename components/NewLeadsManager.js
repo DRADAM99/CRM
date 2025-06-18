@@ -60,7 +60,15 @@ function EditLeadModal({ open, lead, statuses, onClose, onSave }) {
         <textarea className="input w-full border rounded px-2 py-1 text-sm mb-2" placeholder="הערות" value={form.notes||''} onChange={e=>setForm(f=>({...f,notes:e.target.value}))} rows={2} />
         <div className="flex gap-2 mb-2">
           <input className="input flex-1 border rounded px-2 py-1 text-sm" placeholder="הוסף עדכון שיחה..." value={updateText} onChange={e=>setUpdateText(e.target.value)} />
-          <button type="button" className="bg-gray-200 rounded px-2 py-1 text-sm" onClick={()=>{if(updateText){/* handle update */ setUpdateText('');}}}>הוסף עדכון</button>
+          <button type="button" className="bg-gray-200 rounded px-2 py-1 text-sm" onClick={() => {
+            if (updateText) {
+              setForm(f => ({
+                ...f,
+                updates: [...(f.updates || []), { text: updateText, date: new Date().toISOString() }]
+              }));
+              setUpdateText('');
+            }
+          }}>הוסף עדכון</button>
         </div>
         <div className="flex gap-2 mb-2">
           <input className="input flex-1 border rounded px-2 py-1 text-sm" placeholder="הוסף משימה חדשה..." value={taskText} onChange={e=>setTaskText(e.target.value)} />
@@ -177,7 +185,14 @@ function KanbanView() {
                     draggable
                     onDragStart={() => handleDragStart(lead)}
                     onDragEnd={handleDragEnd}
-                    onClick={() => setEditLead(lead)}
+                    onClick={() => {
+                      if (editLead && editLead.id === lead.id) {
+                        setLeads(ls => ls.map(l => l.id === lead.id ? { ...l, ...editLead } : l));
+                        setEditLead(null);
+                      } else {
+                        setEditLead(lead);
+                      }
+                    }}
                   >
                     <div className="font-bold">{lead.name}</div>
                     <div className="text-xs text-gray-500 flex items-center gap-1">
