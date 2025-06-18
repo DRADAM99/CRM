@@ -636,7 +636,12 @@ useEffect(() => {
     }
   };
   
-
+  const [justClosedLeadId, setJustClosedLeadId] = useState(null);
+  const justClosedLeadIdRef = useRef(null);
+  const closeLeadId = (leadId) => {
+    setJustClosedLeadId(leadId);
+    justClosedLeadIdRef.current = leadId;
+  };
 const [selectedDate, setSelectedDate] = useState(new Date());
   const [view, setView] = useState("month");
   const [isFullView, setIsFullView] = useState(() => getLayoutPref('dashboard_isFullView', false));
@@ -1544,7 +1549,20 @@ useEffect(() => {
       };
     });
 
-    setLeads(fetchedLeads);
+    setLeads(prevLeads => {
+      const expandedLead = prevLeads.find(l => l.expanded);
+      const expandedId = expandedLead ? expandedLead.id : null;
+      if (justClosedLeadIdRef.current && expandedId === justClosedLeadIdRef.current) {
+        setJustClosedLeadId(null);
+        justClosedLeadIdRef.current = null;
+        return fetchedLeads.map(lead => ({ ...lead, expanded: false }));
+      }
+      return fetchedLeads.map(lead =>
+        expandedId && lead.id === expandedId
+          ? { ...lead, expanded: true }
+          : { ...lead, expanded: false }
+      );
+    });
   });
 
   return () => unsubscribe(); // ✅ Clean up
@@ -1579,7 +1597,20 @@ useEffect(() => {
       };
     });
 
-    setLeads(fetchedLeads);
+    setLeads(prevLeads => {
+      const expandedLead = prevLeads.find(l => l.expanded);
+      const expandedId = expandedLead ? expandedLead.id : null;
+      if (justClosedLeadIdRef.current && expandedId === justClosedLeadIdRef.current) {
+        setJustClosedLeadId(null);
+        justClosedLeadIdRef.current = null;
+        return fetchedLeads.map(lead => ({ ...lead, expanded: false }));
+      }
+      return fetchedLeads.map(lead =>
+        expandedId && lead.id === expandedId
+          ? { ...lead, expanded: true }
+          : { ...lead, expanded: false }
+      );
+    });
   });
 
   return () => unsubscribe(); // ✅ cleanup on logout
@@ -3352,6 +3383,8 @@ const calculatedAnalytics = useMemo(() => {
                        components={{ event: CustomEvent }}
                        currentUser={currentUser} // <-- pass currentUser here
                        isCalendarFullView={isCalendarFullView}
+                       taskCategories={taskCategories}
+                       users={assignableUsers}
                    />
                  </div>
               </CardContent>
@@ -3549,7 +3582,17 @@ const calculatedAnalytics = useMemo(() => {
                                                <td className="px-2 py-2 align-top">
                                                    <div className="flex items-center justify-start gap-1">
                                                         
-                                                       <Tooltip><TooltipTrigger asChild><Button size="icon" variant="ghost" className="w-7 h-7 text-gray-500 hover:text-blue-600" onClick={() => handleEditLead(lead)}><span role="img" aria-label="Edit">✎</span></Button></TooltipTrigger><TooltipContent>{'פתח/ערוך ליד'}</TooltipContent></Tooltip>
+                                                       <Tooltip><TooltipTrigger asChild><Button size="icon" variant="ghost" className="w-7 h-7 text-gray-500 hover:text-blue-600" title="פתח לעריכה" onClick={async () => {
+  if (lead.expanded) {
+    // Save and close
+    // Simulate form submit for this lead
+    const fakeEvent = { preventDefault: () => {} };
+    await handleSaveLead(fakeEvent, lead.id);
+    closeLeadId(lead.id);
+  } else {
+    handleEditLead(lead);
+  }
+}}><span role="img" aria-label="Edit">✎</span></Button></TooltipTrigger><TooltipContent>{'פתח/ערוך ליד'}</TooltipContent></Tooltip>
 <Tooltip>
   <TooltipTrigger asChild>
     <a
@@ -3640,7 +3683,7 @@ const calculatedAnalytics = useMemo(() => {
                                                            
                                                            <div className="flex gap-2 justify-end border-t pt-3 mt-4">
                                                                <Button type="submit" size="sm">{'שמור שינויים'}</Button>
-                                                               <Button type="button" variant="outline" size="sm" onClick={() => handleCollapseLead(lead.id)}>{'סגור'}</Button>
+                                                               <Button type="button" variant="outline" size="sm" onClick={() => { handleCollapseLead(lead.id); closeLeadId(lead.id); }}>{'סגור'}</Button>
                                                                {(currentUser?.role === 'admin' || role === 'admin') && (
                                                                  <Button type="button" variant="destructive" size="sm" onClick={() => handleDeleteLead(lead.id)}>
                                                                    {'מחק ליד'}
