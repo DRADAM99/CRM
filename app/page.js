@@ -1,4 +1,4 @@
-// Version 6.6 - Collapse/expand Kanban
+// Version 6.7 - Collapse/expand Kanban
 "use client";
 
 // Utility functions for layout persistence
@@ -19,7 +19,7 @@ import React, { useState, useEffect, useMemo, useCallback, useRef } from "react"
 import Image from 'next/image';
 import { useRouter } from "next/navigation";
 import { auth, db } from "../firebase";
-import { FaWhatsapp } from "react-icons/fa";
+import { FaWhatsapp, FaCodeBranch } from "react-icons/fa";
 import { or, query, where, orderBy, arrayUnion } from "firebase/firestore";
 import { useAuth } from "./context/AuthContext";  // Updated import path
 import FullCalendarDemo from "../components/FullCalendarDemo";
@@ -69,7 +69,8 @@ import {
 import { horizontalListSortingStrategy } from "@dnd-kit/sortable";
 import SortableCategoryColumn from "../components/ui/sortable-category-column";
 import SortableItem from "../components/ui/sortable-item";
-
+//CandidatesBlock
+import CandidatesBlock from "../components/CandidatesBlock";
 
 import moment from 'moment-timezone';
 import 'moment/locale/he';
@@ -217,6 +218,7 @@ const localizer = momentLocalizer(moment);
 const messages = { allDay: "כל היום", previous: "הקודם", next: "הבא", today: "היום", month: "חודש", week: "שבוע", day: "יום", agenda: "סדר יום", date: "תאריך", time: "זמן", event: "אירוע", noEventsInRange: "אין אירועים בטווח זה", showMore: (total) => `+ ${total} נוספים`, };
 
 
+// Updated lead statuses and colors (order matters)
 const leadStatusConfig = { "חדש": { color: "bg-red-500", priority: 1 }, "בבדיקת לקוח": { color: "bg-orange-500", priority: 2 }, "ממתין לתשובה של ד״ר וינטר": { color: "bg-purple-500", priority: 3 }, "נקבע יעוץ": { color: "bg-green-500", priority: 4 }, "בסדרת טיפולים": { color: "bg-emerald-400", priority: 6 }, "באג": { color: "bg-yellow-900", priority: 5 }, "לא מתאים": { color: "bg-gray-400", priority: 7 }, "אין מענה": { color: "bg-yellow-500", priority: 5 }, "קורס": { color: "bg-blue-900", priority: 8 }, "ניתן מענה": { color: "bg-gray-500", priority: 9 }, "Default": { color: "bg-gray-300", priority: 99 } };
 const leadColorTab = (status) => leadStatusConfig[status]?.color || leadStatusConfig.Default.color;
 const leadPriorityValue = (status) => leadStatusConfig[status]?.priority || leadStatusConfig.Default.priority;
@@ -681,7 +683,16 @@ const [selectedDate, setSelectedDate] = useState(new Date());
   const [editingCategory, setEditingCategory] = useState(taskCategories[0] || "");
   const [editingDueDate, setEditingDueDate] = useState("");
   const [editingDueTime, setEditingDueTime] = useState("");
-
+  const [isLeadsFullView, setIsLeadsFullView] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const v = localStorage.getItem('dashboard_isLeadsFullView');
+      return v ? JSON.parse(v) : false;
+    }
+    return false;
+  });
+  useEffect(() => {
+    localStorage.setItem('dashboard_isLeadsFullView', JSON.stringify(isLeadsFullView));
+  }, [isLeadsFullView]);
   // Add task creation state variables
   const [showTaskModal, setShowTaskModal] = useState(false);
   const [newTaskTitle, setNewTaskTitle] = useState("");
@@ -896,6 +907,26 @@ const [selectedDate, setSelectedDate] = useState(new Date());
       console.error("שגיאה במחיקת ליד:", error);
       alert("שגיאה במחיקת ליד");
       setConfirmingDeleteLeadId(null);
+    }
+  };
+  const handleDuplicateLead = async (lead) => {
+    try {
+      // Prepare duplicated lead data
+      const duplicatedLead = {
+        ...lead,
+        fullName: lead.fullName + " משוכפל", // Add 'משוכפל' to the name
+        createdAt: new Date(), // New creation date
+        expanded: false,
+      };
+      // Remove fields that should not be duplicated
+      delete duplicatedLead.id;
+      // Add to Firestore
+      await addDoc(collection(db, "leads"), duplicatedLead);
+      // No need to update local state, real-time listener will update leads
+      toast({ title: "הליד שוכפל", description: "נוצר ליד חדש משוכפל." });
+    } catch (error) {
+      console.error("שגיאה בשכפול ליד:", error);
+      alert("שגיאה בשכפול ליד. נסה שוב.");
     }
   };
   // ... existing code ...
@@ -2969,7 +3000,7 @@ const calculatedAnalytics = useMemo(() => {
   </div>
 
   <div className="w-full sm:w-48 text-center sm:text-left text-sm text-gray-500 flex flex-col items-center sm:items-end sm:ml-0">
-    <span>{'Version 6.6'}</span>
+    <span>{'Version 6.7'}</span>
     <button
       className="text-xs text-red-600 underline"
       onClick={() => {
@@ -2986,7 +3017,10 @@ const calculatedAnalytics = useMemo(() => {
 
         
         <div dir="rtl" className="grid grid-cols-1 lg:grid-cols-12 gap-2 sm:gap-4 p-2 sm:p-4 bg-gray-50 min-h-[calc(100vh-90px)]">
-          
+        <CandidatesBlock
+  isFullView={isLeadsFullView}
+  setIsFullView={setIsLeadsFullView}
+/> 
           <div style={{ order: blockOrder.TM }} className={`col-span-1 ${isTMFullView ? 'lg:col-span-12' : 'lg:col-span-4'} transition-all duration-300 ease-in-out`}>
             <Card className="h-full flex flex-col">
               <CardHeader className="space-y-3">
@@ -3012,7 +3046,7 @@ const calculatedAnalytics = useMemo(() => {
                     </Button>
                   </div>
                 </div>
-
+                
                 <div className="flex flex-col gap-3">
                   <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
                     <div className="flex flex-wrap gap-2">
@@ -3056,7 +3090,7 @@ const calculatedAnalytics = useMemo(() => {
                           {taskPriorities.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}
                         </SelectContent>
                       </Select>
-
+                      
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <Button variant="outline" size="sm" className="h-8 text-sm w-full sm:w-[140px] justify-between">
@@ -3582,7 +3616,7 @@ const calculatedAnalytics = useMemo(() => {
                                                <td className="px-2 py-2 align-top">
                                                    <div className="flex items-center justify-start gap-1">
                                                         
-                                                       <Tooltip><TooltipTrigger asChild><Button size="icon" variant="ghost" className="w-7 h-7 text-gray-500 hover:text-blue-600" title="פתח לעריכה" onClick={async () => {
+                                                       <Tooltip><TooltipTrigger asChild><Button size="icon" variant="ghost" className="w-6 h-6 text-gray-500 hover:text-blue-600" title="פתח לעריכה" onClick={async () => {
   if (lead.expanded) {
     // Save and close
     // Simulate form submit for this lead
@@ -3592,7 +3626,7 @@ const calculatedAnalytics = useMemo(() => {
   } else {
     handleEditLead(lead);
   }
-}}><span role="img" aria-label="Edit">✎</span></Button></TooltipTrigger><TooltipContent>{'פתח/ערוך ליד'}</TooltipContent></Tooltip>
+}}><span role="img" aria-label="Edit" className="w-3 h-3">✎</span></Button></TooltipTrigger><TooltipContent>{'פתח/ערוך ליד'}</TooltipContent></Tooltip>
 <Tooltip>
   <TooltipTrigger asChild>
     <a
@@ -3603,14 +3637,35 @@ const calculatedAnalytics = useMemo(() => {
       <Button
         size="icon"
         variant="ghost"
-        className="w-7 h-7 text-green-600 hover:text-green-700"
+        className="w-6 h-6 text-green-600 hover:text-green-700"
       >
-        <FaWhatsapp className="w-4 h-4" />
+        <FaWhatsapp className="w-3 h-3" />
       </Button>
     </a>
   </TooltipTrigger>
   <TooltipContent>{'שלח וואטסאפ'}</TooltipContent>
-</Tooltip>                                                       <Tooltip><TooltipTrigger asChild><Button size="icon" variant="ghost" className="w-7 h-7 text-blue-600 hover:text-blue-700" onClick={() => handleClick2Call(lead.phoneNumber)}><span role="img" aria-label="Call">📞</span></Button></TooltipTrigger><TooltipContent>{'התקשר דרך המרכזיה'}</TooltipContent></Tooltip>
+</Tooltip> 
+
+                                                      <Tooltip><TooltipTrigger asChild><Button size="icon" variant="ghost" className="w-6 h-6 text-blue-600 hover:text-blue-700" onClick={() => handleClick2Call(lead.phoneNumber)}><span role="img" aria-label="Call" className="w-3 h-3">📞</span></Button></TooltipTrigger><TooltipContent>{'התקשר דרך המרכזיה'}</TooltipContent></Tooltip>
+                                                      <div className="flex gap-2">
+  {/* ...other buttons/fields... */}
+  {/* --- Duplicate Button (Split Arrow) --- */}
+  <Tooltip>
+    <TooltipTrigger asChild>
+      <Button
+        size="icon"
+        variant="ghost"
+        className="w-6 h-6 text-purple-600 hover:text-purple-700"
+        onClick={() => handleDuplicateLead(lead)}
+        title="שכפל ליד"
+      >
+        <FaCodeBranch className="w-3 h-3" />
+      </Button>
+    </TooltipTrigger>
+    <TooltipContent>{'שכפל ליד'}</TooltipContent>
+  </Tooltip>
+</div>
+                                                  
                                                    </div>
                                                </td>
                                            </tr>
@@ -3649,6 +3704,7 @@ const calculatedAnalytics = useMemo(() => {
                                                                        <Input type="datetime-local" className="mt-1 h-8 text-sm" value={editLeadAppointmentDateTime} onChange={(ev) => setEditLeadAppointmentDateTime(ev.target.value)} required />
                                                                    </Label>
                                                                )}
+                                                               
                                                            </div>
                                                            
                                                            <div className="border-t pt-3">
@@ -3716,14 +3772,14 @@ const calculatedAnalytics = useMemo(() => {
                                     </div>
                                     <div className="flex items-center gap-0.5 shrink-0">
                                          
-                                        <Button size="icon" variant="ghost" className="w-7 h-7 text-gray-500 hover:text-blue-600" title="פתח לעריכה" onClick={() => handleEditLead(lead)}><span role="img" aria-label="Edit">✎</span></Button>
-                                        <Tooltip><TooltipTrigger asChild><a href={`https://wa.me/${lead.phoneNumber}`} target="_blank" rel="noopener noreferrer"><Button size="icon" variant="ghost" className="w-7 h-7 text-green-600 hover:text-green-700"><span role="img" aria-label="WhatsApp">💬</span></Button></a></TooltipTrigger><TooltipContent>{'שלח וואטסאפ'}</TooltipContent></Tooltip> 
-                                        <Button size="icon" variant="ghost" className="w-7 h-7 text-blue-600 hover:text-blue-700" title="התקשר דרך המרכזיה" onClick={() => handleClick2Call(lead.phoneNumber)}><span role="img" aria-label="Call">📞</span></Button>
+                                        <Button size="icon" variant="ghost" className="w-6 h-6 text-gray-500 hover:text-blue-600" title="פתח לעריכה" onClick={() => handleEditLead(lead)}><span role="img" aria-label="Edit" className="w-3 h-3">✎</span></Button>
+                                        <Tooltip><TooltipTrigger asChild><a href={`https://wa.me/${lead.phoneNumber}`} target="_blank" rel="noopener noreferrer"><Button size="icon" variant="ghost" className="w-6 h-6 text-green-600 hover:text-green-700"><span role="img" aria-label="WhatsApp">💬</span></Button></a></TooltipTrigger><TooltipContent>{'שלח וואטסאפ'}</TooltipContent></Tooltip> 
+                                        <Button size="icon" variant="ghost" className="w-6 h-6 text-blue-600 hover:text-blue-700" title="התקשר דרך המרכזיה" onClick={() => handleClick2Call(lead.phoneNumber)}><span role="img" aria-label="Call" className="w-3 h-3">📞</span></Button>
                                         {/* Admin-only delete button */}
                                         {(currentUser?.role === 'admin' || role === 'admin') && (
                                           <Tooltip>
                                             <TooltipTrigger asChild>
-                                              <Button size="icon" variant="destructive" className="w-7 h-7 text-red-600 hover:text-red-700" onClick={() => handleDeleteLead(lead.id)} title="מחק ליד">
+                                              <Button size="icon" variant="destructive" className="w-6 h-6 text-red-600 hover:text-red-700" onClick={() => handleDeleteLead(lead.id)} title="מחק ליד">
                                                 <span role="img" aria-label="Delete">🗑️</span>
                                               </Button>
                                             </TooltipTrigger>
