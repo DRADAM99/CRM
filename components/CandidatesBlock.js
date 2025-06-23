@@ -18,9 +18,10 @@ const leadStatusConfig = {
   "הומלץ טיפול": { color: "bg-blue-500", priority: 2 },
   "לא הומלץ טיפול": { color: "bg-gray-400", priority: 3 },
   "ניתן מידע": { color: "bg-yellow-400", priority: 4 },
-  "נקבעה סדרה": { color: "bg-emerald-400", priority: 5 },
-  "לא מעוניינים": { color: "bg-gray-500", priority: 6 },
-  "יעוץ בוטל": { color: "bg-red-400", priority: 7 },
+  "הסדר תשלום": { color: "bg-purple-400", priority: 5 },
+  "נקבעה סדרה": { color: "bg-emerald-400", priority: 6 },
+  "לא מעוניינים": { color: "bg-gray-500", priority: 7 },
+  "יעוץ בוטל": { color: "bg-red-400", priority: 8 },
   Default: { color: "bg-gray-300", priority: 99 }
 };
 const leadColorTab = (status) => leadStatusConfig[status]?.color || leadStatusConfig.Default.color;
@@ -30,6 +31,7 @@ const candidatesStatuses = [
   "הומלץ טיפול",
   "לא הומלץ טיפול",
   "ניתן מידע",
+  "הסדר תשלום",
   "נקבעה סדרה",
   "לא מעוניינים",
   "יעוץ בוטל"
