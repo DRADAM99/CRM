@@ -14,7 +14,10 @@ function getLayoutPref(key, defaultValue) {
   } catch (e) { /* ignore */ }
   return defaultValue;
 }
-
+import '@fontsource/rubik/300.css';
+import '@fontsource/rubik/400.css';
+import '@fontsource/rubik/500.css';
+import '@fontsource/rubik/700.css';
 import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import Image from 'next/image';
 import { useRouter } from "next/navigation";
@@ -3099,7 +3102,7 @@ const calculatedAnalytics = useMemo(() => {
             <Card className="h-full flex flex-col">
               <CardHeader className="space-y-3">
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
-                  <CardTitle>{'מנהל משימות'}</CardTitle>
+                  <CardTitle className="text-xl font-bold">{'מנהל משימות'}</CardTitle>
                   <div className="flex flex-wrap items-center gap-2">
                     <Button 
                       variant="outline" 
@@ -3508,7 +3511,7 @@ const calculatedAnalytics = useMemo(() => {
                  {isFullView ? (
                     <div className="flex flex-col gap-2">
                         <div className="flex justify-between items-center">
-                            <CardTitle>{'ניהול לידים (מלא)'}</CardTitle>
+                            <CardTitle className="text-xl font-bold">{'ניהול לידים (מלא)'}</CardTitle>
                             <div className="flex gap-2">
                                 <Button size="sm" onClick={() => setShowAddLeadModal(true)}>{'+ הוסף ליד'}</Button>
                                 <Button onClick={() => setIsFullView(false)} size="sm" variant="outline">{'תצוגה מקוצרת'}</Button>

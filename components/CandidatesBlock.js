@@ -373,7 +373,7 @@ export default function CandidatesBlock({ isFullView: parentIsFullView, setIsFul
         <CardHeader>
           <div className="flex flex-col gap-2">
             <div className="flex justify-between items-center">
-              <CardTitle>{'מועמדים לתוכניות טיפול'}</CardTitle>
+              <CardTitle className="text-xl font-bold">{'מועמדים לתוכניות טיפול'}</CardTitle>
               <div className="flex gap-2">
                 <Button size="sm" onClick={() => parentSetIsFullView(v => !v)} variant="outline">
                   {parentIsFullView ? 'תצוגה מקוצרת' : 'תצוגה מלאה'}
