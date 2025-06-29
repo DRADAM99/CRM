@@ -119,7 +119,7 @@
   
   body {
     @apply bg-background text-foreground antialiased;
-    font-family: var(--font-geist-sans);
+    font-family: 'Rubik', Arial, Helvetica, sans-serif;
     background: #abd3d4 !important;
   }
 
