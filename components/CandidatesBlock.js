@@ -37,6 +37,17 @@ const candidatesStatuses = [
   "יעוץ בוטל"
 ];
 
+// --- Branch options and pastel colors ---
+const BRANCHES = [
+  { value: '', label: 'ללא סניף', color: 'bg-gray-200 text-gray-700' },
+  { value: 'רעננה', label: 'רעננה', color: 'bg-green-200 text-green-800' },
+  { value: 'מודיעין', label: 'מודיעין', color: 'bg-blue-200 text-blue-800' },
+];
+const branchColor = (branch) => {
+  const found = BRANCHES.find(b => b.value === branch);
+  return found ? found.color : 'bg-gray-200 text-gray-700';
+};
+
 // Utility for date formatting (copy from page.js)
 const formatDateTime = (date) => {
   if (!date) return "";
@@ -69,6 +80,7 @@ export default function CandidatesBlock({ isFullView: parentIsFullView, setIsFul
   const [editLeadMessage, setEditLeadMessage] = useState("");
   const [editLeadStatus, setEditLeadStatus] = useState("");
   const [editLeadSource, setEditLeadSource] = useState("");
+  const [editLeadBranch, setEditLeadBranch] = useState("");
   // Conversation update state
   const [showConvUpdate, setShowConvUpdate] = useState(null);
   const [newConversationText, setNewConversationText] = useState("");
@@ -115,6 +127,7 @@ export default function CandidatesBlock({ isFullView: parentIsFullView, setIsFul
           source: data.source || "",
           followUpCall: data.followUpCall || { active: false, count: 0 },
           conversationSummary: data.conversationSummary || [],
+          branch: data.branch || "",
         };
       });
       setLeads(fetchedLeads);
@@ -207,6 +220,7 @@ export default function CandidatesBlock({ isFullView: parentIsFullView, setIsFul
     setEditLeadMessage(lead.message);
     setEditLeadStatus(lead.status);
     setEditLeadSource(lead.source || "");
+    setEditLeadBranch(lead.branch || "");
   };
   const handleSaveLead = async (e, leadId) => {
     e.preventDefault();
@@ -220,8 +234,10 @@ export default function CandidatesBlock({ isFullView: parentIsFullView, setIsFul
         message: editLeadMessage,
         status: editLeadStatus,
         source: editLeadSource,
+        branch: editLeadBranch,
         updatedAt: serverTimestamp(),
       });
+      setEditLeadBranch("");
     } catch (error) {
       alert("שגיאה בשמירת הליד");
       setEditingLeadId(leadId); // Reopen the form if there was an error
@@ -541,6 +557,18 @@ export default function CandidatesBlock({ isFullView: parentIsFullView, setIsFul
                                     </Select>
                                   </Label>
                                   <Label className="block"><span className="text-gray-700 text-sm font-medium">{'מקור:'}</span><Input type="text" className="mt-1 h-8 text-sm" value={editLeadSource} onChange={ev => setEditLeadSource(ev.target.value)} /></Label>
+                                  <Label className="block"><span className="text-gray-700 text-sm font-medium">סניף:</span>
+                                    <Select value={editLeadBranch} onValueChange={setEditLeadBranch}>
+                                      <SelectTrigger className="mt-1 h-8 text-sm"><SelectValue placeholder="בחר סניף..." /></SelectTrigger>
+                                      <SelectContent className="text-right" dir="rtl">
+                                        {BRANCHES.filter(b => b.value).map(b => (
+                                          <SelectItem key={b.value} value={b.value}>
+                                            <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${b.color}`}>{b.label}</span>
+                                          </SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
+                                  </Label>
                                 </div>
                                 <div className="border-t pt-3">
                                   <div className="flex justify-between items-center mb-2">
@@ -598,6 +626,9 @@ export default function CandidatesBlock({ isFullView: parentIsFullView, setIsFul
                       <div className="font-bold text-sm truncate">{lead.fullName}</div>
                       <p className="text-xs text-gray-600 truncate">{lead.message}</p>
                       <p className="text-xs text-gray-500 truncate">{lead.status} - {formatDateTime(lead.createdAt)}</p>
+                      {lead.branch && (
+                        <span className={`inline-block rounded-full px-2 py-0.5 ml-1 text-xs font-medium ${branchColor(lead.branch)}`}>{lead.branch}</span>
+                      )}
                     </div>
                     <div className="flex items-center gap-0.5 shrink-0">
                       <Button size="icon" variant="ghost" className="w-6 h-6 text-gray-500 hover:text-blue-600" title="פתח לעריכה" onClick={() => handleEditLead(lead)}><span role="img" aria-label="Edit" className="w-3 h-3">✎</span></Button>

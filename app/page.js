@@ -390,7 +390,16 @@ const handleFollowUpClick = async (lead) => {
     if (holdDelayTimeout.current) clearTimeout(holdDelayTimeout.current);
     if (holdAnimationRef.current) cancelAnimationFrame(holdAnimationRef.current);
   };
-
+  const BRANCHES = [
+    { value: '', label: 'ללא סניף', color: 'bg-gray-200 text-gray-700' },
+    { value: 'רעננה', label: 'רעננה', color: 'bg-green-200 text-green-800' },
+    { value: 'מודיעין', label: 'מודיעין', color: 'bg-blue-200 text-blue-800' },
+  ];
+  
+  const branchColor = (branch) => {
+    const found = BRANCHES.find(b => b.value === branch);
+    return found ? found.color : 'bg-gray-200 text-gray-700';
+  };
 const [holdLeadId, setHoldLeadId] = useState(null);
 const [holdProgress, setHoldProgress] = useState(0);
 const holdAnimationRef = useRef();
@@ -683,6 +692,7 @@ const [selectedDate, setSelectedDate] = useState(new Date());
   const [editingCategory, setEditingCategory] = useState(taskCategories[0] || "");
   const [editingDueDate, setEditingDueDate] = useState("");
   const [editingDueTime, setEditingDueTime] = useState("");
+  const [editingBranch, setEditingBranch] = useState("");
   const [isLeadsFullView, setIsLeadsFullView] = useState(() => {
     if (typeof window !== 'undefined') {
       const v = localStorage.getItem('dashboard_isLeadsFullView');
@@ -702,7 +712,7 @@ const [selectedDate, setSelectedDate] = useState(new Date());
   const [newTaskDueDate, setNewTaskDueDate] = useState("");
   const [newTaskDueTime, setNewTaskDueTime] = useState("");
   const [newTaskAssignTo, setNewTaskAssignTo] = useState("");
-
+  const [newTaskBranch, setNewTaskBranch] = useState("");
   // First, add a new state for showing the new task form
   const [showNewTaskForm, setShowNewTaskForm] = useState(false);
 
@@ -771,7 +781,8 @@ const [selectedDate, setSelectedDate] = useState(new Date());
         isArchived: false,
         done: false,
         completedBy: null,
-        completedAt: null
+        completedAt: null,
+        branch: newTaskBranch,
       };
 
       console.log("Saving task with data:", newTask);
@@ -786,6 +797,7 @@ const [selectedDate, setSelectedDate] = useState(new Date());
       setNewTaskDueTime("");
       setNewTaskAssignTo("");
       setShowTaskModal(false);
+      setNewTaskBranch('');
     } catch (error) {
       console.error("Error creating task:", error);
       alert("שגיאה ביצירת המשימה. נסה שוב.");
@@ -1155,6 +1167,21 @@ const [selectedDate, setSelectedDate] = useState(new Date());
                 />
               </div>
             </div>
+            <div className="flex-1">
+              <Label className="text-xs">סניף:</Label>
+              <Select value={newTaskBranch} onValueChange={setNewTaskBranch}>
+                <SelectTrigger className="h-8 text-sm">
+                  <SelectValue placeholder="בחר סניף..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {BRANCHES.filter(b => b.value).map(b => (
+                    <SelectItem key={b.value} value={b.value}>
+                      <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${b.color}`}>{b.label}</span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
             <div className="flex justify-end space-x-2 space-x-reverse pt-1">
               <Button type="submit" size="sm">{'צור משימה'}</Button>
               <Button 
@@ -1217,6 +1244,21 @@ const [selectedDate, setSelectedDate] = useState(new Date());
               <div className="flex-1"><Label className="text-xs">תאריך:</Label><Input type="date" value={editingDueDate} onChange={(e) => setEditingDueDate(e.target.value)} className="h-8 text-sm" required /></div>
               <div className="flex-1"><Label className="text-xs">שעה:</Label><Input type="time" value={editingDueTime} onChange={(e) => setEditingDueTime(e.target.value)} className="h-8 text-sm" /></div>
             </div>
+            <div className="flex-1">
+              <Label className="text-xs">סניף:</Label>
+              <Select value={editingBranch} onValueChange={setEditingBranch}>
+                <SelectTrigger className="h-8 text-sm">
+                  <SelectValue placeholder="בחר סניף..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {BRANCHES.filter(b => b.value).map(b => (
+                    <SelectItem key={b.value} value={b.value}>
+                      <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${b.color}`}>{b.label}</span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
             <div className="flex justify-end space-x-2 space-x-reverse pt-1">
               <Button type="submit" size="sm">{'שמור'}</Button>
               <Button type="button" variant="outline" size="sm" onClick={handleCancelEdit}>{'ביטול'}</Button>
@@ -1233,6 +1275,31 @@ const [selectedDate, setSelectedDate] = useState(new Date());
     const bgColor = isCreator ? 'bg-blue-50' : isAssignee ? 'bg-green-50' : 'bg-white';
     const sortedReplies = task.replies?.sort((a, b) => b.timestamp - a.timestamp) || [];
 
+    // Helper to render phone numbers with click-to-call
+    const renderTextWithPhone = (text) => {
+      if (!text) return null;
+      const regex = /(#05\d{8})/g;
+      const parts = [];
+      let lastIndex = 0;
+      let match;
+      while ((match = regex.exec(text)) !== null) {
+        const phone = match[1];
+        const number = phone.slice(1);
+        parts.push(text.slice(lastIndex, match.index));
+        parts.push(
+          <span key={match.index} className="inline-flex items-center gap-1">
+            {phone}
+            <Button size="xs" variant="ghost" className="p-0 ml-1 text-blue-600 hover:text-blue-800" onClick={() => handleClick2Call(number)} title="התקשר">
+              <span role="img" aria-label="Call">📞</span>
+            </Button>
+          </span>
+        );
+        lastIndex = match.index + phone.length;
+      }
+      parts.push(text.slice(lastIndex));
+      return parts;
+    };
+
     return (
       <div key={task.id} className={`w-full p-3 rounded-lg shadow-sm border ${bgColor} relative`}>
         <div className="flex items-start justify-between gap-2">
@@ -1245,12 +1312,12 @@ const [selectedDate, setSelectedDate] = useState(new Date());
                 aria-label={`Mark task ${task.title}`} 
               />
               <span className={`font-medium ${task.done ? 'line-through text-gray-500' : ''}`}>
-                {task.title}
+                {renderTextWithPhone(task.title)}
               </span>
             </div>
             {task.subtitle && (
               <p className={`text-sm text-gray-600 mb-2 ${task.done ? 'line-through' : ''}`}>
-                {task.subtitle}
+                {renderTextWithPhone(task.subtitle)}
               </p>
             )}
             <div className="text-xs text-gray-500 mt-1 space-x-2 space-x-reverse">
@@ -1285,6 +1352,7 @@ const [selectedDate, setSelectedDate] = useState(new Date());
                       }
                     }
                     setEditingAssignTo(task.assignTo || '');
+                    setEditingBranch(task.branch || '');
                   }}
                 >
                   <Pencil className="h-4 w-4" />
@@ -1425,6 +1493,7 @@ const [selectedDate, setSelectedDate] = useState(new Date());
   const [editLeadSource, setEditLeadSource] = useState("");
   const [editLeadAppointmentDateTime, setEditLeadAppointmentDateTime] = useState("");
   const [editLeadNLP, setEditLeadNLP] = useState("");
+  const [editLeadBranch, setEditLeadBranch] = useState("");
   const [newConversationText, setNewConversationText] = useState("");
   const [showConvUpdate, setShowConvUpdate] = useState(null);
   const [leadSortBy, setLeadSortBy] = useState("priority");
@@ -2047,6 +2116,7 @@ const handleNLPSubmit = useCallback(async (e) => {
               done: false,
               completedBy: null,
               completedAt: null,
+              branch: editingBranch,
             }
           : task
       )
@@ -2060,7 +2130,8 @@ const handleNLPSubmit = useCallback(async (e) => {
     setEditingCategory(taskCategories[0] || "");
     setEditingDueDate("");
     setEditingDueTime("");
-  }, [editingTaskId, editingAssignTo, editingTitle, editingSubtitle, editingPriority, editingCategory, editingDueDate, editingDueTime, setTasks, setEditingTaskId, setEditingAssignTo, setEditingTitle, setEditingSubtitle, setEditingPriority, setEditingCategory, setEditingDueDate, setEditingDueTime, currentUser]);
+    setEditingBranch('');
+  }, [editingTaskId, editingAssignTo, editingTitle, editingSubtitle, editingPriority, editingCategory, editingDueDate, editingDueTime, setTasks, setEditingTaskId, setEditingAssignTo, setEditingTitle, setEditingSubtitle, setEditingPriority, setEditingCategory, setEditingDueDate, setEditingDueTime, currentUser, editingBranch]);
 
   /**
   * Cancels the task editing process and clears the editing form state.
@@ -2442,6 +2513,7 @@ const handleNLPSubmit = useCallback(async (e) => {
         message: editLeadMessage,
         status: editLeadStatus,
         source: editLeadSource,
+        branch: editLeadBranch, 
         appointmentDateTime: editLeadStatus === 'תור נקבע' ? (appointmentDate || null) : null,
         updatedAt: serverTimestamp(),
         updatedBy: currentUser.uid
@@ -2475,7 +2547,8 @@ const handleNLPSubmit = useCallback(async (e) => {
           isArchived: false,
           done: false,
           completedBy: null,
-          completedAt: null
+          completedAt: null,
+          branch: editLeadBranch,
         };
 
         await setDoc(taskRef, newTask);
@@ -2495,7 +2568,8 @@ const handleNLPSubmit = useCallback(async (e) => {
     editLeadMessage,
     editLeadStatus,
     editLeadSource,
-    editLeadAppointmentDateTime
+    editLeadAppointmentDateTime,
+    editLeadBranch
   ]);
 
   /** Collapses a lead's detailed/editing view. */
@@ -3266,6 +3340,7 @@ const calculatedAnalytics = useMemo(() => {
                                                       }
                                                     }
                                                     setEditingAssignTo(task.assignTo || '');
+                                                    setEditingBranch(task.branch || '');
                                                   }}
                                                 >
                                                   <Pencil className="h-4 w-4" />
@@ -3703,8 +3778,24 @@ const calculatedAnalytics = useMemo(() => {
                                                                    <Label className="block"><span className="text-gray-700 text-sm font-medium">{'תאריך ושעת פגישה:'}</span>
                                                                        <Input type="datetime-local" className="mt-1 h-8 text-sm" value={editLeadAppointmentDateTime} onChange={(ev) => setEditLeadAppointmentDateTime(ev.target.value)} required />
                                                                    </Label>
+                                                                   
                                                                )}
-                                                               
+                                                               <Label className="block">
+  <span className="text-gray-700 text-sm font-medium">{'סניף:'}</span>
+  <Select value={editLeadBranch} onValueChange={setEditLeadBranch}>
+    <SelectTrigger className="mt-1 h-8 text-sm">
+      <SelectValue placeholder="בחר סניף..." />
+    </SelectTrigger>
+    <SelectContent>
+      {BRANCHES.filter(b => b.value).map(b => (
+        <SelectItem key={b.value} value={b.value}>
+          <span className={`inline-block w-3 h-3 rounded-full mr-2 align-middle ${b.color}`}></span>
+          {b.label}
+        </SelectItem>
+      ))}
+    </SelectContent>
+  </Select>
+</Label>
                                                            </div>
                                                            
                                                            <div className="border-t pt-3">
@@ -4057,6 +4148,22 @@ const calculatedAnalytics = useMemo(() => {
                            onChange={(e) => setNewLeadSource(e.target.value)}
                            placeholder="לדוגמא: פייסבוק, טלפון, המלצה..."
                          />
+                         <Label className="block">
+  <span className="text-gray-700 text-sm font-medium">{'סניף:'}</span>
+  <Select value={editLeadBranch} onValueChange={setEditLeadBranch}>
+    <SelectTrigger className="mt-1 h-8 text-sm">
+      <SelectValue placeholder="בחר סניף..." />
+    </SelectTrigger>
+    <SelectContent>
+      {BRANCHES.filter(b => b.value).map(b => (
+        <SelectItem key={b.value} value={b.value}>
+          <span className={`inline-block w-3 h-3 rounded-full mr-2 align-middle ${b.color}`}></span>
+          {b.label}
+        </SelectItem>
+      ))}
+    </SelectContent>
+  </Select>
+</Label>
                        </div>
                      </div>
                      
@@ -4183,6 +4290,21 @@ const calculatedAnalytics = useMemo(() => {
                 />
               </div>
             </div>
+            <div className="flex-1">
+              <Label className="text-xs">סניף:</Label>
+              <Select value={newTaskBranch} onValueChange={setNewTaskBranch}>
+                <SelectTrigger className="h-8 text-sm">
+                  <SelectValue placeholder="בחר סניף..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {BRANCHES.filter(b => b.value).map(b => (
+                    <SelectItem key={b.value} value={b.value}>
+                      <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${b.color}`}>{b.label}</span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
             <div className="flex justify-end space-x-2 space-x-reverse pt-1">
               <Button type="submit" size="sm">{'צור משימה'}</Button>
               <Button 
@@ -4287,6 +4409,21 @@ const renderNewTaskForm = () => {
               className="h-8 text-sm" 
             />
           </div>
+        </div>
+        <div className="flex-1">
+          <Label className="text-xs">סניף:</Label>
+          <Select value={newTaskBranch} onValueChange={setNewTaskBranch}>
+            <SelectTrigger className="h-8 text-sm">
+              <SelectValue placeholder="בחר סניף..." />
+            </SelectTrigger>
+            <SelectContent>
+              {BRANCHES.filter(b => b.value).map(b => (
+                <SelectItem key={b.value} value={b.value}>
+                  <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${b.color}`}>{b.label}</span>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
         <div className="flex justify-end space-x-2 space-x-reverse pt-1">
           <Button type="submit" size="sm">{'צור משימה'}</Button>
