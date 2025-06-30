@@ -252,7 +252,7 @@ export default function Dashboard() {
   const [role, setRole] = useState("");
   const [alias, setAlias] = useState("");
   const [users, setUsers] = useState([]);
-  
+  const [userExt, setUserExt] = useState("");
   // Single tasks state declaration
   const [tasks, setTasks] = useState([]);
   const [replyingToTaskId, setReplyingToTaskId] = useState(null);
@@ -273,11 +273,19 @@ const handleCategoryDragEnd = (event) => {
   updateKanbanCategoryOrder(newOrder);
 };
 const handleClick2Call = async (phoneNumber) => {
+  if (!userExt) {
+    toast({
+      title: "לא מוגדר שלוחה",
+      description: "לא הוגדרה שלוחה (EXT) למשתמש זה. פנה למנהל המערכת.",
+      variant: "destructive"
+    });
+    return;
+  }
   const apiUrl = "https://master.ippbx.co.il/ippbx_api/v1.4/api/info/click2call";
   const payload = {
     token_id: "22K3TWfeifaCPUyA",
     phone_number: phoneNumber,
-    extension_number: "104",
+    extension_number: userExt, // <-- Use user's EXT
     extension_password: "bdb307dc55bf1e679c296ee5c73215cb"
   };
   try {
@@ -473,6 +481,7 @@ const updateKanbanCategoryOrder = async (newOrder) => {
           const data = userSnap.data();
           setAlias(data.alias || currentUser.email || "");
           setRole(data.role || "staff");
+          setUserExt(data.EXT || ""); // <-- Fetch EXT
         }
       } catch (error) {
         console.error("Error fetching user data:", error);
