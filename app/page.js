@@ -1,4 +1,4 @@
-// Version 6.7 - Collapse/expand Kanban
+// Version 6.9 - Branch tag on Tasks
 "use client";
 
 // Utility functions for layout persistence
@@ -1333,80 +1333,85 @@ const [selectedDate, setSelectedDate] = useState(new Date());
             {/* Add TaskTabs component */}
             <TaskTabs taskId={task.id} currentUser={currentUser} />
           </div>
-          
-          <div className="flex items-center gap-1">
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8"
-                  onClick={() => {
-                    setEditingTaskId(task.id);
-                    setEditingTitle(task.title);
-                    setEditingSubtitle(task.subtitle || '');
-                    setEditingPriority(task.priority);
-                    setEditingCategory(task.category);
-                    if (task.dueDate) {
-                      const due = new Date(task.dueDate);
-                      if (!isNaN(due.getTime())) {
-                        setEditingDueDate(due.toLocaleDateString('en-CA'));
-                        setEditingDueTime(due.toTimeString().slice(0, 5));
-                      }
-                    }
-                    setEditingAssignTo(task.assignTo || '');
-                    setEditingBranch(task.branch || '');
-                  }}
-                >
-                  <Pencil className="h-4 w-4" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>ערוך משימה</TooltipContent>
-            </Tooltip>
-
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8 relative"
-                  onClick={() => {
-                    setReplyingToTaskId(task.id);
-                    setReplyInputValue("");
-                  }}
-                >
-                  <MessageCircle className="h-4 w-4" />
-                  {hasUnreadReplies && (
-                    <span className="absolute -top-1 -right-1 h-3 w-3 bg-red-500 rounded-full" />
-                  )}
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>הוסף תגובה</TooltipContent>
-            </Tooltip>
-
-            {!task.done && (
+          <div className="flex flex-col items-end gap-1 min-w-[70px]">
+            {/* Branch tag */}
+            {task.branch && (
+              <span className={`mb-1 inline-block rounded-full px-2 py-0.5 text-xs font-medium ${branchColor(task.branch)}`}>{task.branch}</span>
+            )}
+            <div className="flex items-center gap-1">
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button
                     variant="ghost"
                     size="icon"
-                    className={`w-6 h-6 relative ${task.hasUnreadNudges ? 'text-orange-500' : 'text-gray-400'} hover:text-orange-600`}
-                    title="שלח תזכורת" 
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleNudgeTask(task.id);
+                    className="h-8 w-8"
+                    onClick={() => {
+                      setEditingTaskId(task.id);
+                      setEditingTitle(task.title);
+                      setEditingSubtitle(task.subtitle || '');
+                      setEditingPriority(task.priority);
+                      setEditingCategory(task.category);
+                      if (task.dueDate) {
+                        const due = new Date(task.dueDate);
+                        if (!isNaN(due.getTime())) {
+                          setEditingDueDate(due.toLocaleDateString('en-CA'));
+                          setEditingDueTime(due.toTimeString().slice(0, 5));
+                        }
+                      }
+                      setEditingAssignTo(task.assignTo || '');
+                      setEditingBranch(task.branch || '');
                     }}
-                    onPointerDown={(e) => e.stopPropagation()}
                   >
-                    <Bell className="h-4 w-4" />
-                    {task.hasUnreadNudges && (
-                      <span className="absolute -top-1 -right-1 h-2 w-2 bg-orange-500 rounded-full" />
+                    <Pencil className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>ערוך משימה</TooltipContent>
+              </Tooltip>
+
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 relative"
+                    onClick={() => {
+                      setReplyingToTaskId(task.id);
+                      setReplyInputValue("");
+                    }}
+                  >
+                    <MessageCircle className="h-4 w-4" />
+                    {hasUnreadReplies && (
+                      <span className="absolute -top-1 -right-1 h-3 w-3 bg-red-500 rounded-full" />
                     )}
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent>שלח תזכורת</TooltipContent>
+                <TooltipContent>הוסף תגובה</TooltipContent>
               </Tooltip>
-            )}
+
+              {!task.done && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className={`w-6 h-6 relative ${task.hasUnreadNudges ? 'text-orange-500' : 'text-gray-400'} hover:text-orange-600`}
+                      title="שלח תזכורת" 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleNudgeTask(task.id);
+                      }}
+                      onPointerDown={(e) => e.stopPropagation()}
+                    >
+                      <Bell className="h-4 w-4" />
+                      {task.hasUnreadNudges && (
+                        <span className="absolute -top-1 -right-1 h-2 w-2 bg-orange-500 rounded-full" />
+                      )}
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>שלח תזכורת</TooltipContent>
+                </Tooltip>
+              )}
+            </div>
           </div>
         </div>
             
@@ -3077,7 +3082,7 @@ const calculatedAnalytics = useMemo(() => {
   </div>
 
   <div className="w-full sm:w-48 text-center sm:text-left text-sm text-gray-500 flex flex-col items-center sm:items-end sm:ml-0">
-    <span>{'Version 6.8'}</span>
+    <span>{'Version 6.9'}</span>
     <button
       className="text-xs text-red-600 underline"
       onClick={() => {
