@@ -102,9 +102,7 @@ import { TaskTabs } from "@/components/TaskTabs";
 // Add this import at the top with other imports
 import { Switch as MuiSwitch } from '@mui/material';
 import { styled } from '@mui/material/styles';
-import { IconButton, Chip } from '@mui/material';
-import CalendarTodayIcon from '@mui/icons-material/CalendarToday';
-import AccessTimeIcon from '@mui/icons-material/AccessTime';
+
 
 // Add this styled component definition before the Dashboard component
 const IOSSwitch = styled((props) => (
