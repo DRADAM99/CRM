@@ -1023,10 +1023,18 @@ export default function FullCalendarDemo({ isCalendarFullView, taskCategories: p
                     <input type="checkbox" checked={!!modalEvent.done} onChange={handleModalToggleDone} disabled={modalUpdating} /> בוצע
                   </label>
                   <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 500 }}>
-                    <input type="checkbox" checked={!!modalEvent.messageSent} onChange={handleModalToggleMessageSent} disabled={modalUpdating} /> הודעה נשלחה
+                    <input type="checkbox" checked={!!modalEvent.messageSent} onChange={handleModalToggleMessageSent} disabled={modalUpdating} /> הודעה בדיקה
                   </label>
                   {modalUpdating && <span style={{ fontSize: 13, color: '#888' }}>מעדכן...</span>}
                 </div>
+                {modalEvent && modalEvent.leadId && (
+                  <button
+                    onClick={() => window.dispatchEvent(new CustomEvent('open-lead', { detail: { leadId: modalEvent.leadId } }))}
+                    style={{ background: '#bee4e5', color: '#222', border: 'none', borderRadius: 6, padding: '8px 18px', fontWeight: 600, fontSize: 16, cursor: 'pointer', marginTop: 12, marginBottom: 12 }}
+                  >
+                    פתח ליד
+                  </button>
+                )}
                 <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12, marginTop: 18 }}>
                   <button onClick={() => setModalEditing(true)} style={{ background: '#eee', color: '#222', border: 'none', borderRadius: 6, padding: '8px 18px', fontWeight: 600, fontSize: 16, cursor: 'pointer' }}>ערוך</button>
                   <button onClick={() => setShowEventModal(false)} style={{ background: '#2196f3', color: '#fff', border: 'none', borderRadius: 6, padding: '8px 18px', fontWeight: 600, fontSize: 16, cursor: 'pointer' }}>סגור</button>

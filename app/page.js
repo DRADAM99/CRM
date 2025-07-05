@@ -1,4 +1,4 @@
-// Version 6.9 - Branch tag on Tasks
+// Version 7.0- Assign 
 "use client";
 
 // Utility functions for layout persistence
@@ -102,6 +102,9 @@ import { TaskTabs } from "@/components/TaskTabs";
 // Add this import at the top with other imports
 import { Switch as MuiSwitch } from '@mui/material';
 import { styled } from '@mui/material/styles';
+import { IconButton, Chip } from '@mui/material';
+import CalendarTodayIcon from '@mui/icons-material/CalendarToday';
+import AccessTimeIcon from '@mui/icons-material/AccessTime';
 
 // Add this styled component definition before the Dashboard component
 const IOSSwitch = styled((props) => (
@@ -262,7 +265,14 @@ export default function Dashboard() {
   const [kanbanCollapsed, setKanbanCollapsed] = useState({});
   // --- Add per-task collapsed state ---
   const [kanbanTaskCollapsed, setKanbanTaskCollapsed] = useState({});
-// Add this handler for category drag end
+  // Add this state for lead Task
+  const [leadTaskText, setLeadTaskText] = useState("");
+  const [leadTaskAssignTo, setLeadTaskAssignTo] = useState("");
+  const [leadTaskCategory, setLeadTaskCategory] = useState("");
+  const [leadTaskDueDate, setLeadTaskDueDate] = useState("");
+  const [leadTaskDueTime, setLeadTaskDueTime] = useState("");
+  
+  // Add this handler for category drag end
 const handleCategoryDragEnd = (event) => {
   const { active, over } = event;
   if (!over || active.id === over.id) return;
@@ -271,6 +281,44 @@ const handleCategoryDragEnd = (event) => {
   if (oldIndex === -1 || newIndex === -1) return;
   const newOrder = arrayMove(taskCategories, oldIndex, newIndex);
   updateKanbanCategoryOrder(newOrder);
+};
+const handleCreateTaskFromLead = async (lead) => {
+  if (!leadTaskText.trim() || !leadTaskAssignTo || !leadTaskCategory || !leadTaskDueDate) return;
+  try {
+    const assignedUser = assignableUsers.find(u => u.alias === leadTaskAssignTo || u.email === leadTaskAssignTo);
+    const taskRef = doc(collection(db, "tasks"));
+    await setDoc(taskRef, {
+      id: taskRef.id,
+      userId: currentUser.uid,
+      creatorId: currentUser.uid,
+      creatorAlias: alias || currentUser.email || "",
+      title: leadTaskText,
+      subtitle: `נוצר מליד: ${lead.fullName}`,
+      assignTo: assignedUser ? assignedUser.email : leadTaskAssignTo,
+      category: leadTaskCategory,
+      status: "פתוח",
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+      dueDate: leadTaskDueDate && leadTaskDueTime
+        ? new Date(`${leadTaskDueDate}T${leadTaskDueTime}`).toISOString()
+        : new Date(leadTaskDueDate).toISOString(),
+      replies: [],
+      isRead: false,
+      isArchived: false,
+      done: false,
+      completedBy: null,
+      completedAt: null,
+      leadId: lead.id // <-- Add this line
+    });
+    setLeadTaskText("");
+    setLeadTaskAssignTo("");
+    setLeadTaskCategory("להתקשר");
+    setLeadTaskDueDate("");
+    setLeadTaskDueTime("");
+    toast({ title: "המשימה נוצרה בהצלחה" });
+  } catch (error) {
+    alert("שגיאה ביצירת משימה");
+  }
 };
 const handleClick2Call = async (phoneNumber) => {
   if (!userExt) {
@@ -317,7 +365,6 @@ const handleClick2Call = async (phoneNumber) => {
     });
   }
 };
-
   // --- Add Kanban collapse/expand handler ---
   const handleToggleKanbanCollapse = async (category) => {
     setKanbanCollapsed((prev) => {
@@ -415,7 +462,7 @@ const [holdLeadId, setHoldLeadId] = useState(null);
 const [holdProgress, setHoldProgress] = useState(0);
 const holdAnimationRef = useRef();
 const HOLD_DURATION = 1500;
-
+const [expandedLeadId, setExpandedLeadId] = useState(null);
 // When lead status changes, reset followUpCall
 const handleStatusChange = async (leadId, newStatus) => {
   const leadRef = doc(db, 'leads', leadId);
@@ -468,7 +515,16 @@ const updateKanbanCategoryOrder = async (newOrder) => {
     }
     setLoading(false);
   }, [loading, currentUser, router]);
-
+  // --- Handle lead expand/collapse ---
+  useEffect(() => {
+    function handleOpenLead(e) {
+      if (e.detail && e.detail.leadId) {
+        setExpandedLeadId(e.detail.leadId);
+      }
+    }
+    window.addEventListener('open-lead', handleOpenLead);
+    return () => window.removeEventListener('open-lead', handleOpenLead);
+  }, []);
   // Fetch user's alias
   useEffect(() => {
     const fetchUserData = async () => {
@@ -2410,7 +2466,6 @@ const handleNLPSubmit = useCallback(async (e) => {
     setEditLeadNLP("");
     setNewConversationText("");
 
-
     if (lead.appointmentDateTime) {
         try {
             const apptDate = new Date(lead.appointmentDateTime);
@@ -2430,12 +2485,7 @@ const handleNLPSubmit = useCallback(async (e) => {
     } else {
         setEditLeadAppointmentDateTime("");
     }
-
-
-    setLeads((prevLeads) =>
-      prevLeads.map((l) => ({ ...l, expanded: l.id === lead.id }))
-    );
-  }, [setEditingLeadId, setEditLeadFullName, setEditLeadPhone, setEditLeadMessage, setEditLeadStatus, setEditLeadSource, setEditLeadNLP, setNewConversationText, setEditLeadAppointmentDateTime, setLeads]);
+  }, [setEditingLeadId, setEditLeadFullName, setEditLeadPhone, setEditLeadMessage, setEditLeadStatus, setEditLeadSource, setEditLeadNLP, setNewConversationText, setEditLeadAppointmentDateTime]);
 
   /** Creates a follow-up task from lead edit form and saves to Firestore */
   const handleLeadNLPSubmit = useCallback(async (leadId) => {
@@ -3091,7 +3141,7 @@ const calculatedAnalytics = useMemo(() => {
   </div>
 
   <div className="w-full sm:w-48 text-center sm:text-left text-sm text-gray-500 flex flex-col items-center sm:items-end sm:ml-0">
-    <span>{'Version 6.9'}</span>
+    <span>{'Version 7.0'}</span>
     <button
       className="text-xs text-red-600 underline"
       onClick={() => {
@@ -3709,14 +3759,14 @@ const calculatedAnalytics = useMemo(() => {
                                                    <div className="flex items-center justify-start gap-1">
                                                         
                                                        <Tooltip><TooltipTrigger asChild><Button size="icon" variant="ghost" className="w-6 h-6 text-gray-500 hover:text-blue-600" title="פתח לעריכה" onClick={async () => {
-  if (lead.expanded) {
+  if (lead.id === expandedLeadId) {
     // Save and close
-    // Simulate form submit for this lead
     const fakeEvent = { preventDefault: () => {} };
     await handleSaveLead(fakeEvent, lead.id);
-    closeLeadId(lead.id);
+    setExpandedLeadId(null);
   } else {
     handleEditLead(lead);
+    setExpandedLeadId(lead.id);
   }
 }}><span role="img" aria-label="Edit" className="w-3 h-3">✎</span></Button></TooltipTrigger><TooltipContent>{'פתח/ערוך ליד'}</TooltipContent></Tooltip>
 <Tooltip>
@@ -3762,7 +3812,7 @@ const calculatedAnalytics = useMemo(() => {
                                                </td>
                                            </tr>
                                            
-                                           {lead.expanded && (
+                                           {lead.id === expandedLeadId && (
                                                <tr key={`expanded-${lead.id}`} className="border-b bg-blue-50">
                                                    <td colSpan={7} className="p-4">
                                                        <form onSubmit={(e) => handleSaveLead(e, lead.id)} className="space-y-4">
@@ -3838,12 +3888,41 @@ const calculatedAnalytics = useMemo(() => {
                                                            </div>
                                                            
                                                            <div className="border-t pt-3">
-                                                               <Label className="font-semibold text-sm block mb-1">{'הוסף משימת המשך (NLP):'}</Label>
-                                                               <div className="flex gap-2">
-                                                                   <Input type="text" className="h-8 text-sm" placeholder="לדוגמא: לקבוע פגישה מחר ב-10:00..." value={editLeadNLP} onChange={(ev) => setEditLeadNLP(ev.target.value)} />
-                                                                   <Button type="button" size="sm" onClick={() => handleLeadNLPSubmit(lead.id)} className="shrink-0">{'➕ משימה'}</Button>
+                                                               <Label className="font-semibold text-sm block mb-1">{'הוסף משימה מהליד:'}</Label>
+                                                               <div className="flex flex-col md:flex-row gap-2">
+                                                                   <Input type="text" className="h-8 text-sm flex-1" placeholder="תיאור משימה..." value={leadTaskText} onChange={ev => setLeadTaskText(ev.target.value)} />
+                                                                   <Select value={leadTaskAssignTo} onValueChange={setLeadTaskAssignTo}>
+                                                                     <SelectTrigger className="h-8 text-sm w-32"><SelectValue placeholder="מוקצה ל..." /></SelectTrigger>
+                                                                     <SelectContent>
+                                                                       {assignableUsers.map(user => (
+                                                                         <SelectItem key={user.id} value={user.alias || user.email}>{user.alias || user.email}</SelectItem>
+                                                                       ))}
+                                                                     </SelectContent>
+                                                                   </Select>
+                                                                   <Select value={leadTaskCategory} onValueChange={setLeadTaskCategory}>
+                                                                     <SelectTrigger className="h-8 text-sm w-32"><SelectValue placeholder="קטגוריה..." /></SelectTrigger>
+                                                                     <SelectContent>
+                                                                       {taskCategories.map(cat => (
+                                                                         <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                                                                       ))}
+                                                                     </SelectContent>
+                                                                   </Select>
+                                                                   <input
+                                                                     type="date"
+                                                                     className="input-icon"
+                                                                     value={leadTaskDueDate}
+                                                                     onChange={ev => setLeadTaskDueDate(ev.target.value)}
+                                                                   />
+                                                                   <input
+                                                                     type="time"
+                                                                     className="input-icon"
+                                                                     value={leadTaskDueTime}
+                                                                     onChange={ev => setLeadTaskDueTime(ev.target.value)}
+                                                                   />
+                                                                   <Button type="button" size="sm" onClick={() => handleCreateTaskFromLead(lead)} className="shrink-0">{'➕ משימה'}</Button>
+                                                                 </div>
                                                                </div>
-                                                           </div>
+                                                           
                                                            
                                                            <div className="flex gap-2 justify-end border-t pt-3 mt-4">
                                                                <Button type="submit" size="sm">{'שמור שינויים'}</Button>

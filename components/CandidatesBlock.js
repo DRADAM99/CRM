@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
 import { db } from "../firebase";
-import { collection, onSnapshot, addDoc, updateDoc, doc, serverTimestamp, arrayUnion, setDoc } from "firebase/firestore";
+import { collection, onSnapshot, addDoc, updateDoc, doc, serverTimestamp, arrayUnion, setDoc, getDocs } from "firebase/firestore";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -91,7 +91,13 @@ export default function CandidatesBlock({ isFullView: parentIsFullView, setIsFul
   const HOLD_DURATION = 1500;
   // Add state for new task creation:
   const [newTaskText, setNewTaskText] = useState("");
-  const [newTaskAlias, setNewTaskAlias] = useState("");
+  const [newTaskAssignTo, setNewTaskAssignTo] = useState("");
+  const [newTaskCategory, setNewTaskCategory] = useState("להתקשר");
+  const [newTaskDueDate, setNewTaskDueDate] = useState("");
+  const [newTaskDueTime, setNewTaskDueTime] = useState("");
+  // Add state for assignable users and task categories
+  const [assignableUsers, setAssignableUsers] = useState([]);
+  const [taskCategories, setTaskCategories] = useState(["להתקשר", "לקבוע סדרה", "דוחות", "תשלומים", "תוכנית טיפול", "אחר"]);
 
   const didMountStatuses = useRef(false);
 
@@ -133,6 +139,28 @@ export default function CandidatesBlock({ isFullView: parentIsFullView, setIsFul
       setLeads(fetchedLeads);
     });
     return () => unsubscribe();
+  }, []);
+
+  // Fetch assignable users from Firestore
+  useEffect(() => {
+    const fetchUsers = async () => {
+      try {
+        const querySnapshot = await getDocs(collection(db, "users"));
+        const users = querySnapshot.docs.map((doc) => {
+          const data = doc.data();
+          return {
+            id: doc.id,
+            email: data.email || "",
+            alias: data.alias || data.email || "",
+            role: data.role || "staff",
+          };
+        });
+        setAssignableUsers(users);
+      } catch (error) {
+        console.error("שגיאה בטעינת משתמשים:", error);
+      }
+    };
+    fetchUsers();
   }, []);
 
   // --- Sorting logic ---
@@ -335,8 +363,9 @@ export default function CandidatesBlock({ isFullView: parentIsFullView, setIsFul
 
   // --- Add handler for creating a task from a lead:
   const handleCreateTaskFromLead = async (lead) => {
-    if (!newTaskText.trim() || !newTaskAlias.trim()) return;
+    if (!newTaskText.trim() || !newTaskAssignTo || !newTaskCategory || !newTaskDueDate) return;
     try {
+      const assignedUser = assignableUsers.find(u => u.alias === newTaskAssignTo || u.email === newTaskAssignTo);
       const taskRef = doc(collection(db, "tasks"));
       await setDoc(taskRef, {
         id: taskRef.id,
@@ -344,10 +373,14 @@ export default function CandidatesBlock({ isFullView: parentIsFullView, setIsFul
         creatorId: lead.id, // or current user if available
         title: newTaskText,
         subtitle: `נוצר מליד: ${lead.fullName}`,
-        assignTo: newTaskAlias.replace(/^@/, ""),
+        assignTo: assignedUser ? assignedUser.email : newTaskAssignTo,
+        category: newTaskCategory,
         status: "פתוח",
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
+        dueDate: newTaskDueDate && newTaskDueTime
+          ? new Date(`${newTaskDueDate}T${newTaskDueTime}`).toISOString()
+          : new Date(newTaskDueDate).toISOString(),
         replies: [],
         isRead: false,
         isArchived: false,
@@ -356,7 +389,10 @@ export default function CandidatesBlock({ isFullView: parentIsFullView, setIsFul
         completedAt: null
       });
       setNewTaskText("");
-      setNewTaskAlias("");
+      setNewTaskAssignTo("");
+      setNewTaskCategory("להתקשר");
+      setNewTaskDueDate("");
+      setNewTaskDueTime("");
       alert("המשימה נוצרה בהצלחה");
     } catch (error) {
       alert("שגיאה ביצירת משימה");
@@ -592,10 +628,27 @@ export default function CandidatesBlock({ isFullView: parentIsFullView, setIsFul
                                   </ul>
                                 </div>
                                 <div className="border-t pt-3">
-                                  <Label className="font-semibold text-sm block mb-1">{'הוסף משימה מהליד (כולל @ מוקצה):'}</Label>
-                                  <div className="flex gap-2">
-                                    <Input type="text" className="h-8 text-sm" placeholder="תיאור משימה..." value={newTaskText} onChange={ev => setNewTaskText(ev.target.value)} />
-                                    <Input type="text" className="h-8 text-sm w-32" placeholder="@מוקצה" value={newTaskAlias} onChange={ev => setNewTaskAlias(ev.target.value)} />
+                                  <Label className="font-semibold text-sm block mb-1">{'הוסף משימה מהליד:'}</Label>
+                                  <div className="flex flex-col md:flex-row gap-2">
+                                    <Input type="text" className="h-8 text-sm flex-1" placeholder="תיאור משימה..." value={newTaskText} onChange={ev => setNewTaskText(ev.target.value)} />
+                                    <Select value={newTaskAssignTo} onValueChange={setNewTaskAssignTo}>
+                                      <SelectTrigger className="h-8 text-sm w-32"><SelectValue placeholder="מוקצה ל..." /></SelectTrigger>
+                                      <SelectContent>
+                                        {assignableUsers.map(user => (
+                                          <SelectItem key={user.id} value={user.alias || user.email}>{user.alias || user.email}</SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
+                                    <Select value={newTaskCategory} onValueChange={setNewTaskCategory}>
+                                      <SelectTrigger className="h-8 text-sm w-32"><SelectValue placeholder="קטגוריה..." /></SelectTrigger>
+                                      <SelectContent>
+                                        {taskCategories.map(cat => (
+                                          <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
+                                    <Input type="date" className="h-8 text-sm w-32" value={newTaskDueDate} onChange={ev => setNewTaskDueDate(ev.target.value)} />
+                                    <Input type="time" className="h-8 text-sm w-24" value={newTaskDueTime} onChange={ev => setNewTaskDueTime(ev.target.value)} />
                                     <Button type="button" size="sm" onClick={() => handleCreateTaskFromLead(lead)} className="shrink-0">{'➕ משימה'}</Button>
                                   </div>
                                 </div>

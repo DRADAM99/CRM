@@ -183,3 +183,26 @@
   border-radius: 10px;
   z-index: 1;
 } 
+
+/* Visually hidden but focusable (for accessibility and native input pickers) */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  border: 0;
+} 
+
+/* Minimal icon-style input for native date/time pickers */
+.input-icon {
+  background: none;
+  border: none;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  cursor: pointer;
+  color: #888;
+} 
