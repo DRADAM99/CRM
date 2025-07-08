@@ -282,6 +282,9 @@ const handleCategoryDragEnd = (event) => {
 };
 const handleCreateTaskFromLead = async (lead) => {
   if (!leadTaskText.trim() || !leadTaskAssignTo || !leadTaskCategory || !leadTaskDueDate) return;
+  
+  console.log('Creating task from lead:', lead);
+  
   try {
     const assignedUser = assignableUsers.find(u => u.alias === leadTaskAssignTo || u.email === leadTaskAssignTo);
     const taskRef = doc(collection(db, "tasks"));
@@ -513,16 +516,7 @@ const updateKanbanCategoryOrder = async (newOrder) => {
     }
     setLoading(false);
   }, [loading, currentUser, router]);
-  // --- Handle lead expand/collapse ---
-  useEffect(() => {
-    function handleOpenLead(e) {
-      if (e.detail && e.detail.leadId) {
-        setExpandedLeadId(e.detail.leadId);
-      }
-    }
-    window.addEventListener('open-lead', handleOpenLead);
-    return () => window.removeEventListener('open-lead', handleOpenLead);
-  }, []);
+  
   // Fetch user's alias
   useEffect(() => {
     const fetchUserData = async () => {
@@ -1700,6 +1694,9 @@ useEffect(() => {
   if (!currentUser) return; // ⛔ Prevent running if not logged in
 
   const unsubscribe = onSnapshot(collection(db, "leads"), (snapshot) => {
+    console.log('Leads listener triggered. expandedLeadId:', expandedLeadId);
+    console.log('Raw leads from Firebase:', snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    
     const fetchedLeads = snapshot.docs.map((doc) => {
       const data = doc.data();
       return {
@@ -1720,72 +1717,105 @@ useEffect(() => {
       };
     });
 
+    console.log('Processed leads:', fetchedLeads);
+
     setLeads(prevLeads => {
       const expandedLead = prevLeads.find(l => l.expanded);
       const expandedId = expandedLead ? expandedLead.id : null;
+      console.log('Previous expanded lead ID:', expandedId);
+      console.log('Current expandedLeadId state:', expandedLeadId);
+      
       if (justClosedLeadIdRef.current && expandedId === justClosedLeadIdRef.current) {
         setJustClosedLeadId(null);
         justClosedLeadIdRef.current = null;
         return fetchedLeads.map(lead => ({ ...lead, expanded: false }));
       }
-      return fetchedLeads.map(lead =>
-        expandedId && lead.id === expandedId
-          ? { ...lead, expanded: true }
-          : { ...lead, expanded: false }
-      );
+      
+      const updatedLeads = fetchedLeads.map(lead => {
+        const shouldExpand = (expandedId && lead.id === expandedId) || (expandedLeadId && lead.id === expandedLeadId);
+        console.log(`Lead ${lead.id}: shouldExpand = ${shouldExpand}, expandedId = ${expandedId}, expandedLeadId = ${expandedLeadId}`);
+        
+        // Debug the specific lead that should be expanded
+        if (shouldExpand) {
+          console.log('Expanded lead data:', lead);
+          
+          // Check if lead data is empty and show a warning
+          if (!lead.fullName && !lead.phoneNumber && !lead.message) {
+            console.warn('Lead has empty data - this might be a data issue');
+          }
+        }
+        
+        return {
+          ...lead,
+          expanded: shouldExpand
+        };
+      });
+      
+      // Check if the expandedLeadId exists in the fetched leads
+      if (expandedLeadId && !fetchedLeads.find(lead => lead.id === expandedLeadId)) {
+        console.warn(`Lead with ID ${expandedLeadId} not found in the leads list. Available lead IDs:`, fetchedLeads.map(l => l.id));
+        
+        // Try to fetch the specific lead from the database
+        const fetchSpecificLead = async () => {
+          try {
+            const leadRef = doc(db, 'leads', expandedLeadId);
+            const leadSnap = await getDoc(leadRef);
+            if (leadSnap.exists()) {
+              const leadData = leadSnap.data();
+              const specificLead = {
+                id: leadSnap.id,
+                createdAt: leadData.createdAt?.toDate?.() || new Date(),
+                fullName: leadData.fullName || "",
+                phoneNumber: leadData.phoneNumber || "",
+                message: leadData.message || "",
+                status: leadData.status || "חדש",
+                source: leadData.source || "",
+                conversationSummary: leadData.conversationSummary?.map(entry => ({
+                  text: entry.text || "",
+                  timestamp: entry.timestamp?.toDate?.() || new Date()
+                })) || [],
+                appointmentDateTime: leadData.appointmentDateTime?.toDate?.() || null,
+                expanded: true,
+                followUpCall: leadData.followUpCall || { active: false, count: 0 },
+              };
+              
+              // Add this specific lead to the leads list
+              setLeads(prevLeads => {
+                const existingLead = prevLeads.find(l => l.id === specificLead.id);
+                if (existingLead) {
+                  return prevLeads.map(lead => 
+                    lead.id === specificLead.id ? { ...lead, expanded: true } : lead
+                  );
+                } else {
+                  return [specificLead, ...prevLeads];
+                }
+              });
+            } else {
+              console.error(`Lead with ID ${expandedLeadId} does not exist in the database`);
+              setExpandedLeadId(null);
+            }
+          } catch (error) {
+            console.error('Error fetching specific lead:', error);
+            setExpandedLeadId(null);
+          }
+        };
+        
+        fetchSpecificLead();
+      }
+      
+      console.log('Final leads with expanded state:', updatedLeads);
+      return updatedLeads;
     });
   });
 
   return () => unsubscribe(); // ✅ Clean up
-}, [currentUser]); // ✅ Re-run when currentUser changes
+}, [currentUser, expandedLeadId]); // ✅ Re-run when currentUser or expandedLeadId changes
 
 
     // 🔁 Redirect if not logged in
 
 
-// ✅ First: real-time listener for leads
-useEffect(() => {
-  if (!currentUser) return; // 👈 prevent listener without auth
 
-  const unsubscribe = onSnapshot(collection(db, "leads"), (snapshot) => {
-    const fetchedLeads = snapshot.docs.map((doc) => {
-      const data = doc.data();
-      return {
-        id: doc.id,
-        createdAt: data.createdAt?.toDate?.() || new Date(),
-        fullName: data.fullName || "",
-        phoneNumber: data.phoneNumber || "",
-        message: data.message || "",
-        status: data.status || "חדש",
-        source: data.source || "",
-        conversationSummary: data.conversationSummary?.map((entry) => ({
-          text: entry.text || "",
-          timestamp: entry.timestamp?.toDate?.() || new Date(),
-        })) || [],
-        appointmentDateTime: data.appointmentDateTime?.toDate?.() || null,
-        expanded: false,
-        followUpCall: data.followUpCall || { active: false, count: 0 },
-      };
-    });
-
-    setLeads(prevLeads => {
-      const expandedLead = prevLeads.find(l => l.expanded);
-      const expandedId = expandedLead ? expandedLead.id : null;
-      if (justClosedLeadIdRef.current && expandedId === justClosedLeadIdRef.current) {
-        setJustClosedLeadId(null);
-        justClosedLeadIdRef.current = null;
-        return fetchedLeads.map(lead => ({ ...lead, expanded: false }));
-      }
-      return fetchedLeads.map(lead =>
-        expandedId && lead.id === expandedId
-          ? { ...lead, expanded: true }
-          : { ...lead, expanded: false }
-      );
-    });
-  });
-
-  return () => unsubscribe(); // ✅ cleanup on logout
-}, [currentUser]);
 
 
 /**  ✅ Second: redirect if not logged in
@@ -2484,7 +2514,20 @@ const handleNLPSubmit = useCallback(async (e) => {
         setEditLeadAppointmentDateTime("");
     }
   }, [setEditingLeadId, setEditLeadFullName, setEditLeadPhone, setEditLeadMessage, setEditLeadStatus, setEditLeadSource, setEditLeadNLP, setNewConversationText, setEditLeadAppointmentDateTime]);
-
+  // --- Handle lead expand/collapse ---
+useEffect(() => {
+  function handleOpenLead(e) {
+    if (e.detail && e.detail.leadId) {
+      const lead = leads.find(l => l.id === e.detail.leadId);
+      if (lead) {
+        handleEditLead(lead); // Populate form fields
+        setExpandedLeadId(e.detail.leadId);
+      }
+    }
+  }
+  window.addEventListener('open-lead', handleOpenLead);
+  return () => window.removeEventListener('open-lead', handleOpenLead);
+}, [leads, handleEditLead]);
   /** Creates a follow-up task from lead edit form and saves to Firestore */
   const handleLeadNLPSubmit = useCallback(async (leadId) => {
     if (!editLeadNLP.trim() || !currentUser) return;

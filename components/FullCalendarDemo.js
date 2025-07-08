@@ -1023,7 +1023,7 @@ export default function FullCalendarDemo({ isCalendarFullView, taskCategories: p
                     <input type="checkbox" checked={!!modalEvent.done} onChange={handleModalToggleDone} disabled={modalUpdating} /> בוצע
                   </label>
                   <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 500 }}>
-                    <input type="checkbox" checked={!!modalEvent.messageSent} onChange={handleModalToggleMessageSent} disabled={modalUpdating} /> הודעה בדיקה
+                    <input type="checkbox" checked={!!modalEvent.messageSent} onChange={handleModalToggleMessageSent} disabled={modalUpdating} /> הודעה נשלחה
                   </label>
                   {modalUpdating && <span style={{ fontSize: 13, color: '#888' }}>מעדכן...</span>}
                 </div>
