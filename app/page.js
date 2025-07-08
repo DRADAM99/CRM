@@ -223,7 +223,7 @@ const messages = { allDay: "כל היום", previous: "הקודם", next: "הב�
 
 
 // Updated lead statuses and colors (order matters)
-const leadStatusConfig = { "חדש": { color: "bg-red-500", priority: 1 }, "בבדיקת לקוח": { color: "bg-orange-500", priority: 2 }, "ממתין לתשובה של ד״ר וינטר": { color: "bg-purple-500", priority: 3 }, "נקבע יעוץ": { color: "bg-green-500", priority: 4 }, "בסדרת טיפולים": { color: "bg-emerald-400", priority: 6 }, "באג": { color: "bg-yellow-900", priority: 5 }, "לא מתאים": { color: "bg-gray-400", priority: 7 }, "אין מענה": { color: "bg-yellow-500", priority: 5 }, "קורס": { color: "bg-blue-900", priority: 8 }, "ניתן מענה": { color: "bg-gray-500", priority: 9 }, "Default": { color: "bg-gray-300", priority: 99 } };
+const leadStatusConfig = { "חדש": { color: "bg-red-500", priority: 1 },"נקבעה שיחה": { color: "bg-pink-500", priority: 2 },"בבדיקת לקוח": { color: "bg-orange-500", priority: 2 }, "ממתין לתשובה של ד״ר וינטר": { color: "bg-purple-500", priority: 3 }, "נקבע יעוץ": { color: "bg-green-500", priority: 4 }, "בסדרת טיפולים": { color: "bg-emerald-400", priority: 6 }, "באג": { color: "bg-yellow-900", priority: 5 }, "לא מתאים": { color: "bg-gray-400", priority: 7 }, "אין מענה": { color: "bg-yellow-500", priority: 5 }, "קורס": { color: "bg-blue-900", priority: 8 }, "ניתן מענה": { color: "bg-gray-500", priority: 9 }, "Default": { color: "bg-gray-300", priority: 99 } };
 const leadColorTab = (status) => leadStatusConfig[status]?.color || leadStatusConfig.Default.color;
 const leadPriorityValue = (status) => leadStatusConfig[status]?.priority || leadStatusConfig.Default.priority;
 
@@ -3182,7 +3182,7 @@ const calculatedAnalytics = useMemo(() => {
   </div>
 
   <div className="w-full sm:w-48 text-center sm:text-left text-sm text-gray-500 flex flex-col items-center sm:items-end sm:ml-0">
-    <span>{'Version 7.0'}</span>
+    <span>{'Version 7.1'}</span>
     <button
       className="text-xs text-red-600 underline"
       onClick={() => {
@@ -3660,26 +3660,41 @@ const calculatedAnalytics = useMemo(() => {
                                  <ChevronDown className="h-4 w-4 opacity-50" />
                                </Button>
                              </DropdownMenuTrigger>
-                             <DropdownMenuContent className="w-[160px]" dir="rtl">
+                             <DropdownMenuContent className="w-[160px] text-right" dir="rtl">
                                <DropdownMenuLabel>{'סינון קטגוריה'}</DropdownMenuLabel>
                                <DropdownMenuSeparator />
-                               {allLeadCategories.map((category) => (
-                                 <DropdownMenuCheckboxItem
-                                   key={category}
-                                   checked={selectedLeadCategories.includes(category)}
-                                   onCheckedChange={() => {
-                                     setSelectedLeadCategories(prev =>
-                                       prev.includes(category)
-                                         ? prev.filter(c => c !== category)
-                                         : [...prev, category]
-                                     );
-                                   }}
-                                   onSelect={e => e.preventDefault()}
-                                   className="flex flex-row-reverse items-center justify-between"
-                                 >
-                                   {category}
-                                 </DropdownMenuCheckboxItem>
-                               ))}
+                               {allLeadCategories.map((category) => {
+                                 const selected = selectedLeadCategories.includes(category);
+                                 return (
+                                   <div
+                                     key={category}
+                                     onClick={() => {
+                                       setSelectedLeadCategories(prev =>
+                                         prev.includes(category)
+                                           ? prev.filter(c => c !== category)
+                                           : [...prev, category]
+                                       );
+                                     }}
+                                     className="flex flex-row items-center justify-between cursor-pointer py-1 px-2"
+                                     style={{ direction: 'rtl' }}
+                                   >
+                                     <span className="flex items-center gap-2 w-full justify-between">
+                                       <span
+                                         className={`inline-block w-4 h-4 rounded-full ${leadStatusConfig[category]?.color || 'bg-gray-300'} flex items-center justify-center`}
+                                         style={{
+                                           border: selected ? '2px solid #222' : '2px solid transparent',
+                                           transition: 'border 0.2s'
+                                         }}
+                                       >
+                                         {selected && (
+                                           <span className="w-2 h-2 bg-white rounded-full block"></span>
+                                         )}
+                                       </span>
+                                       <span className="flex-1 text-right">{category}</span>
+                                     </span>
+                                   </div>
+                                 );
+                               })}
                              </DropdownMenuContent>
                            </DropdownMenu>
                            <div>
