@@ -1708,8 +1708,8 @@ useEffect(() => {
         status: data.status || "חדש",
         source: data.source || "",
         conversationSummary: data.conversationSummary?.map(entry => ({
-          text: entry.text || "",
-          timestamp: entry.timestamp?.toDate?.() || new Date()
+          ...entry,
+          timestamp: entry.timestamp?.toDate?.() || new Date(entry.timestamp) || new Date()
         })) || [],
         appointmentDateTime: data.appointmentDateTime?.toDate?.() || null,
         expanded: false,
@@ -1771,8 +1771,8 @@ useEffect(() => {
                 status: leadData.status || "חדש",
                 source: leadData.source || "",
                 conversationSummary: leadData.conversationSummary?.map(entry => ({
-                  text: entry.text || "",
-                  timestamp: entry.timestamp?.toDate?.() || new Date()
+                  ...entry,
+                  timestamp: entry.timestamp?.toDate?.() || new Date(entry.timestamp) || new Date()
                 })) || [],
                 appointmentDateTime: leadData.appointmentDateTime?.toDate?.() || null,
                 expanded: true,
@@ -2682,15 +2682,13 @@ useEffect(() => {
 
   /** Collapses a lead's detailed/editing view. */
   const handleCollapseLead = useCallback((leadId) => {
-    setLeads((prevLeads) =>
-      prevLeads.map((l) => (l.id === leadId ? { ...l, expanded: false } : l))
-    );
+    setExpandedLeadId(null);
 
     if (editingLeadId === leadId) {
       setEditingLeadId(null);
       setEditLeadAppointmentDateTime("");
     }
-  }, [editingLeadId, setLeads, setEditingLeadId, setEditLeadAppointmentDateTime]);
+  }, [editingLeadId, setExpandedLeadId, setEditingLeadId, setEditLeadAppointmentDateTime]);
 
   /** Adds a new entry to a lead's conversation summary and saves to Firestore */
   const handleAddConversation = useCallback(async (leadId) => {
@@ -3934,12 +3932,25 @@ const calculatedAnalytics = useMemo(() => {
                                                                )}
                                                                <ul className="space-y-1.5 max-h-40 overflow-y-auto border rounded p-2 bg-white">
                                                                    {(lead.conversationSummary || []).length === 0 && <li className="text-xs text-gray-500 text-center py-2">{'אין עדכוני שיחה.'}</li>}
-                                                                   {(lead.conversationSummary || []).map((c, idx) => (
+                                                                   {(lead.conversationSummary || []).map((c, idx) => {
+                                                                     console.log('Conversation entry:', c);
+                                                                     return (
                                                                        <li key={idx} className="text-xs bg-gray-50 p-1.5 border rounded">
-                                                                           <div className="font-semibold text-gray-700">{formatDateTime(c.timestamp)}</div>
-                                                                           <div className="text-gray-800">{c.text}</div>
+                                                                         <div className="font-semibold text-gray-700" dir="rtl">
+                                                                           {formatDateTime(c.timestamp)}
+                                                                           {c.userAlias && (
+                                                                             <span className="mx-1 text-gray-400" aria-hidden="true">-</span>
+                                                                           )}
+                                                                           {c.userAlias && (
+                                                                             <span className="text-gray-500" dir="rtl">
+                                                                               {'עודכן ע"י '}{c.userAlias}
+                                                                             </span>
+                                                                           )}
+                                                                         </div>
+                                                                         <div className="text-gray-800" dir="rtl">{c.text}</div>
                                                                        </li>
-                                                                   ))}
+                                                                     );
+                                                                   })}
                                                                </ul>
                                                            </div>
                                                            
@@ -3982,7 +3993,7 @@ const calculatedAnalytics = useMemo(() => {
                                                            
                                                            <div className="flex gap-2 justify-end border-t pt-3 mt-4">
                                                                <Button type="submit" size="sm">{'שמור שינויים'}</Button>
-                                                               <Button type="button" variant="outline" size="sm" onClick={() => { handleCollapseLead(lead.id); closeLeadId(lead.id); }}>{'סגור'}</Button>
+                                                                                                                               <Button type="button" variant="outline" size="sm" onClick={() => handleCollapseLead(lead.id)}>{'סגור'}</Button>
                                                                {(currentUser?.role === 'admin' || role === 'admin') && (
                                                                  <Button type="button" variant="destructive" size="sm" onClick={() => handleDeleteLead(lead.id)}>
                                                                    {'מחק ליד'}
