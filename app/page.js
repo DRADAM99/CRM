@@ -1,4 +1,4 @@
-// Version 7.0- Assign 
+// Version 7.3- Assign 
 "use client";
 
 // Utility functions for layout persistence
@@ -90,6 +90,12 @@ import {
     CartesianGrid,
     Tooltip as RechartsTooltip,
     Legend,
+    Area,
+    BarChart,
+    Bar,
+    Cell,
+    PieChart,
+    Pie,
 } from 'recharts';
 
 import TaskManager from "@/components/TaskManager";
@@ -3051,6 +3057,18 @@ const calculatedAnalytics = useMemo(() => {
     const sourceCounts = filteredLeads.reduce((acc, lead) => { const source = lead.source || "לא ידוע"; acc[source] = (acc[source] || 0) + 1; return acc; }, {});
     const daysInRange = startDate ? Math.max(1, endDate.diff(startDate, 'days') + 1) : 1;
     const leadsPerDay = totalLeads / daysInRange;
+    
+    // Calculate conversion rates
+    // 1. First conversion: נקבע יעוץ / (total leads - באג)
+    const realLeads = filteredLeads.filter(l => l.status !== 'באג');
+    const consultationLeads = filteredLeads.filter(l => l.status === 'נקבע יעוץ').length;
+    const firstConversionRate = realLeads.length > 0 ? (consultationLeads / realLeads.length) * 100 : 0;
+    
+    // 2. Second conversion: נקבעה סדרה / נקבע יעוץ
+    const scheduledLeads = filteredLeads.filter(l => l.status === 'נקבעה סדרה').length;
+    const secondConversionRate = consultationLeads > 0 ? (scheduledLeads / consultationLeads) * 100 : 0;
+    
+    // Legacy conversion rate (for backward compatibility)
     const convertedCount = filteredLeads.filter(l => l.status === 'תור נקבע' || l.status === 'בסדרת טיפול').length;
     const conversionRate = (convertedCount / totalLeads) * 100;
 
@@ -3112,6 +3130,8 @@ const calculatedAnalytics = useMemo(() => {
         totalLeads, statusCounts, sourceCounts,
         leadsPerDay: leadsPerDay.toFixed(1),
         conversionRate: conversionRate.toFixed(1),
+        firstConversionRate: firstConversionRate.toFixed(1),
+        secondConversionRate: secondConversionRate.toFixed(1),
         avgAnswerTimeHours: avgAnswerTimeString,
         graphData,
         range: { start: startDate?.format('DD/MM/YY'), end: endDate?.format('DD/MM/YY') }
@@ -3180,7 +3200,7 @@ const calculatedAnalytics = useMemo(() => {
   </div>
 
   <div className="w-full sm:w-48 text-center sm:text-left text-sm text-gray-500 flex flex-col items-center sm:items-end sm:ml-0">
-    <span>{'Version 7.2'}</span>
+    <span>{'Version 7.3'}</span>
     <button
       className="text-xs text-red-600 underline"
       onClick={() => {
@@ -4086,7 +4106,8 @@ const calculatedAnalytics = useMemo(() => {
                                         <tbody>
                                             <tr className="border-b"><td className="p-2 font-medium">{'סה"כ לידים:'}</td><td className="p-2">{calculatedAnalytics.totalLeads}</td></tr>
                                             <tr className="border-b"><td className="p-2 font-medium">{'ממוצע ליום:'}</td><td className="p-2">{calculatedAnalytics.leadsPerDay}</td></tr>
-                                            <tr className="border-b"><td className="p-2 font-medium">{'שיעור המרה:'}</td><td className="p-2">{calculatedAnalytics.conversionRate}%</td></tr>
+                                            <tr className="border-b bg-yellow-50"><td className="p-2 font-bold">{'שיעור המרה ראשון:'}</td><td className="p-2 font-bold">{calculatedAnalytics.firstConversionRate}%</td></tr>
+                                            <tr className="border-b bg-blue-50"><td className="p-2 font-bold">{'שיעור המרה שני:'}</td><td className="p-2 font-bold">{calculatedAnalytics.secondConversionRate}%</td></tr>
                                             <tr className="border-b"><td className="p-2 font-medium">{'זמן מענה ממוצע:'}</td><td className="p-2">{calculatedAnalytics.avgAnswerTimeHours}</td></tr>
                                             <tr className="bg-gray-100 font-medium border-b"><td className="p-2" colSpan={2}>{'סטטוסים:'}</td></tr>
                                             {Object.entries(calculatedAnalytics.statusCounts).map(([s, c]) => (<tr key={s} className="border-b"><td className="p-2 pl-4">{s}</td><td className="p-2">{c}</td></tr>))}
@@ -4096,18 +4117,212 @@ const calculatedAnalytics = useMemo(() => {
                                     </table>
                                 </div>
                                 
-                                <div className="min-h-[300px]">
-                                    <h4 className="font-semibold mb-2 text-center">{'לידים נכנסים לפי יום'}</h4>
-                                    <ResponsiveContainer width="100%" height={300}>
-                                        <LineChart data={calculatedAnalytics.graphData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
-                                            <CartesianGrid strokeDasharray="3 3" />
-                                            <XAxis dataKey="name" style={{ fontSize: '0.75rem' }} />
-                                            <YAxis allowDecimals={false} style={{ fontSize: '0.75rem' }}/>
-                                            <RechartsTooltip />
-                                            <Legend />
-                                            <Line type="monotone" dataKey="received" name="לידים נכנסים" stroke="#8884d8" strokeWidth={2} activeDot={{ r: 6 }}/>
-                                        </LineChart>
-                                    </ResponsiveContainer>
+                                <div className="space-y-6">
+                                    {/* Enhanced Lead Inflow Chart */}
+                                    <div className="min-h-[300px]">
+                                        <h4 className="font-semibold mb-2 text-center">{'לידים נכנסים לפי יום'}</h4>
+                                        <ResponsiveContainer width="100%" height={300}>
+                                            <LineChart data={calculatedAnalytics.graphData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
+                                                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                                                <XAxis 
+                                                    dataKey="name" 
+                                                    style={{ fontSize: '0.75rem' }}
+                                                    tick={{ fill: '#666' }}
+                                                    axisLine={{ stroke: '#ddd' }}
+                                                />
+                                                <YAxis 
+                                                    allowDecimals={false} 
+                                                    style={{ fontSize: '0.75rem' }}
+                                                    tick={{ fill: '#666' }}
+                                                    axisLine={{ stroke: '#ddd' }}
+                                                />
+                                                <RechartsTooltip 
+                                                    contentStyle={{ 
+                                                        backgroundColor: 'rgba(255, 255, 255, 0.95)', 
+                                                        border: '1px solid #ddd',
+                                                        borderRadius: '8px',
+                                                        boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)'
+                                                    }}
+                                                    labelStyle={{ fontWeight: 'bold', color: '#333' }}
+                                                />
+                                                <Legend wrapperStyle={{ paddingTop: '10px' }} />
+                                                <Line 
+                                                    type="monotone" 
+                                                    dataKey="received" 
+                                                    name="לידים נכנסים" 
+                                                    stroke="#3b82f6" 
+                                                    strokeWidth={3} 
+                                                    activeDot={{ r: 8, fill: '#3b82f6', stroke: '#fff', strokeWidth: 2 }}
+                                                    dot={{ r: 4, fill: '#3b82f6', stroke: '#fff', strokeWidth: 2 }}
+                                                />
+                                                <Area 
+                                                    type="monotone" 
+                                                    dataKey="received" 
+                                                    fill="url(#leadGradient)" 
+                                                    fillOpacity={0.3}
+                                                />
+                                                <defs>
+                                                    <linearGradient id="leadGradient" x1="0" y1="0" x2="0" y2="1">
+                                                        <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.8}/>
+                                                        <stop offset="95%" stopColor="#3b82f6" stopOpacity={0.1}/>
+                                                    </linearGradient>
+                                                </defs>
+                                            </LineChart>
+                                        </ResponsiveContainer>
+                                    </div>
+
+                                    {/* Conversion Funnel Chart */}
+                                    <div className="min-h-[250px]">
+                                        <h4 className="font-semibold mb-2 text-center">{'מנהרת המרה'}</h4>
+                                        <ResponsiveContainer width="100%" height={250}>
+                                            <BarChart 
+                                                data={[
+                                                    {
+                                                        name: 'לידים אמיתיים',
+                                                        value: calculatedAnalytics.totalLeads - (calculatedAnalytics.statusCounts['באג'] || 0),
+                                                        color: '#6b7280'
+                                                    },
+                                                    {
+                                                        name: 'נקבע יעוץ',
+                                                        value: calculatedAnalytics.statusCounts['נקבע יעוץ'] || 0,
+                                                        color: '#f59e0b'
+                                                    },
+                                                    {
+                                                        name: 'נקבעה סדרה',
+                                                        value: calculatedAnalytics.statusCounts['נקבעה סדרה'] || 0,
+                                                        color: '#10b981'
+                                                    }
+                                                ]}
+                                                margin={{ top: 20, right: 30, left: 20, bottom: 5 }}
+                                            >
+                                                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                                                <XAxis 
+                                                    dataKey="name" 
+                                                    style={{ fontSize: '0.75rem' }}
+                                                    tick={{ fill: '#666' }}
+                                                />
+                                                <YAxis 
+                                                    style={{ fontSize: '0.75rem' }}
+                                                    tick={{ fill: '#666' }}
+                                                />
+                                                <RechartsTooltip 
+                                                    contentStyle={{ 
+                                                        backgroundColor: 'rgba(255, 255, 255, 0.95)', 
+                                                        border: '1px solid #ddd',
+                                                        borderRadius: '8px'
+                                                    }}
+                                                    formatter={(value, name) => [value, name]}
+                                                />
+                                                <Bar 
+                                                    dataKey="value" 
+                                                    fill="#3b82f6"
+                                                    radius={[4, 4, 0, 0]}
+                                                >
+                                                    {[
+                                                        {
+                                                            name: 'לידים אמיתיים',
+                                                            value: calculatedAnalytics.totalLeads - (calculatedAnalytics.statusCounts['באג'] || 0),
+                                                            color: '#6b7280'
+                                                        },
+                                                        {
+                                                            name: 'נקבע יעוץ',
+                                                            value: calculatedAnalytics.statusCounts['נקבע יעוץ'] || 0,
+                                                            color: '#f59e0b'
+                                                        },
+                                                        {
+                                                            name: 'נקבעה סדרה',
+                                                            value: calculatedAnalytics.statusCounts['נקבעה סדרה'] || 0,
+                                                            color: '#10b981'
+                                                        }
+                                                    ].map((entry, index) => (
+                                                        <Cell key={`cell-${index}`} fill={entry.color} />
+                                                    ))}
+                                                </Bar>
+                                            </BarChart>
+                                        </ResponsiveContainer>
+                                    </div>
+
+                                    {/* Status Distribution Pie Chart */}
+                                    <div className="min-h-[300px]">
+                                        <h4 className="font-semibold mb-2 text-center">{'התפלגות סטטוסים'}</h4>
+                                        <ResponsiveContainer width="100%" height={300}>
+                                            <PieChart>
+                                                <Pie
+                                                    data={Object.entries(calculatedAnalytics.statusCounts)
+                                                        .filter(([status, count]) => count > 0)
+                                                        .map(([status, count]) => ({
+                                                            name: status,
+                                                            value: count
+                                                        }))}
+                                                    cx="50%"
+                                                    cy="50%"
+                                                    labelLine={false}
+                                                    label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                                                    outerRadius={80}
+                                                    fill="#8884d8"
+                                                    dataKey="value"
+                                                >
+                                                    {Object.entries(calculatedAnalytics.statusCounts)
+                                                        .filter(([status, count]) => count > 0)
+                                                        .map((entry, index) => (
+                                                            <Cell key={`cell-${index}`} fill={['#3b82f6', '#f59e0b', '#10b981', '#ef4444', '#8b5cf6', '#06b6d4', '#84cc16', '#f97316', '#ec4899'][index % 9]} />
+                                                        ))}
+                                                </Pie>
+                                                <RechartsTooltip 
+                                                    contentStyle={{ 
+                                                        backgroundColor: 'rgba(255, 255, 255, 0.95)', 
+                                                        border: '1px solid #ddd',
+                                                        borderRadius: '8px'
+                                                    }}
+                                                />
+                                            </PieChart>
+                                        </ResponsiveContainer>
+                                    </div>
+
+                                    {/* Performance Metrics Cards */}
+                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                        <div className="bg-gradient-to-br from-blue-50 to-blue-100 p-4 rounded-lg border border-blue-200">
+                                            <div className="text-center">
+                                                <div className="text-2xl font-bold text-blue-600">
+                                                    {calculatedAnalytics.firstConversionRate}%
+                                                </div>
+                                                <div className="text-sm text-blue-700 font-medium">
+                                                    המרה ראשונה
+                                                </div>
+                                                <div className="text-xs text-blue-600 mt-1">
+                                                    לידים → יעוץ
+                                                </div>
+                                            </div>
+                                        </div>
+                                        
+                                        <div className="bg-gradient-to-br from-green-50 to-green-100 p-4 rounded-lg border border-green-200">
+                                            <div className="text-center">
+                                                <div className="text-2xl font-bold text-green-600">
+                                                    {calculatedAnalytics.secondConversionRate}%
+                                                </div>
+                                                <div className="text-sm text-green-700 font-medium">
+                                                    המרה שנייה
+                                                </div>
+                                                <div className="text-xs text-green-600 mt-1">
+                                                    יעוץ → סדרה
+                                                </div>
+                                            </div>
+                                        </div>
+                                        
+                                        <div className="bg-gradient-to-br from-purple-50 to-purple-100 p-4 rounded-lg border border-purple-200">
+                                            <div className="text-center">
+                                                <div className="text-2xl font-bold text-purple-600">
+                                                    {calculatedAnalytics.leadsPerDay}
+                                                </div>
+                                                <div className="text-sm text-purple-700 font-medium">
+                                                    ממוצע ליום
+                                                </div>
+                                                <div className="text-xs text-purple-600 mt-1">
+                                                    לידים חדשים
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                         )}

@@ -18,6 +18,7 @@ const leadStatusConfig = {
   "הומלץ טיפול": { color: "bg-blue-500", priority: 2 },
   "לא הומלץ טיפול": { color: "bg-gray-400", priority: 3 },
   "ניתן מידע": { color: "bg-yellow-400", priority: 4 },
+  "בבדיקת לקוח": { color: "bg-orange-600", priority: 4.5 },
   "הסדר תשלום": { color: "bg-purple-400", priority: 5 },
   "נקבעה סדרה": { color: "bg-emerald-400", priority: 6 },
   "לא מעוניינים": { color: "bg-gray-500", priority: 7 },
@@ -31,6 +32,7 @@ const candidatesStatuses = [
   "הומלץ טיפול",
   "לא הומלץ טיפול",
   "ניתן מידע",
+  "בבדיקת לקוח",
   "הסדר תשלום",
   "נקבעה סדרה",
   "לא מעוניינים",
@@ -184,7 +186,6 @@ export default function CandidatesBlock({ isFullView: parentIsFullView, setIsFul
   const filteredCandidates = useMemo(() => {
     return leads
       .filter(lead => selectedStatuses.includes(lead.status))
-      .filter(lead => lead.status !== "בבדיקת לקוח")
       .filter(lead => {
         const term = searchTerm.toLowerCase();
         return (
