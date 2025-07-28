@@ -148,6 +148,7 @@ export default function FullCalendarDemo({ isCalendarFullView, taskCategories: p
   const [userColors, setUserColors] = useState(() => getUserColorsFromStorage());
   const [isTouch, setIsTouch] = useState(false);
   const [blockOrder, setBlockOrder] = useState(() => getBlockOrderFromStorage());
+  const [localStorageLoaded, setLocalStorageLoaded] = useState(false);
   const calendarRef = useRef();
   const [showUserFilterModal, setShowUserFilterModal] = useState(false);
   const [pendingUserFilter, setPendingUserFilter] = useState(userFilterMulti);
@@ -270,14 +271,26 @@ export default function FullCalendarDemo({ isCalendarFullView, taskCategories: p
     );
   };
 
-  // View sync logic
+  // View sync logic - only set default view if no saved view exists
   useEffect(() => {
+    // Wait for localStorage to be loaded first
+    if (!localStorageLoaded) {
+      return;
+    }
+    
+    // Check if there's a saved view in localStorage
+    const savedView = localStorage.getItem('calendar_currentView');
+    if (savedView) {
+      return; // Don't override saved view
+    }
+    
+    // Only set default view if no saved view exists
     const newView = isCalendarFullView ? 'timeGridWeek' : 'timeGridDay';
     setCurrentView(newView);
     if (calendarRef.current) {
       calendarRef.current.getApi().changeView(newView);
     }
-  }, [isCalendarFullView]);
+  }, [isCalendarFullView, localStorageLoaded]);
 
   // Track last full view
   useEffect(() => {
@@ -419,12 +432,12 @@ export default function FullCalendarDemo({ isCalendarFullView, taskCategories: p
   function renderEventContent(eventInfo) {
     const { done, messageSent } = eventInfo.event.extendedProps;
     const title = eventInfo.event.title || '';
-    // Only show title and icons, truncate if too long, text in black, center aligned
+    // Align text to the right for better visibility, show title and icons
     return (
       <div style={{
-        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 15, fontWeight: 500, padding: '2px 4px', minHeight: 24, maxWidth: '100%', color: '#222',
+        display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 6, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 15, fontWeight: 500, padding: '2px 4px', minHeight: 24, maxWidth: '100%', color: '#222',
       }}>
-        <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: '#222', textAlign: 'center' }}>{title}</span>
+        <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: '#222', textAlign: 'right' }}>{title}</span>
         {done && (
           <span title="בוצע" style={{ color: '#222', fontSize: 16, marginLeft: 2, display: 'flex', alignItems: 'center' }}>✔️</span>
         )}
@@ -492,22 +505,36 @@ export default function FullCalendarDemo({ isCalendarFullView, taskCategories: p
     setBlockOrderToStorage(next);
   };
 
-  // --- 1. Persist full/compact state and calendar view in localStorage ---
+  // --- 1. Persist calendar view in localStorage ---
   useEffect(() => {
+    // Don't save until localStorage has been loaded
+    if (!localStorageLoaded) {
+      return;
+    }
+    
     try {
-      localStorage.setItem('calendar_isFullView', JSON.stringify(isCalendarFullView));
       localStorage.setItem('calendar_currentView', currentView);
-    } catch {}
-  }, [isCalendarFullView, currentView]);
+    } catch (error) {
+      console.error('Error saving to localStorage:', error);
+    }
+  }, [currentView, localStorageLoaded]);
 
+  // Load saved view from localStorage on component mount - run this FIRST
   useEffect(() => {
     try {
-      const savedFullView = localStorage.getItem('calendar_isFullView');
       const savedView = localStorage.getItem('calendar_currentView');
-      if (savedFullView !== null) setIsCalendarFullView(JSON.parse(savedFullView));
-      if (savedView) setCurrentView(savedView);
-    } catch {}
-    // eslint-disable-next-line
+      if (savedView) {
+        setCurrentView(savedView);
+        // Also update the calendar API if it's available
+        if (calendarRef.current) {
+          calendarRef.current.getApi().changeView(savedView);
+        }
+      }
+      setLocalStorageLoaded(true);
+    } catch (error) {
+      console.error('Error loading from localStorage:', error);
+      setLocalStorageLoaded(true);
+    }
   }, []);
 
   // Load user filter from Firestore for the Auth user
@@ -730,6 +757,7 @@ export default function FullCalendarDemo({ isCalendarFullView, taskCategories: p
         fontSize: isTouch ? 18 : 15,
         order: blockOrder,
         position: 'relative',
+        minHeight: isCalendarFullView ? 'auto' : '750px',
       }}
     >
       {/* Broom icon at the very top left of the card */}
@@ -848,7 +876,6 @@ export default function FullCalendarDemo({ isCalendarFullView, taskCategories: p
         ref={calendarRef}
         plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin, listPlugin]}
         initialView={isCalendarFullView ? lastFullView : currentView}
-        view={currentView}
         headerToolbar={isCalendarFullView
           ? { right: 'prev,next today', center: 'title', left: '' }
           : { right: 'prev,next today', center: 'title', left: '' }
@@ -858,16 +885,14 @@ export default function FullCalendarDemo({ isCalendarFullView, taskCategories: p
         droppable={true}
         eventDrop={handleEventDrop}
         eventClick={handleEventClick}
-        height={isCalendarFullView ? 700 : 520}
+        height={isCalendarFullView ? 700 : 650}
         locale="he"
         direction="rtl"
         eventContent={renderEventContent}
-        slotMinTime="08:00:00"
+        slotMinTime="09:00:00"
         slotMaxTime="20:00:00"
         hiddenDays={[6]}
-        datesSet={arg => {
-          setCurrentView(arg.view.type);
-        }}
+
         dayHeaderClassNames={() => 'fc-pastel-header'}
         buttonText={{ today: 'היום' }}
         dateClick={handleDateClick}

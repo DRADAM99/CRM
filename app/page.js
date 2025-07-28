@@ -1,4 +1,4 @@
-// Version 7.3- Assign 
+// Version 7.5- Assign 
 "use client";
 
 // Utility functions for layout persistence
@@ -3214,7 +3214,7 @@ const calculatedAnalytics = useMemo(() => {
   </div>
 
   <div className="w-full sm:w-48 text-center sm:text-left text-sm text-gray-500 flex flex-col items-center sm:items-end sm:ml-0">
-    <span>{'Version 7.3'}</span>
+                            <span>{'Version 7.5'}</span>
     <button
       className="text-xs text-red-600 underline"
       onClick={() => {
