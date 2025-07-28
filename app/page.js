@@ -782,6 +782,10 @@ const [selectedDate, setSelectedDate] = useState(new Date());
   // First, add a new state for showing the new task form
   const [showNewTaskForm, setShowNewTaskForm] = useState(false);
 
+  // Add state for duplicate confirmation dialog
+  const [showDuplicateConfirm, setShowDuplicateConfirm] = useState(false);
+  const [leadToDuplicate, setLeadToDuplicate] = useState(null);
+
   // Add state for calendar full view
   const [isCalendarFullView, setIsCalendarFullView] = useState(() => getLayoutPref('dashboard_isCalendarFullView', false));
 
@@ -988,11 +992,18 @@ const [selectedDate, setSelectedDate] = useState(new Date());
     }
   };
   const handleDuplicateLead = async (lead) => {
+    setLeadToDuplicate(lead);
+    setShowDuplicateConfirm(true);
+  };
+
+  const handleConfirmDuplicate = async () => {
+    if (!leadToDuplicate) return;
+    
     try {
       // Prepare duplicated lead data
       const duplicatedLead = {
-        ...lead,
-        fullName: lead.fullName + " משוכפל", // Add 'משוכפל' to the name
+        ...leadToDuplicate,
+        fullName: leadToDuplicate.fullName + " משוכפל", // Add 'משוכפל' to the name
         createdAt: new Date(), // New creation date
         expanded: false,
       };
@@ -1005,6 +1016,9 @@ const [selectedDate, setSelectedDate] = useState(new Date());
     } catch (error) {
       console.error("שגיאה בשכפול ליד:", error);
       alert("שגיאה בשכפול ליד. נסה שוב.");
+    } finally {
+      setShowDuplicateConfirm(false);
+      setLeadToDuplicate(null);
     }
   };
   // ... existing code ...
@@ -4423,6 +4437,8 @@ const calculatedAnalytics = useMemo(() => {
                              let duration = "";
                              if (completedAt && createdAt && !isNaN(completedAt.getTime()) && !isNaN(createdAt.getTime())) {
                                try {
+
+
                                  const durationMs = completedAt.getTime() - createdAt.getTime();
                                  duration = formatDuration(durationMs);
                                } catch { duration = "N/A"; }
@@ -4695,6 +4711,35 @@ const calculatedAnalytics = useMemo(() => {
               </Button>
             </div>
           </form>
+        </div>
+      )}
+
+      {/* Duplicate Confirmation Modal */}
+      {showDuplicateConfirm && (
+        <div className="fixed inset-0 flex items-center justify-center bg-black/60 z-50 p-4" onClick={() => setShowDuplicateConfirm(false)}>
+          <div className="bg-white p-6 rounded-lg shadow-xl w-full max-w-md" onClick={(e) => e.stopPropagation()}>
+            <h2 className="text-lg font-semibold mb-4 text-right">אישור שכפול ליד</h2>
+            <p className="text-gray-600 mb-6 text-right">
+              האם את בטוחה שאת רוצה לשכפל את הליד הזה?
+            </p>
+            <div className="flex justify-end gap-3">
+              <Button 
+                type="button" 
+                variant="outline" 
+                onClick={() => setShowDuplicateConfirm(false)}
+                className="px-4 py-2"
+              >
+                ביטול
+              </Button>
+              <Button 
+                type="button" 
+                onClick={handleConfirmDuplicate}
+                className="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white"
+              >
+                כן, שכפל
+              </Button>
+            </div>
+          </div>
         </div>
       )}
     </TooltipProvider>

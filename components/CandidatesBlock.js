@@ -100,6 +100,8 @@ export default function CandidatesBlock({ isFullView: parentIsFullView, setIsFul
   // Add state for assignable users and task categories
   const [assignableUsers, setAssignableUsers] = useState([]);
   const [taskCategories, setTaskCategories] = useState(["להתקשר", "לקבוע סדרה", "דוחות", "תשלומים", "תוכנית טיפול", "אחר"]);
+  // Add state for full width toggle
+  const [isFullWidth, setIsFullWidth] = useState(() => getPref('candidates_isFullWidth', false));
 
   const didMountStatuses = useRef(false);
 
@@ -119,6 +121,11 @@ export default function CandidatesBlock({ isFullView: parentIsFullView, setIsFul
       savePref('candidates_sortDirection', sortDirection);
     }
   }, [selectedStatuses, searchTerm, sortBy, sortDirection, parentIsFullView]);
+
+  // Persist full width preference
+  useEffect(() => {
+    savePref('candidates_isFullWidth', isFullWidth);
+  }, [isFullWidth]);
 
   // --- Real-time Firestore listener ---
   useEffect(() => {
@@ -404,7 +411,7 @@ export default function CandidatesBlock({ isFullView: parentIsFullView, setIsFul
   return (
     <div
       style={{ order: blockOrder }}
-      className={`col-span-1 ${parentIsFullView ? 'lg:col-span-8' : 'lg:col-span-4'} transition-all duration-300 ease-in-out`}
+      className={`col-span-1 ${parentIsFullView ? (isFullWidth ? 'lg:col-span-12' : 'lg:col-span-8') : (isFullWidth ? 'lg:col-span-12' : 'lg:col-span-4')} transition-all duration-300 ease-in-out`}
     >
       <Card className="h-full flex flex-col">
         <CardHeader>
@@ -414,6 +421,9 @@ export default function CandidatesBlock({ isFullView: parentIsFullView, setIsFul
               <div className="flex gap-2">
                 <Button size="sm" onClick={() => parentSetIsFullView(v => !v)} variant="outline">
                   {parentIsFullView ? 'תצוגה מקוצרת' : 'תצוגה מלאה'}
+                </Button>
+                <Button size="sm" onClick={() => setIsFullWidth(v => !v)} variant="outline">
+                  {isFullWidth ? '66% רוחב' : '100% רוחב'}
                 </Button>
                 <Button size="xs" onClick={handleToggleBlockOrder} variant="outline">
                   {'מיקום: '}{blockOrder}
