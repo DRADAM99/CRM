@@ -23,6 +23,7 @@ const leadStatusConfig = {
   "נקבעה סדרה": { color: "bg-emerald-400", priority: 6 },
   "לא מעוניינים": { color: "bg-gray-500", priority: 7 },
   "יעוץ בוטל": { color: "bg-red-400", priority: 8 },
+  "ממשיכים לסדרה נוספת": { color: "bg-black", priority: 9 },
   Default: { color: "bg-gray-300", priority: 99 }
 };
 const leadColorTab = (status) => leadStatusConfig[status]?.color || leadStatusConfig.Default.color;
@@ -36,7 +37,8 @@ const candidatesStatuses = [
   "הסדר תשלום",
   "נקבעה סדרה",
   "לא מעוניינים",
-  "יעוץ בוטל"
+  "יעוץ בוטל",
+  "ממשיכים לסדרה נוספת"
 ];
 
 // --- Branch options and pastel colors ---
