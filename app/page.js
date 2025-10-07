@@ -108,7 +108,10 @@ import { TaskTabs } from "@/components/TaskTabs";
 // Add this import at the top with other imports
 import { Switch as MuiSwitch } from '@mui/material';
 import { styled } from '@mui/material/styles';
-
+import { createUserWithEmailAndPassword } from "firebase/auth";
+import AddUserDialog from "@/components/AddUserDialog";
+import { restrictToVerticalAxis, restrictToWindowEdges } from '@dnd-kit/modifiers';
+import UserManagement from "@/components/UserManagement";
 
 // Add this styled component definition before the Dashboard component
 const IOSSwitch = styled((props) => (
@@ -250,18 +253,19 @@ const taskPriorities = ["דחוף", "רגיל", "נמוך"];
 
 
 export default function Dashboard() {
-  const defaultTaskCategories = ["לקבוע סדרה", "דוחות", "תשלומים וזיכויים", "להתקשר", "תוכנית טיפול", "אחר"];
+  const defaultTaskCategories = ["לקבוע סדרה"];
   const [taskCategories, setTaskCategories] = useState(defaultTaskCategories);
+
+  const [tasks, setTasks] = useState([]);
+  const [users, setUsers] = useState([]);
   const { currentUser } = useAuth();
   const { toast } = useToast();
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [role, setRole] = useState("");
   const [alias, setAlias] = useState("");
-  const [users, setUsers] = useState([]);
   const [userExt, setUserExt] = useState("");
   // Single tasks state declaration
-  const [tasks, setTasks] = useState([]);
   const [replyingToTaskId, setReplyingToTaskId] = useState(null);
   const [showOverdueEffects, setShowOverdueEffects] = useState(true);
   const [replyInputValue, setReplyInputValue] = useState("");
@@ -275,6 +279,8 @@ export default function Dashboard() {
   const [leadTaskCategory, setLeadTaskCategory] = useState("");
   const [leadTaskDueDate, setLeadTaskDueDate] = useState("");
   const [leadTaskDueTime, setLeadTaskDueTime] = useState("");
+  const [showFunnel, setShowFunnel] = useState(false); // State to control funnel visibility
+  const [showTimeline, setShowTimeline] = useState(false); // State to control timeline visibility
   
   // Add this handler for category drag end
 const handleCategoryDragEnd = (event) => {
@@ -3225,6 +3231,7 @@ const calculatedAnalytics = useMemo(() => {
     >
       התנתק
     </button>
+    <UserManagement role={role} />
   </div>
 </header>
 
