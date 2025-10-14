@@ -1,4 +1,4 @@
-// Version 7.5- Assign 
+// Version 7.6- add user button to dashboard 
 "use client";
 
 // Utility functions for layout persistence
@@ -98,7 +98,6 @@ import {
     Pie,
 } from 'recharts';
 
-import TaskManager from "@/components/TaskManager";
 
 import { useToast } from "@/components/ui/use-toast"
 
@@ -253,7 +252,7 @@ const taskPriorities = ["דחוף", "רגיל", "נמוך"];
 
 
 export default function Dashboard() {
-  const defaultTaskCategories = ["לקבוע סדרה"];
+  const defaultTaskCategories = ["תוכניות טיפול", "לקבוע סדרה", "תשלומים וזיכויים", "דוחות", "להתקשר", "אחר"];
   const [taskCategories, setTaskCategories] = useState(defaultTaskCategories);
 
   const [tasks, setTasks] = useState([]);
@@ -1583,7 +1582,6 @@ const [selectedDate, setSelectedDate] = useState(new Date());
   const [editLeadStatus, setEditLeadStatus] = useState("חדש");
   const [editLeadSource, setEditLeadSource] = useState("");
   const [editLeadAppointmentDateTime, setEditLeadAppointmentDateTime] = useState("");
-  const [editLeadNLP, setEditLeadNLP] = useState("");
   const [editLeadBranch, setEditLeadBranch] = useState("");
   const [newConversationText, setNewConversationText] = useState("");
   const [showConvUpdate, setShowConvUpdate] = useState(null);
@@ -2510,36 +2508,17 @@ const handleNLPSubmit = useCallback(async (e) => {
 
   /** Populates the editing form state for a lead. */
   const handleEditLead = useCallback((lead) => {
-    if (!lead) return;
     setEditingLeadId(lead.id);
     setEditLeadFullName(lead.fullName);
     setEditLeadPhone(lead.phoneNumber);
     setEditLeadMessage(lead.message);
-    setEditLeadStatus(lead.status);
+    setEditLeadStatus(lead.status || "חדש");
     setEditLeadSource(lead.source || "");
-    setEditLeadNLP("");
+    setEditLeadAppointmentDateTime(lead.appointmentDateTime || "");
     setNewConversationText("");
+    setEditLeadBranch(lead.branch || "");
+  }, []);
 
-    if (lead.appointmentDateTime) {
-        try {
-            const apptDate = new Date(lead.appointmentDateTime);
-            if (!isNaN(apptDate.getTime())) {
-                const year = apptDate.getFullYear();
-                const month = (apptDate.getMonth() + 1).toString().padStart(2, '0');
-                const day = apptDate.getDate().toString().padStart(2, '0');
-                const hours = apptDate.getHours().toString().padStart(2, '0');
-                const minutes = apptDate.getMinutes().toString().padStart(2, '0');
-                setEditLeadAppointmentDateTime(`${year}-${month}-${day}T${hours}:${minutes}`);
-            } else {
-                 setEditLeadAppointmentDateTime("");
-            }
-        } catch {
-            setEditLeadAppointmentDateTime("");
-        }
-    } else {
-        setEditLeadAppointmentDateTime("");
-    }
-  }, [setEditingLeadId, setEditLeadFullName, setEditLeadPhone, setEditLeadMessage, setEditLeadStatus, setEditLeadSource, setEditLeadNLP, setNewConversationText, setEditLeadAppointmentDateTime]);
   // --- Handle lead expand/collapse ---
 useEffect(() => {
   function handleOpenLead(e) {
@@ -2554,70 +2533,7 @@ useEffect(() => {
   window.addEventListener('open-lead', handleOpenLead);
   return () => window.removeEventListener('open-lead', handleOpenLead);
 }, [leads, handleEditLead]);
-  /** Creates a follow-up task from lead edit form and saves to Firestore */
-  const handleLeadNLPSubmit = useCallback(async (leadId) => {
-    if (!editLeadNLP.trim() || !currentUser) return;
-    const lead = leads.find((l) => l.id === leadId);
-    if (!lead) return;
-    let parsedDetails = null;
-    let usedApi = false;
-    try {
-      // Try Anthropic NLP API
-      const response = await fetch('/api/parse-task', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: editLeadNLP })
-      });
-      if (response.ok) {
-        const data = await response.json();
-        // Compose parsedDetails in the same format as parseTaskFromText
-        parsedDetails = {
-          title: data.title || '',
-          category: data.category || 'אחר',
-          dueDate: (data.date && data.time) ? new Date(`${data.date}T${data.time}`) : (data.date ? new Date(`${data.date}T13:00`) : new Date()),
-          assignTo: currentUser.email,
-          priority: 'רגיל',
-          done: false,
-          completedBy: null,
-          completedAt: null
-        };
-        usedApi = true;
-      }
-    } catch (err) {
-      // Ignore and fallback
-    }
-    if (!parsedDetails) {
-      // Fallback to local parser
-      parsedDetails = parseTaskFromText(editLeadNLP);
-    }
-    try {
-      const taskRef = doc(collection(db, "tasks"));
-      const newTask = {
-        ...parsedDetails,
-        id: taskRef.id,
-        userId: currentUser.uid,
-        creatorId: currentUser.uid,
-        creatorAlias: alias || currentUser.email || "",
-        assignTo: currentUser.email,
-        title: `מעקב ${lead.fullName}: ${parsedDetails.title || editLeadNLP}`,
-        subtitle: editLeadNLP,
-        status: "פתוח",
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-        replies: [],
-        isRead: false,
-        isArchived: false,
-        done: false,
-        completedBy: null,
-        completedAt: null
-      };
-      await setDoc(taskRef, newTask);
-      setEditLeadNLP("");
-    } catch (error) {
-      console.error("Error creating follow-up task:", error);
-      alert("שגיאה ביצירת משימת המשך");
-    }
-  }, [editLeadNLP, leads, parseTaskFromText, currentUser, alias]);
+
 
   /** Saves the edited lead details back to the main leads state. Creates task if needed. */
   const handleSaveLead = useCallback(async (e, leadId) => {
@@ -3220,7 +3136,7 @@ const calculatedAnalytics = useMemo(() => {
   </div>
 
   <div className="w-full sm:w-48 text-center sm:text-left text-sm text-gray-500 flex flex-col items-center sm:items-end sm:ml-0">
-                            <span>{'Version 7.5'}</span>
+                            <span>{'Version 7.6'}</span>
     <button
       className="text-xs text-red-600 underline"
       onClick={() => {
