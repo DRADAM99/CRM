@@ -134,6 +134,10 @@ export default function CandidatesBlock({ isFullView: parentIsFullView, setIsFul
     const unsubscribe = onSnapshot(collection(db, "leads"), (snapshot) => {
       const fetchedLeads = snapshot.docs.map((doc) => {
         const data = doc.data();
+        const conversationSummary = (data.conversationSummary || []).map(entry => ({
+          ...entry,
+          timestamp: entry.timestamp?.toDate ? entry.timestamp.toDate() : (entry.timestamp ? new Date(entry.timestamp) : null)
+        }));
         return {
           id: doc.id,
           createdAt: data.createdAt?.toDate?.() || new Date(),
@@ -143,8 +147,9 @@ export default function CandidatesBlock({ isFullView: parentIsFullView, setIsFul
           status: data.status || "",
           source: data.source || "",
           followUpCall: data.followUpCall || { active: false, count: 0 },
-          conversationSummary: data.conversationSummary || [],
+          conversationSummary: conversationSummary,
           branch: data.branch || "",
+          isHot: data.isHot || false,
         };
       });
       setLeads(fetchedLeads);
@@ -266,6 +271,9 @@ export default function CandidatesBlock({ isFullView: parentIsFullView, setIsFul
     setEditingLeadId(null); // Optimistically close the form
     try {
       const leadRef = doc(db, "leads", leadId);
+      const leadToUpdate = leads.find(l => l.id === leadId);
+      const isStatusChanging = leadToUpdate && leadToUpdate.status !== editLeadStatus;
+
       await updateDoc(leadRef, {
         fullName: editLeadFullName,
         phoneNumber: editLeadPhone,
@@ -274,6 +282,7 @@ export default function CandidatesBlock({ isFullView: parentIsFullView, setIsFul
         source: editLeadSource,
         branch: editLeadBranch,
         updatedAt: serverTimestamp(),
+        ...(isStatusChanging && { isHot: false }),
       });
       setEditLeadBranch("");
     } catch (error) {
@@ -524,7 +533,10 @@ export default function CandidatesBlock({ isFullView: parentIsFullView, setIsFul
                         <tr className="border-b hover:bg-gray-50 group">
                           <td className="px-2 py-2 align-top"><div className={`w-3 h-6 ${colorTab} rounded mx-auto`} /></td>
                           <td className="px-2 py-2 align-top whitespace-nowrap">{formatDateTime(lead.createdAt)}</td>
-                          <td className="px-2 py-2 align-top font-medium">{lead.fullName}</td>
+                          <td className="px-2 py-2 align-top font-medium">
+                            {lead.isHot && <span className="mr-1">🔥</span>}
+                            {lead.fullName}
+                          </td>
                           <td className="px-2 py-2 align-top">{lead.status}</td>
                           <td className="px-2 py-2 align-top truncate" title={lead.message}>{lead.message}</td>
                           <td className="px-2 py-2 align-top text-center">
@@ -689,7 +701,10 @@ export default function CandidatesBlock({ isFullView: parentIsFullView, setIsFul
                   <li key={lead.id} className="p-2 border rounded shadow-sm flex items-center gap-2 bg-white hover:bg-gray-50">
                     <div className={`w-2 h-10 ${colorTab} rounded shrink-0`} />
                     <div className="flex-grow overflow-hidden">
-                      <div className="font-bold text-sm truncate">{lead.fullName}</div>
+                      <div className="font-bold text-sm truncate">
+                        {lead.isHot && <span className="mr-1">🔥</span>}
+                        {lead.fullName}
+                      </div>
                       <p className="text-xs text-gray-600 truncate">{lead.message}</p>
                       <p className="text-xs text-gray-500 truncate">{lead.status} - {formatDateTime(lead.createdAt)}</p>
                       {lead.branch && (

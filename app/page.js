@@ -477,9 +477,17 @@ const HOLD_DURATION = 1500;
 const [expandedLeadId, setExpandedLeadId] = useState(null);
 // When lead status changes, reset followUpCall
 const handleStatusChange = async (leadId, newStatus) => {
-  const leadRef = doc(db, 'leads', leadId);
-  await updateDoc(leadRef, { status: newStatus, followUpCall: { active: false, count: 0 } });
-};
+    if (!leadId || !newStatus) return;
+    try {
+      const leadRef = doc(db, "leads", leadId);
+      await updateDoc(leadRef, {
+        status: newStatus,
+        isHot: false
+      });
+    } catch (error) {
+      console.error("Error updating lead status:", error);
+    }
+  };
 // Function to update Kanban category order in Firestore
 const updateKanbanCategoryOrder = async (newOrder) => {
   setTaskCategories(newOrder);
@@ -746,7 +754,7 @@ const [selectedDate, setSelectedDate] = useState(new Date());
   const [newLeadMessage, setNewLeadMessage] = useState("");
   const [newLeadStatus, setNewLeadStatus] = useState("חדש");
   const [newLeadSource, setNewLeadSource] = useState("");
-
+  const [newLeadIsHot, setNewLeadIsHot] = useState(true);
 
   const [taskFilter, setTaskFilter] = useState("הכל");
   const [taskPriorityFilter, setTaskPriorityFilter] = useState("all");
@@ -997,8 +1005,19 @@ const [selectedDate, setSelectedDate] = useState(new Date());
     }
   };
   const handleDuplicateLead = async (lead) => {
-    setLeadToDuplicate(lead);
-    setShowDuplicateConfirm(true);
+    try {
+      const duplicatedLead = {
+        ...lead,
+        fullName: lead.fullName + " משוכפל",
+        createdAt: new Date(),
+        isHot: true,
+      };
+      delete duplicatedLead.id;
+      await addDoc(collection(db, "leads"), duplicatedLead);
+      alert("הליד שוכפל");
+    } catch (error) {
+      alert("שגיאה בשכפול ליד");
+    }
   };
 
   const handleConfirmDuplicate = async () => {
@@ -1717,123 +1736,29 @@ const q = query(
 useEffect(() => {
   if (!currentUser) return; // ⛔ Prevent running if not logged in
 
-  const unsubscribe = onSnapshot(collection(db, "leads"), (snapshot) => {
-    console.log('Leads listener triggered. expandedLeadId:', expandedLeadId);
-    console.log('Raw leads from Firebase:', snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-    
-    const fetchedLeads = snapshot.docs.map((doc) => {
-      const data = doc.data();
-      return {
-        id: doc.id,
-        createdAt: data.createdAt?.toDate?.() || new Date(),
-        fullName: data.fullName || "",
-        phoneNumber: data.phoneNumber || "",
-        message: data.message || "",
-        status: data.status || "חדש",
-        source: data.source || "",
-        conversationSummary: data.conversationSummary?.map(entry => ({
+  const unsubscribe = onSnapshot(
+    query(collection(db, "leads"), orderBy("createdAt", "desc")),
+    (snapshot) => {
+      const allLeads = snapshot.docs.map((doc) => {
+        const data = doc.data();
+        const conversationSummary = (data.conversationSummary || []).map(entry => ({
           ...entry,
-          timestamp: entry.timestamp?.toDate?.() || new Date(entry.timestamp) || new Date()
-        })) || [],
-        appointmentDateTime: data.appointmentDateTime?.toDate?.() || null,
-        expanded: false,
-        followUpCall: data.followUpCall || { active: false, count: 0 },
-      };
-    });
-
-    console.log('Processed leads:', fetchedLeads);
-
-    setLeads(prevLeads => {
-      const expandedLead = prevLeads.find(l => l.expanded);
-      const expandedId = expandedLead ? expandedLead.id : null;
-      console.log('Previous expanded lead ID:', expandedId);
-      console.log('Current expandedLeadId state:', expandedLeadId);
-      
-      if (justClosedLeadIdRef.current && expandedId === justClosedLeadIdRef.current) {
-        setJustClosedLeadId(null);
-        justClosedLeadIdRef.current = null;
-        return fetchedLeads.map(lead => ({ ...lead, expanded: false }));
-      }
-      
-      const updatedLeads = fetchedLeads.map(lead => {
-        const shouldExpand = (expandedId && lead.id === expandedId) || (expandedLeadId && lead.id === expandedLeadId);
-        console.log(`Lead ${lead.id}: shouldExpand = ${shouldExpand}, expandedId = ${expandedId}, expandedLeadId = ${expandedLeadId}`);
-        
-        // Debug the specific lead that should be expanded
-        if (shouldExpand) {
-          console.log('Expanded lead data:', lead);
-          
-          // Check if lead data is empty and show a warning
-          if (!lead.fullName && !lead.phoneNumber && !lead.message) {
-            console.warn('Lead has empty data - this might be a data issue');
-          }
-        }
-        
+          timestamp: entry.timestamp?.toDate ? entry.timestamp.toDate() : (entry.timestamp ? new Date(entry.timestamp) : null)
+        }));
         return {
-          ...lead,
-          expanded: shouldExpand
+          id: doc.id,
+          ...data,
+          createdAt: data.createdAt?.toDate() || new Date(),
+          conversationSummary,
+          isHot: data.isHot || false,
         };
       });
-      
-      // Check if the expandedLeadId exists in the fetched leads
-      if (expandedLeadId && !fetchedLeads.find(lead => lead.id === expandedLeadId)) {
-        console.warn(`Lead with ID ${expandedLeadId} not found in the leads list. Available lead IDs:`, fetchedLeads.map(l => l.id));
-        
-        // Try to fetch the specific lead from the database
-        const fetchSpecificLead = async () => {
-          try {
-            const leadRef = doc(db, 'leads', expandedLeadId);
-            const leadSnap = await getDoc(leadRef);
-            if (leadSnap.exists()) {
-              const leadData = leadSnap.data();
-              const specificLead = {
-                id: leadSnap.id,
-                createdAt: leadData.createdAt?.toDate?.() || new Date(),
-                fullName: leadData.fullName || "",
-                phoneNumber: leadData.phoneNumber || "",
-                message: leadData.message || "",
-                status: leadData.status || "חדש",
-                source: leadData.source || "",
-                conversationSummary: leadData.conversationSummary?.map(entry => ({
-                  ...entry,
-                  timestamp: entry.timestamp?.toDate?.() || new Date(entry.timestamp) || new Date()
-                })) || [],
-                appointmentDateTime: leadData.appointmentDateTime?.toDate?.() || null,
-                expanded: true,
-                followUpCall: leadData.followUpCall || { active: false, count: 0 },
-              };
-              
-              // Add this specific lead to the leads list
-              setLeads(prevLeads => {
-                const existingLead = prevLeads.find(l => l.id === specificLead.id);
-                if (existingLead) {
-                  return prevLeads.map(lead => 
-                    lead.id === specificLead.id ? { ...lead, expanded: true } : lead
-                  );
-                } else {
-                  return [specificLead, ...prevLeads];
-                }
-              });
-            } else {
-              console.error(`Lead with ID ${expandedLeadId} does not exist in the database`);
-              setExpandedLeadId(null);
-            }
-          } catch (error) {
-            console.error('Error fetching specific lead:', error);
-            setExpandedLeadId(null);
-          }
-        };
-        
-        fetchSpecificLead();
-      }
-      
-      console.log('Final leads with expanded state:', updatedLeads);
-      return updatedLeads;
-    });
-  });
+      setLeads(allLeads);
+    }
+  );
 
   return () => unsubscribe(); // ✅ Clean up
-}, [currentUser, expandedLeadId]); // ✅ Re-run when currentUser or expandedLeadId changes
+}, [currentUser]);
 
 
     // 🔁 Redirect if not logged in
@@ -2669,24 +2594,24 @@ useEffect(() => {
     }
 
     try {
-        const newLead = {
+        await addDoc(collection(db, "leads"), {
+            createdAt: serverTimestamp(),
             fullName: newLeadFullName.trim(),
             phoneNumber: newLeadPhone.trim(),
             message: newLeadMessage.trim(),
             status: newLeadStatus,
             source: newLeadSource.trim(),
             conversationSummary: [],
-            expanded: false,
-            appointmentDateTime: null,
-            createdAt: serverTimestamp(),
-        };
-        await addDoc(collection(db, "leads"), newLead);
-        // No need to update local state, real-time listener will update leads
+            isHot: newLeadIsHot,
+            followUpCall: { active: false, count: 0 },
+        });
+
         setNewLeadFullName("");
         setNewLeadPhone("");
         setNewLeadMessage("");
         setNewLeadStatus("חדש");
         setNewLeadSource("");
+        setNewLeadIsHot(true);
         setShowAddLeadModal(false);
     } catch (error) {
         console.error("שגיאה בהוספת ליד חדש:", error);
@@ -2694,8 +2619,8 @@ useEffect(() => {
     }
 }, [
     newLeadFullName, newLeadPhone, newLeadMessage,
-    newLeadStatus, newLeadSource,
-    setNewLeadFullName, setNewLeadPhone, setNewLeadMessage, setNewLeadStatus, setNewLeadSource, setShowAddLeadModal
+    newLeadStatus, newLeadSource, newLeadIsHot,
+    setNewLeadFullName, setNewLeadPhone, setNewLeadMessage, setNewLeadStatus, setNewLeadSource, setNewLeadIsHot, setShowAddLeadModal
 ]);
 
 
@@ -3719,8 +3644,14 @@ const calculatedAnalytics = useMemo(() => {
                                            <tr className="border-b hover:bg-gray-50 group">
                                                <td className="px-2 py-2 align-top"><div className={`w-3 h-6 ${colorTab} rounded mx-auto`} /></td>
                                                <td className="px-2 py-2 align-top whitespace-nowrap">{formatDateTime(lead.createdAt)}</td>
-                                               <td className="px-2 py-2 align-top font-medium">{lead.fullName}</td>
-                                               <td className="px-2 py-2 align-top whitespace-nowrap">{lead.phoneNumber}</td>
+                                               <td className="px-2 py-2 align-top font-medium">
+                                                 {lead.isHot && <span className="mr-1">🔥</span>}
+                                                 {lead.fullName}
+                                               </td>
+                                               <td className="px-2 py-2 align-top whitespace-nowrap">
+                                                 {lead.isHot && <span className="mr-1">🔥</span>}
+                                                 {lead.phoneNumber}
+                                               </td>
                                                <td className="px-2 py-2 align-top truncate" title={lead.message}>{lead.message}</td>
                                                <td className="px-2 py-2 align-top">{lead.status}</td>
                                                <td className="px-2 py-2 align-top text-center">
@@ -3977,7 +3908,10 @@ const calculatedAnalytics = useMemo(() => {
                                 <li key={`compact-${lead.id}`} className="p-2 border rounded shadow-sm flex items-center gap-2 bg-white hover:bg-gray-50">
                                     <div className={`w-2 h-10 ${colorTab} rounded shrink-0`} />
                                     <div className="flex-grow overflow-hidden">
-                                        <div className="font-bold text-sm truncate">{lead.fullName}</div>
+                                        <div className="font-bold text-sm truncate">
+                                          {lead.isHot && <span className="mr-1">🔥</span>}
+                                          {lead.fullName}
+                                        </div>
                                         <p className="text-xs text-gray-600 truncate">{lead.message}</p>
                                         <p className="text-xs text-gray-500 truncate">{lead.status} - {formatDateTime(lead.createdAt)}</p>
                                     </div>
@@ -4444,6 +4378,17 @@ const calculatedAnalytics = useMemo(() => {
                          placeholder="פרטים ראשוניים, סיבת פניה..."
                        />
                      </div>
+
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        id="new-lead-hot"
+                        checked={newLeadIsHot}
+                        onChange={(e) => setNewLeadIsHot(e.target.checked)}
+                        className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                      />
+                      <Label htmlFor="new-lead-hot" className="text-sm font-medium">ליד חם 🔥</Label>
+                    </div>
                      
                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                        <div>
