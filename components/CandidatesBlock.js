@@ -11,6 +11,7 @@ import { FaWhatsapp, FaCodeBranch } from "react-icons/fa";
 import { Search, ChevronDown } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { useAuth } from "@/app/context/AuthContext";
 
 // --- Status config (copy from page.js) ---
 const leadStatusConfig = {
@@ -70,6 +71,7 @@ function getPref(key, def) {
   try { const v = localStorage.getItem(key); if (v !== null) return JSON.parse(v); } catch (e) {} return def; }
 
 export default function CandidatesBlock({ isFullView: parentIsFullView, setIsFullView: parentSetIsFullView }) {
+  const { currentUser } = useAuth();
   // --- State ---
   const [leads, setLeads] = useState([]);
   // Multi-select status filter
@@ -101,7 +103,7 @@ export default function CandidatesBlock({ isFullView: parentIsFullView, setIsFul
   const [newTaskDueTime, setNewTaskDueTime] = useState("");
   // Add state for assignable users and task categories
   const [assignableUsers, setAssignableUsers] = useState([]);
-  const [taskCategories, setTaskCategories] = useState(["להתקשר", "לקבוע סדרה", "דוחות", "תשלומים", "תוכנית טיפול", "אחר"]);
+  const [taskCategories, setTaskCategories] = useState(["להתקשר", "לקבוע סדרה", "דוחות", "תשלומים", "תוכניות טיפול", "אחר"]);
   // Add state for full width toggle
   const [isFullWidth, setIsFullWidth] = useState(() => getPref('candidates_isFullWidth', false));
 
@@ -274,6 +276,14 @@ export default function CandidatesBlock({ isFullView: parentIsFullView, setIsFul
       const leadToUpdate = leads.find(l => l.id === leadId);
       const isStatusChanging = leadToUpdate && leadToUpdate.status !== editLeadStatus;
 
+      console.log("--- Auto-Task-Creation-Debug ---", {
+        isStatusChanging: isStatusChanging,
+        leadCurrentStatus: leadToUpdate ? leadToUpdate.status : "not found",
+        newStatus: editLeadStatus,
+        targetStatus: "נקבעה סדרה",
+        isMatch: editLeadStatus === "נקבעה סדרה"
+      });
+
       await updateDoc(leadRef, {
         fullName: editLeadFullName,
         phoneNumber: editLeadPhone,
@@ -284,6 +294,16 @@ export default function CandidatesBlock({ isFullView: parentIsFullView, setIsFul
         updatedAt: serverTimestamp(),
         ...(isStatusChanging && { isHot: false }),
       });
+
+      if (isStatusChanging && editLeadStatus === "נקבעה סדרה" && currentUser) {
+        const updatedLead = {
+          id: leadId,
+          fullName: editLeadFullName,
+          branch: editLeadBranch,
+        };
+        await createAutomatedTaskForTreatmentPlan(updatedLead, currentUser);
+      }
+
       setEditLeadBranch("");
     } catch (error) {
       alert("שגיאה בשמירת הליד");
@@ -415,6 +435,49 @@ export default function CandidatesBlock({ isFullView: parentIsFullView, setIsFul
       alert("המשימה נוצרה בהצלחה");
     } catch (error) {
       alert("שגיאה ביצירת משימה");
+    }
+  };
+
+  // --- Automated task creation for treatment plan ---
+  const createAutomatedTaskForTreatmentPlan = async (lead, user) => {
+    if (!user) {
+      console.error("Cannot create automated task without a user.");
+      return;
+    }
+    try {
+      const taskRef = doc(collection(db, "tasks"));
+      const dueDate = new Date();
+      dueDate.setDate(dueDate.getDate() + 14);
+
+      const newTask = {
+        id: taskRef.id,
+        userId: lead.id,
+        creatorId: user.uid,
+        title: lead.fullName,
+        subtitle: `נוצר מליד: ${lead.fullName}`,
+        assignTo: "dradamwinter@gmail.com",
+        category: "תוכניות טיפול",
+        status: "פתוח",
+        priority: "רגיל",
+        branch: lead.branch || "",
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+        dueDate: dueDate.toISOString(),
+        replies: [],
+        isRead: false,
+        isArchived: false,
+        done: false,
+        completedBy: null,
+        completedAt: null,
+      };
+
+      console.log("Creating automated task with data:", newTask);
+      await setDoc(taskRef, newTask);
+      
+      console.log(`Automated task created for lead: ${lead.fullName}`);
+    } catch (error) {
+      console.error("Error creating automated task:", error);
+      alert("שגיאה ביצירת משימה אוטומטית");
     }
   };
 
