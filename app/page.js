@@ -1,4 +1,4 @@
-// Version 7.6.1- add fire Hot Lead and timestamp on Candidate updates
+// Version 7.6.5- Extracted Task Manager, Lead Manager outside. fixed redandencies calling for Firebase.
 "use client";
 
 // Utility functions for layout persistence
@@ -25,6 +25,7 @@ import { auth, db } from "../firebase";
 import { FaWhatsapp, FaCodeBranch } from "react-icons/fa";
 import { or, query, where, orderBy, arrayUnion } from "firebase/firestore";
 import { useAuth } from "./context/AuthContext";  // Updated import path
+import { useData } from "./context/DataContext";
 import FullCalendarDemo from "../components/FullCalendarDemo";
 // ואז ברנדר:
 // <FullCalendarDemo />
@@ -257,9 +258,8 @@ export default function Dashboard() {
   const defaultTaskCategories = ["תוכניות טיפול", "לקבוע סדרה", "תשלומים וזיכויים", "דוחות", "להתקשר", "אחר"];
   const [taskCategories, setTaskCategories] = useState(defaultTaskCategories);
 
-  const [tasks, setTasks] = useState([]);
-  const [users, setUsers] = useState([]);
   const { currentUser } = useAuth();
+  const { tasks, setTasks, leads, setLeads, users, assignableUsers } = useData();
   const { toast } = useToast();
   const router = useRouter();
   const [loading, setLoading] = useState(true);
@@ -560,121 +560,7 @@ const updateKanbanCategoryOrder = async (newOrder) => {
     fetchUserData();
   }, [currentUser]);
 
-  // Fetch users with better error handling and logging
-  useEffect(() => {
-    const fetchUsers = async () => {
-      try {
-        const usersRef = collection(db, "users");
-        const usersSnap = await getDocs(usersRef);
-        const usersData = usersSnap.docs.map(doc => {
-          const data = doc.data();
-          return {
-            id: doc.id,
-            email: data.email || "",
-            alias: data.alias || data.email || "",
-            role: data.role || "staff"
-          };
-        });
-        console.log("Fetched users:", usersData);
-        setUsers(usersData);
-        setAssignableUsers(usersData);
-      } catch (error) {
-        console.error("Error fetching users:", error);
-      }
-    };
-    if (currentUser) {
-      fetchUsers();
-    }
-  }, [currentUser]);
-
-  /** Task Listener with improved visibility logic */
-  useEffect(() => {
-    if (!currentUser || !users.length) return;
-
-    console.log("Setting up task listener for user:", {
-      uid: currentUser.uid,
-      email: currentUser.email,
-      alias: currentUser.alias || alias
-    });
-
-    const tasksRef = collection(db, "tasks");
-    // Query all tasks - we'll filter client-side for better flexibility
-    const q = query(tasksRef, orderBy("createdAt", "desc"));
-
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const allTasks = snapshot.docs.map(doc => {
-        const data = doc.data();
-        // Ensure replies are properly structured
-        const replies = Array.isArray(data.replies) ? data.replies.map(reply => ({
-          ...reply,
-          timestamp: reply.timestamp?.toDate?.() || new Date(reply.timestamp) || new Date(),
-          isRead: reply.isRead || false
-        })).sort((a, b) => b.timestamp - a.timestamp) : [];
-
-        // --- FIX: Always parse dueDate as Date object ---
-        let dueDate = null;
-        if (data.dueDate) {
-          if (typeof data.dueDate.toDate === 'function') {
-            dueDate = data.dueDate.toDate();
-          } else if (typeof data.dueDate === 'string') {
-            dueDate = new Date(data.dueDate);
-          } else if (data.dueDate instanceof Date) {
-            dueDate = data.dueDate;
-          }
-        }
-
-        return {
-          id: doc.id,
-          ...data,
-          dueDate,
-          replies,
-          uniqueId: `task-${doc.id}-${Date.now()}`
-        };
-      });
-      
-      console.log("All tasks with replies:", allTasks);
-
-      const visibleTasks = allTasks.filter(task => {
-        // Get all possible identifiers for the current user
-        const userIdentifiers = [
-          currentUser.uid,
-          currentUser.email,
-          currentUser.alias,
-          alias
-        ].filter(Boolean); // Remove any undefined/null values
-
-        // Check if user is creator
-        const isCreator = task.userId === currentUser.uid || 
-                         task.creatorId === currentUser.uid;
-
-        // Check if task is assigned to any of user's identifiers
-        const isAssignee = userIdentifiers.some(identifier => 
-          task.assignTo === identifier
-        );
-
-        // Log task visibility and replies
-        console.log(`Task ${task.id} visibility check:`, {
-          taskAssignTo: task.assignTo,
-          userIdentifiers,
-          isCreator,
-          isAssignee,
-          isDone: task.done,
-          replyCount: task.replies?.length || 0,
-          hasUnreadReplies: task.replies?.some(reply => !reply.isRead && reply.userId !== currentUser.uid)
-        });
-
-        // Keep task visible if user is creator or assignee, regardless of completion status
-        return isCreator || isAssignee;
-      });
-
-      console.log("Filtered visible tasks with replies:", visibleTasks);
-      setTasks(visibleTasks);
-    }, (error) => {
-      console.error("Error in task listener:", error);
-    });
-
-    return () => unsubscribe();
-  }, [currentUser, users, alias]);
+  // Users and tasks now come from DataContext
 
 /** 🔁 Fetch logged-in user's alias */
 useEffect(() => {
@@ -1657,13 +1543,7 @@ const [selectedDate, setSelectedDate] = useState(new Date());
 
 
 
-  const [leads, setLeads] = useState([
-/** 
-    { id: 'lead-1', createdAt: new Date(new Date().setDate(new Date().getDate() - 10)), fullName: "יוסי כהן", phoneNumber: "0501234567", message: "פולו-אפ על פגישה", status: "מעקב", source: "פייסבוק", conversationSummary: [ { text: "יצירת קשר ראשונית.", timestamp: new Date(new Date().setDate(new Date().getDate() - 10)) }, { text: "תיאום פגישה.", timestamp: new Date(new Date().setDate(new Date().getDate() - 9)) }, ], expanded: false, appointmentDateTime: null, },
-    { id: 'lead-2', createdAt: new Date(new Date().setDate(new Date().getDate() - 5)), fullName: "שרה מזרחי", phoneNumber: "0527654321", message: "שיחת בירור מצב", status: "תור נקבע", source: "מבצע טלמרקטינג", conversationSummary: [ { text: "שוחחנו על המצב, תיאום שיחה נוספת.", timestamp: new Date(new Date().setDate(new Date().getDate() - 5)) }, ], expanded: false, appointmentDateTime: new Date(new Date().setDate(new Date().getDate() + 7)).toISOString(), },
-    { id: 'lead-3', createdAt: new Date(new Date().setDate(new Date().getDate() - 2)), fullName: "בני גנץ", phoneNumber: "0509876543", message: "לא היה מענה", status: "חדש", source: "אתר אינטרנט", conversationSummary: [], expanded: false, appointmentDateTime: null, },
-    { id: 'lead-4', createdAt: new Date(new Date().setDate(new Date().getDate() - 1)), fullName: "דנה לוי", phoneNumber: "0541122334", message: "קבעה פגישה לשבוע הבא", status: "תור נקבע", source: "המלצה", conversationSummary: [ { text: "שיחה ראשונית, עניין רב.", timestamp: new Date(new Date().setDate(new Date().getDate() - 1)) }, { text: "נקבעה פגישת ייעוץ ל-15/4.", timestamp: new Date(new Date().setDate(new Date().getDate() - 1)) }, ], expanded: false, appointmentDateTime: new Date(2025, 3, 15, 10, 30).toISOString(), }, */
-  ]); 
+  // Leads now come from DataContext 
   const [editingLeadId, setEditingLeadId] = useState(null);
   const [editLeadFullName, setEditLeadFullName] = useState("");
   const [editLeadPhone, setEditLeadPhone] = useState("");
@@ -1712,97 +1592,7 @@ const [selectedDate, setSelectedDate] = useState(new Date());
 
 
   
-  const [assignableUsers, setAssignableUsers] = useState([]);
-  useEffect(() => {
-    const fetchUsers = async () => {
-      try {
-        const querySnapshot = await getDocs(collection(db, "users"));
-        const users = querySnapshot.docs.map((doc) => {
-          const data = doc.data();
-          return {
-            id: doc.id,
-            email: data.email || "",
-            alias: data.alias || data.email || "",
-            role: data.role || "staff",
-          };
-        });
-  
-        setAssignableUsers(users);
-      } catch (error) {
-        console.error("שגיאה בטעינת משתמשים:", error);
-      }
-    };
-  
-    if (currentUser) {
-      fetchUsers();
-    }
-  }, [currentUser]);
-  
-  /** Task Listener */
-  useEffect(() => {
-    if (!currentUser) return;
-    console.log("Current user:", { uid: currentUser.uid, email: currentUser.email, alias });
-
-    const tasksRef = collection(db, "tasks");
-    const q = query(
-      tasksRef,
-      orderBy("createdAt", "desc")
-    );
-
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      console.log("Raw tasks from Firebase:", snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-      
-      const tasksData = snapshot.docs
-        .map(doc => {
-          const data = doc.data();
-          // --- FIX: Always parse dueDate as Date object ---
-          let dueDate = null;
-          if (data.dueDate) {
-            if (typeof data.dueDate.toDate === 'function') {
-              dueDate = data.dueDate.toDate();
-            } else if (typeof data.dueDate === 'string') {
-              dueDate = new Date(data.dueDate);
-            } else if (data.dueDate instanceof Date) {
-              dueDate = data.dueDate;
-            }
-          }
-          return {
-            id: doc.id,
-            ...data,
-            dueDate,
-            uniqueId: `task-${doc.id}-${Date.now()}`
-          };
-        })
-        .filter(task => {
-          const isCreator = task.userId === currentUser.uid || task.creatorId === currentUser.uid;
-          const isAssignee = 
-            task.assignTo === currentUser.uid ||
-            task.assignTo === currentUser.email ||
-            task.assignTo === currentUser.alias ||
-            task.assignTo === alias;
-          
-          console.log("Task visibility check:", {
-            taskId: task.id,
-            assignTo: task.assignTo,
-            currentUser: currentUser.uid,
-            currentEmail: currentUser.email,
-            currentAlias: currentUser.alias,
-            alias,
-            isCreator,
-            isAssignee
-          });
-
-          return isCreator || isAssignee;
-        });
-
-      console.log("Filtered tasks:", tasksData);
-      setTasks(tasksData);
-    }, (error) => {
-      console.error("Error fetching tasks:", error);
-    });
-
-    return () => unsubscribe();
-  }, [currentUser, alias]);
+  // Assignable users now come from DataContext
   /** listens to pull but not needed here
   const tasksRef = collection(db, "tasks");
 const q = query(
@@ -1814,33 +1604,7 @@ const q = query(
 );
 */
 
-// Real-time leads listener
-useEffect(() => {
-  if (!currentUser) return; // ⛔ Prevent running if not logged in
-
-  const unsubscribe = onSnapshot(
-    query(collection(db, "leads"), orderBy("createdAt", "desc")),
-    (snapshot) => {
-      const allLeads = snapshot.docs.map((doc) => {
-        const data = doc.data();
-        const conversationSummary = (data.conversationSummary || []).map(entry => ({
-          ...entry,
-          timestamp: entry.timestamp?.toDate ? entry.timestamp.toDate() : (entry.timestamp ? new Date(entry.timestamp) : null)
-        }));
-        return {
-          id: doc.id,
-          ...data,
-          createdAt: data.createdAt?.toDate() || new Date(),
-          conversationSummary,
-          isHot: data.isHot || false,
-        };
-      });
-      setLeads(allLeads);
-    }
-  );
-
-  return () => unsubscribe(); // ✅ Clean up
-}, [currentUser]);
+// Leads listener now handled by DataContext
 
 
     // 🔁 Redirect if not logged in
@@ -2926,7 +2690,6 @@ const calculatedAnalytics = useMemo(() => {
     }
     
   return (
-
     <TooltipProvider>
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
         
@@ -2955,7 +2718,7 @@ const calculatedAnalytics = useMemo(() => {
   </div>
 
   <div className="w-full sm:w-48 text-center sm:text-left text-sm text-gray-500 flex flex-col items-center sm:items-end sm:ml-0">
-                            <span>{'Version 7.6.1'}</span>
+                            <span>{'Version 7.6.5'}</span>
     <button
       className="text-xs text-red-600 underline"
       onClick={() => {

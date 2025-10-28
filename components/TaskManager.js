@@ -3,6 +3,7 @@ import React, { useState, useEffect, useMemo, useCallback, useRef } from "react"
 import { useRouter } from "next/navigation";
 import { auth, db } from "../firebase";
 import { useAuth } from "@/app/context/AuthContext";
+import { useData } from "@/app/context/DataContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -24,7 +25,7 @@ import { Switch as MuiSwitch } from '@mui/material';
 import { FaWhatsapp } from "react-icons/fa";
 import { BRANCHES, branchColor } from "@/lib/branches";
 import { 
-  collection, getDocs, getDoc, addDoc, updateDoc, onSnapshot, setDoc, doc, deleteDoc, serverTimestamp, arrayUnion, orderBy, query
+  collection, getDocs, getDoc, addDoc, updateDoc, onSnapshot, setDoc, doc, deleteDoc, serverTimestamp, arrayUnion, orderBy, query, Timestamp
 } from "firebase/firestore";
 import { TaskTabs } from "./TaskTabs";
 
@@ -104,10 +105,7 @@ const IOSSwitch = styled((props) => (
 export default function TaskManager({ isTMFullView, setIsTMFullView, blockPosition, onToggleBlockOrder, onCalendarDataChange }) {
   const { currentUser } = useAuth();
   const { toast } = useToast();
-
-  const [tasks, setTasks] = useState([]);
-  const [users, setUsers] = useState([]);
-  const [assignableUsers, setAssignableUsers] = useState([]);
+  const { tasks, setTasks, users, assignableUsers } = useData();
   const [alias, setAlias] = useState("");
   const [role, setRole] = useState("");
   const [userExt, setUserExt] = useState("");
@@ -216,22 +214,7 @@ export default function TaskManager({ isTMFullView, setIsTMFullView, blockPositi
     }).catch(() => {});
   }, [currentUser, prefsLoaded, taskFilter, taskPriorityFilter, selectedTaskCategories, taskSearchTerm, showDoneTasks, showOverdueEffects]);
 
-  // Fetch assignable users
-  useEffect(() => {
-    const fetchUsers = async () => {
-      try {
-        const usersRef = collection(db, "users");
-        const usersSnap = await getDocs(usersRef);
-        const usersData = usersSnap.docs.map(docu => {
-          const data = docu.data();
-          return { id: docu.id, email: data.email || "", alias: data.alias || data.email || "", role: data.role || "staff" };
-        });
-        setUsers(usersData);
-        setAssignableUsers(usersData);
-      } catch {}
-    };
-    if (currentUser) fetchUsers();
-  }, [currentUser]);
+  // Users now come from DataContext - no need to fetch
 
   // Kanban category order persistence in Firestore
   useEffect(() => {
@@ -323,61 +306,7 @@ export default function TaskManager({ isTMFullView, setIsTMFullView, blockPositi
     });
   };
 
-  // Task listeners (preserve both to keep behavior identical)
-  useEffect(() => {
-    if (!currentUser || !users.length) return;
-    const tasksRef = collection(db, "tasks");
-    const q = query(tasksRef, orderBy("createdAt", "desc"));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const allTasks = snapshot.docs.map(docu => {
-        const data = docu.data();
-        const replies = Array.isArray(data.replies) ? data.replies.map(reply => ({
-          ...reply,
-          timestamp: reply.timestamp?.toDate?.() || new Date(reply.timestamp) || new Date(),
-          isRead: reply.isRead || false
-        })).sort((a, b) => b.timestamp - a.timestamp) : [];
-        let dueDate = null;
-        if (data.dueDate) {
-          if (typeof data.dueDate.toDate === 'function') dueDate = data.dueDate.toDate();
-          else if (typeof data.dueDate === 'string') dueDate = new Date(data.dueDate);
-          else if (data.dueDate instanceof Date) dueDate = data.dueDate;
-        }
-        return { id: docu.id, ...data, dueDate, replies, uniqueId: `task-${docu.id}-${Date.now()}` };
-      });
-      const visibleTasks = allTasks.filter(task => {
-        const userIdentifiers = [currentUser.uid, currentUser.email, currentUser.alias, alias].filter(Boolean);
-        const isCreator = task.userId === currentUser.uid || task.creatorId === currentUser.uid;
-        const isAssignee = userIdentifiers.some(identifier => task.assignTo === identifier);
-        return isCreator || isAssignee;
-      });
-      setTasks(visibleTasks);
-    });
-    return () => unsubscribe();
-  }, [currentUser, users, alias]);
-
-  useEffect(() => {
-    if (!currentUser) return;
-    const tasksRef = collection(db, "tasks");
-    const q = query(tasksRef, orderBy("createdAt", "desc"));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const tasksData = snapshot.docs.map(docu => {
-        const data = docu.data();
-        let dueDate = null;
-        if (data.dueDate) {
-          if (typeof data.dueDate.toDate === 'function') dueDate = data.dueDate.toDate();
-          else if (typeof data.dueDate === 'string') dueDate = new Date(data.dueDate);
-          else if (data.dueDate instanceof Date) dueDate = data.dueDate;
-        }
-        return { id: docu.id, ...data, dueDate, uniqueId: `task-${docu.id}-${Date.now()}` };
-      }).filter(task => {
-        const isCreator = task.userId === currentUser.uid || task.creatorId === currentUser.uid;
-        const isAssignee = task.assignTo === currentUser.uid || task.assignTo === currentUser.email || task.assignTo === currentUser.alias || task.assignTo === alias;
-        return isCreator || isAssignee;
-      });
-      setTasks(tasksData);
-    });
-    return () => unsubscribe();
-  }, [currentUser, alias]);
+  // Tasks now come from DataContext - no need for listener
 
   // Handlers
   const handleCreateTask = async (e) => {
@@ -427,11 +356,11 @@ export default function TaskManager({ isTMFullView, setIsTMFullView, blockPositi
     const taskData = taskDoc.data();
     const hasPermission = taskData.userId === currentUser.uid || taskData.creatorId === currentUser.uid || taskData.assignTo === currentUser.uid || taskData.assignTo === currentUser.email || taskData.assignTo === alias;
     if (!hasPermission) return;
-    const now = new Date();
+    const now = Timestamp.fromDate(new Date());
     const newReply = { id: `reply-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`, text: replyText, timestamp: now, userId: currentUser.uid, userEmail: currentUser.email, userAlias: alias || currentUser.email, isRead: false };
     const existingReplies = taskData.replies || [];
     await updateDoc(taskRef, { userId: taskData.userId, creatorId: taskData.creatorId, assignTo: taskData.assignTo, replies: [...existingReplies, newReply], hasNewReply: true, lastReplyAt: serverTimestamp(), updatedAt: serverTimestamp() });
-    setTasks(prev => prev.map(t => t.id === taskId ? { ...t, replies: [...(t.replies || []), newReply], hasNewReply: true, lastReplyAt: now } : t));
+    setTasks(prev => prev.map(t => t.id === taskId ? { ...t, replies: [...(t.replies || []), newReply], hasNewReply: true, lastReplyAt: now.toDate() } : t));
     setReplyingToTaskId(null);
   };
 
@@ -584,6 +513,46 @@ export default function TaskManager({ isTMFullView, setIsTMFullView, blockPositi
       alert('המשימה שוחזרה בהצלחה');
     } catch {
       alert('שגיאה בשחזור המשימה');
+    }
+  };
+
+  // Delete archived tasks older than 30 days
+  const deleteOldArchivedTasks = async () => {
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    
+    const oldTasks = archivedTasks.filter(task => {
+      const completedAt = task.completedAt?.toDate ? task.completedAt.toDate() : new Date(task.completedAt);
+      return completedAt < thirtyDaysAgo;
+    });
+
+    if (oldTasks.length === 0) {
+      alert('אין משימות ישנות למחיקה (מעל 30 יום)');
+      return;
+    }
+
+    const confirmMsg = `נמצאו ${oldTasks.length} משימות שבוצעו לפני יותר מ-30 יום.\n\nהאם אתה בטוח שברצונך למחוק אותן לצמיתות?\nלא ניתן לשחזר פעולה זו.`;
+    
+    if (!window.confirm(confirmMsg)) return;
+
+    try {
+      const deletePromises = oldTasks.map(task => 
+        deleteDoc(doc(db, 'archivedTasks', task.id))
+      );
+      
+      await Promise.all(deletePromises);
+      
+      toast({
+        title: "משימות נמחקו בהצלחה",
+        description: `${oldTasks.length} משימות ישנות נמחקו מהארכיון`,
+      });
+    } catch (error) {
+      console.error('Error deleting old archived tasks:', error);
+      toast({
+        title: "שגיאה",
+        description: "לא ניתן למחוק חלק מהמשימות",
+        variant: "destructive"
+      });
     }
   };
 
@@ -825,6 +794,17 @@ export default function TaskManager({ isTMFullView, setIsTMFullView, blockPositi
 
   const activeTaskForOverlay = activeId && typeof activeId === 'string' && activeId.startsWith('task-') ? tasks.find(task => `task-${task.id}` === activeId) : null;
 
+  // Calculate old archived tasks count (30+ days)
+  const oldArchivedTasksCount = useMemo(() => {
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    
+    return archivedTasks.filter(task => {
+      const completedAt = task.completedAt?.toDate ? task.completedAt.toDate() : new Date(task.completedAt);
+      return completedAt < thirtyDaysAgo;
+    }).length;
+  }, [archivedTasks]);
+
   return (
     <Card className="h-full flex flex-col">
       <CardHeader className="space-y-3">
@@ -992,7 +972,26 @@ export default function TaskManager({ isTMFullView, setIsTMFullView, blockPositi
       {showHistoryModal && (
         <div className="fixed inset-0 flex items-center justify-center bg-black/60 z-50 p-4" onClick={() => setShowHistoryModal(false)}>
           <div className="bg-white p-6 rounded-lg shadow-xl w-full max-w-lg max-h-[80vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
-            <h2 className="text-lg font-semibold mb-4 shrink-0 text-right">{'היסטוריית משימות שבוצעו'}</h2>
+            <div className="flex justify-between items-center mb-4 shrink-0 gap-2">
+              <h2 className="text-lg font-semibold text-right">{'היסטוריית משימות שבוצעו'}</h2>
+              <div className="flex items-center gap-2">
+                {oldArchivedTasksCount > 0 && (
+                  <span className="text-xs text-gray-600 bg-orange-100 px-2 py-1 rounded font-medium">
+                    {oldArchivedTasksCount} ישנות
+                  </span>
+                )}
+                <Button 
+                  variant="outline" 
+                  size="icon" 
+                  onClick={deleteOldArchivedTasks}
+                  title={`מחק ${oldArchivedTasksCount} משימות ישנות (30+ יום)`}
+                  className="h-8 w-8 text-red-600 hover:bg-red-50 hover:text-red-700 border-red-300"
+                  disabled={oldArchivedTasksCount === 0}
+                >
+                  {'🗑️'}
+                </Button>
+              </div>
+            </div>
             <div className="overflow-y-auto flex-grow mb-4 border rounded p-2 bg-gray-50">
               <ul className="space-y-2">
                 {archivedTasks

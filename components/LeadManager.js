@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { db, auth } from "../firebase";
 import { useAuth } from "@/app/context/AuthContext";
+import { useData } from "@/app/context/DataContext";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,7 +16,7 @@ import { BRANCHES, branchColor } from "@/lib/branches";
 import { leadStatusConfig, leadColorTab, leadPriorityValue } from "@/lib/leadStatus";
 import { Search, ChevronDown } from "lucide-react";
 import { 
-  collection, onSnapshot, addDoc, updateDoc, doc, serverTimestamp, arrayUnion, setDoc, getDocs, getDoc, orderBy, query, deleteDoc
+  collection, onSnapshot, addDoc, updateDoc, doc, serverTimestamp, arrayUnion, setDoc, getDocs, getDoc, orderBy, query, deleteDoc, Timestamp
 } from "firebase/firestore";
 
 // Shared configs imported from lib
@@ -31,9 +32,7 @@ function formatDateTime(date) {
 
 export default function LeadManager({ isFullView, setIsFullView, blockPosition, onToggleBlockOrder, onCalendarDataChange }) {
   const { currentUser } = useAuth();
-
-  const [leads, setLeads] = useState([]);
-  const [assignableUsers, setAssignableUsers] = useState([]);
+  const { leads, assignableUsers } = useData();
   const [taskCategories, setTaskCategories] = useState(["להתקשר", "לקבוע סדרה", "דוחות", "תשלומים", "תוכניות טיפול", "אחר"]);
   const [editingLeadId, setEditingLeadId] = useState(null);
   const [editLeadFullName, setEditLeadFullName] = useState("");
@@ -121,20 +120,7 @@ export default function LeadManager({ isFullView, setIsFullView, blockPosition, 
     } catch {}
   }, [showAnalytics]);
 
-  // Fetch assignable users
-  useEffect(() => {
-    const fetchUsers = async () => {
-      try {
-        const querySnapshot = await getDocs(collection(db, "users"));
-        const users = querySnapshot.docs.map((docu) => {
-          const data = docu.data();
-          return { id: docu.id, email: data.email || "", alias: data.alias || data.email || "", role: data.role || "staff" };
-        });
-        setAssignableUsers(users);
-      } catch {}
-    };
-    fetchUsers();
-  }, []);
+  // Users now come from DataContext
 
   // Fetch user alias/role/EXT
   useEffect(() => {
@@ -162,19 +148,7 @@ export default function LeadManager({ isFullView, setIsFullView, blockPosition, 
     }
   }, [alias, currentUser, assignableUsers]);
 
-  // Leads realtime listener
-  useEffect(() => {
-    if (!currentUser) return;
-    const unsubscribe = onSnapshot(query(collection(db, "leads"), orderBy("createdAt", "desc")), (snapshot) => {
-      const allLeads = snapshot.docs.map((docu) => {
-        const data = docu.data();
-        const conversationSummary = (data.conversationSummary || []).map(entry => ({ ...entry, timestamp: entry.timestamp?.toDate ? entry.timestamp.toDate() : (entry.timestamp ? new Date(entry.timestamp) : null) }));
-        return { id: docu.id, ...data, createdAt: data.createdAt?.toDate() || new Date(), conversationSummary, isHot: data.isHot || false };
-      });
-      setLeads(allLeads);
-    });
-    return () => unsubscribe();
-  }, [currentUser]);
+  // Leads now come from DataContext
 
   // Calendar event bridge from leads
   const leadAppointmentEvents = useMemo(() => {
@@ -293,7 +267,7 @@ export default function LeadManager({ isFullView, setIsFullView, blockPosition, 
     if (!newConversationText.trim() || !currentUser) return;
     try {
       const leadRef = doc(db, 'leads', leadId);
-      const newEntry = { text: newConversationText, timestamp: new Date(), userId: currentUser.uid, userAlias: alias || currentUser.email };
+      const newEntry = { text: newConversationText, timestamp: Timestamp.fromDate(new Date()), userId: currentUser.uid, userAlias: alias || currentUser.email };
       await updateDoc(leadRef, { conversationSummary: arrayUnion(newEntry), updatedAt: serverTimestamp() });
       setNewConversationText(""); setShowConvUpdate(leadId);
     } catch { alert("שגיאה בהוספת עדכון שיחה"); }

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
 import { db } from "../firebase";
-import { collection, onSnapshot, addDoc, updateDoc, doc, serverTimestamp, arrayUnion, setDoc, getDocs } from "firebase/firestore";
+import { collection, onSnapshot, addDoc, updateDoc, doc, serverTimestamp, arrayUnion, setDoc, getDocs, Timestamp } from "firebase/firestore";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,6 +12,7 @@ import { Search, ChevronDown } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useAuth } from "@/app/context/AuthContext";
+import { useData } from "@/app/context/DataContext";
 
 // --- Status config (copy from page.js) ---
 const leadStatusConfig = {
@@ -72,8 +73,8 @@ function getPref(key, def) {
 
 export default function CandidatesBlock({ isFullView: parentIsFullView, setIsFullView: parentSetIsFullView }) {
   const { currentUser } = useAuth();
+  const { leads, assignableUsers } = useData();
   // --- State ---
-  const [leads, setLeads] = useState([]);
   // Multi-select status filter
   const [selectedStatuses, setSelectedStatuses] = useState(() => getPref('candidates_selectedStatuses', candidatesStatuses));
   const [searchTerm, setSearchTerm] = useState(() => getPref('candidates_searchTerm', ""));
@@ -101,8 +102,7 @@ export default function CandidatesBlock({ isFullView: parentIsFullView, setIsFul
   const [newTaskCategory, setNewTaskCategory] = useState("להתקשר");
   const [newTaskDueDate, setNewTaskDueDate] = useState("");
   const [newTaskDueTime, setNewTaskDueTime] = useState("");
-  // Add state for assignable users and task categories
-  const [assignableUsers, setAssignableUsers] = useState([]);
+  // Add state for task categories (assignableUsers now from DataContext)
   const [taskCategories, setTaskCategories] = useState(["להתקשר", "לקבוע סדרה", "דוחות", "תשלומים", "תוכניות טיפול", "אחר"]);
   // Add state for full width toggle
   const [isFullWidth, setIsFullWidth] = useState(() => getPref('candidates_isFullWidth', false));
@@ -131,55 +131,7 @@ export default function CandidatesBlock({ isFullView: parentIsFullView, setIsFul
     savePref('candidates_isFullWidth', isFullWidth);
   }, [isFullWidth]);
 
-  // --- Real-time Firestore listener ---
-  useEffect(() => {
-    const unsubscribe = onSnapshot(collection(db, "leads"), (snapshot) => {
-      const fetchedLeads = snapshot.docs.map((doc) => {
-        const data = doc.data();
-        const conversationSummary = (data.conversationSummary || []).map(entry => ({
-          ...entry,
-          timestamp: entry.timestamp?.toDate ? entry.timestamp.toDate() : (entry.timestamp ? new Date(entry.timestamp) : null)
-        }));
-        return {
-          id: doc.id,
-          createdAt: data.createdAt?.toDate?.() || new Date(),
-          fullName: data.fullName || "",
-          phoneNumber: data.phoneNumber || "",
-          message: data.message || "",
-          status: data.status || "",
-          source: data.source || "",
-          followUpCall: data.followUpCall || { active: false, count: 0 },
-          conversationSummary: conversationSummary,
-          branch: data.branch || "",
-          isHot: data.isHot || false,
-        };
-      });
-      setLeads(fetchedLeads);
-    });
-    return () => unsubscribe();
-  }, []);
-
-  // Fetch assignable users from Firestore
-  useEffect(() => {
-    const fetchUsers = async () => {
-      try {
-        const querySnapshot = await getDocs(collection(db, "users"));
-        const users = querySnapshot.docs.map((doc) => {
-          const data = doc.data();
-          return {
-            id: doc.id,
-            email: data.email || "",
-            alias: data.alias || data.email || "",
-            role: data.role || "staff",
-          };
-        });
-        setAssignableUsers(users);
-      } catch (error) {
-        console.error("שגיאה בטעינת משתמשים:", error);
-      }
-    };
-    fetchUsers();
-  }, []);
+  // Leads and users now come from DataContext
 
   // --- Sorting logic ---
   const compareLeads = (a, b) => {
@@ -327,7 +279,7 @@ export default function CandidatesBlock({ isFullView: parentIsFullView, setIsFul
       const leadRef = doc(db, "leads", leadId);
       const newEntry = {
         text: newConversationText,
-        timestamp: new Date(),
+        timestamp: Timestamp.fromDate(new Date()),
       };
       await updateDoc(leadRef, {
         conversationSummary: arrayUnion(newEntry),

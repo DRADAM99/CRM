@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import FullCalendar from '@fullcalendar/react';
 import dayGridPlugin from '@fullcalendar/daygrid';
 import timeGridPlugin from '@fullcalendar/timegrid';
@@ -11,6 +11,7 @@ import { db } from '../firebase';
 import { collection, onSnapshot, doc, getDoc, updateDoc, serverTimestamp, arrayUnion, setDoc, addDoc, deleteDoc } from 'firebase/firestore';
 import { ChevronDown } from 'lucide-react';
 import { getAuth, onAuthStateChanged } from 'firebase/auth';
+import { useData } from '@/app/context/DataContext';
 
 // Use the same categories and priorities as the main app
 const taskPriorities = ["דחוף", "רגיל", "נמוך"];
@@ -132,8 +133,9 @@ function CategoryDropdown({ categories, selected, onChange, categoryColors }) {
 }
 
 export default function FullCalendarDemo({ isCalendarFullView, taskCategories: propTaskCategories, users: propUsers }) {
+  const { tasks: allTasks, leads: allLeads, users: dataUsers } = useData();
   const [events, setEvents] = useState([]);
-  const [users, setUsers] = useState(propUsers || []);
+  const [users, setUsers] = useState(dataUsers || propUsers || []);
   const [currentUser, setCurrentUser] = useState(null);
   const [alias, setAlias] = useState("");
   const [editEvent, setEditEvent] = useState(null);
@@ -175,8 +177,11 @@ export default function FullCalendarDemo({ isCalendarFullView, taskCategories: p
   useEffect(() => {
     if (propTaskCategories) setTaskCategories(propTaskCategories);
   }, [propTaskCategories]);
-  // Now define CATEGORY_COLORS after taskCategories is initialized
-  const CATEGORY_COLORS = Object.fromEntries((taskCategories || []).map((cat, i) => [cat, pastelColors[i % pastelColors.length]]));
+  // Now define CATEGORY_COLORS after taskCategories is initialized (memoized to prevent infinite loop)
+  const CATEGORY_COLORS = useMemo(() => 
+    Object.fromEntries((taskCategories || []).map((cat, i) => [cat, pastelColors[i % pastelColors.length]])),
+    [taskCategories]
+  );
 
   // Get Firebase Auth user
   useEffect(() => {
@@ -187,74 +192,47 @@ export default function FullCalendarDemo({ isCalendarFullView, taskCategories: p
     return () => unsubscribe();
   }, []);
 
-  // Fetch users from Firestore (for list, not for current user)
+  // Update users from DataContext
   useEffect(() => {
-    const unsub = onSnapshot(collection(db, "users"), (snap) => {
-      const usersData = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      setUsers(usersData);
+    if (dataUsers && dataUsers.length > 0) {
+      setUsers(dataUsers);
       // Set alias for current user if available
       if (currentUser) {
-        const myUserDoc = usersData.find(u => u.id === currentUser.uid);
+        const myUserDoc = dataUsers.find(u => u.id === currentUser.uid);
         if (myUserDoc) setAlias(myUserDoc.alias || myUserDoc.email || "");
       }
-    });
-    return () => unsub();
-  }, [currentUser]);
+    }
+  }, [dataUsers, currentUser]);
 
-  // Fetch tasks and leads
+  // Transform tasks and leads from DataContext into calendar events
   useEffect(() => {
-    const unsubTasks = onSnapshot(collection(db, "tasks"), (snap) => {
-      const tasks = snap.docs.map(doc => {
-        const data = doc.data();
-        let dueDate = null;
-        if (data.dueDate) {
-          if (typeof data.dueDate.toDate === 'function') dueDate = data.dueDate.toDate();
-          else if (typeof data.dueDate === 'string') dueDate = new Date(data.dueDate);
-          else if (data.dueDate instanceof Date) dueDate = data.dueDate;
-        }
+    const taskEvents = allTasks.map(task => ({
+      ...task,
+      type: 'task',
+      start: task.dueDate,
+      end: task.dueDate ? new Date(task.dueDate.getTime() + 20 * 60 * 1000) : null,
+      color: CATEGORY_COLORS[task.category],
+    }));
+    
+    const leadEvents = allLeads
+      .filter(lead => lead.status === 'תור נקבע' && lead.appointmentDateTime)
+      .map(lead => {
+        let start = lead.appointmentDateTime;
+        if (typeof start?.toDate === 'function') start = start.toDate();
         return {
-          ...data,
-          id: doc.id,
-          type: 'task',
-          start: dueDate,
-          end: dueDate ? new Date(dueDate.getTime() + 20 * 60 * 1000) : null,
-          color: CATEGORY_COLORS[data.category],
-        };
-      });
-      setEvents(prev => {
-        const leads = prev.filter(e => e.type === 'lead');
-        return [...tasks, ...leads];
-      });
-    });
-    const unsubLeads = onSnapshot(collection(db, "leads"), (snap) => {
-      const leads = snap.docs.filter(doc => {
-        const d = doc.data();
-        return d.status === 'תור נקבע' && d.appointmentDateTime;
-      }).map(doc => {
-        const d = doc.data();
-        let start = null;
-        if (d.appointmentDateTime) {
-          if (typeof d.appointmentDateTime.toDate === 'function') start = d.appointmentDateTime.toDate();
-          else if (typeof d.appointmentDateTime === 'string') start = new Date(d.appointmentDateTime);
-          else if (d.appointmentDateTime instanceof Date) start = d.appointmentDateTime;
-        }
-        return {
-          id: `lead-${doc.id}`,
+          id: `lead-${lead.id}`,
           type: 'lead',
-          title: `פגישה: ${d.fullName}`,
+          title: `פגישה: ${lead.fullName}`,
           start,
           end: start ? new Date(start.getTime() + 20 * 60 * 1000) : null,
           color: '#b5ead7',
-          lead: d,
+          lead,
         };
       });
-      setEvents(prev => {
-        const tasks = prev.filter(e => e.type === 'task');
-        return [...tasks, ...leads];
-      });
-    });
-    return () => { unsubTasks(); unsubLeads(); };
-  }, []);
+      
+    setEvents([...taskEvents, ...leadEvents]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [allTasks, allLeads]);
 
   // Detect touch device (iPad, etc.)
   useEffect(() => {
