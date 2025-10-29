@@ -1,4 +1,4 @@
-// Version 7.6.5- Extracted Task Manager, Lead Manager outside. fixed redandencies calling for Firebase.
+// Version 7.6.6- fixed new lead dialog functionaliy and UI
 "use client";
 
 // Utility functions for layout persistence
@@ -299,7 +299,7 @@ const handleCreateTaskFromLead = async (lead) => {
   console.log('Creating task from lead:', lead);
   
   try {
-    const assignedUser = assignableUsers.find(u => u.alias === leadTaskAssignTo || u.email === leadTaskAssignTo);
+    const assignedUser = assignableUsersWithSelf.find(u => u.alias === leadTaskAssignTo || u.email === leadTaskAssignTo);
     const taskRef = doc(collection(db, "tasks"));
     await setDoc(taskRef, {
       id: taskRef.id,
@@ -538,7 +538,7 @@ const updateKanbanCategoryOrder = async (newOrder) => {
     setLoading(false);
   }, [loading, currentUser, router]);
   
-  // Fetch user's alias
+  // Fetch user's alias, role, and EXT
   useEffect(() => {
     const fetchUserData = async () => {
       if (!currentUser) return;
@@ -550,32 +550,30 @@ const updateKanbanCategoryOrder = async (newOrder) => {
           const data = userSnap.data();
           setAlias(data.alias || currentUser.email || "");
           setRole(data.role || "staff");
-          setUserExt(data.EXT || ""); // <-- Fetch EXT
+          setUserExt(data.EXT || "");
+        } else {
+          // Fallback if document doesn't exist
+          setAlias(currentUser.email || "");
+          setRole("staff");
         }
       } catch (error) {
         console.error("Error fetching user data:", error);
+        setAlias(currentUser.email || "");
       }
     };
 
     fetchUserData();
   }, [currentUser]);
 
-  // Users and tasks now come from DataContext
-
-/** 🔁 Fetch logged-in user's alias */
-useEffect(() => {
-  if (currentUser) {
-    const fetchAlias = async () => {
-      const userRef = doc(db, "users", currentUser.uid);
-      const userSnap = await getDoc(userRef);
-      if (userSnap.exists()) {
-        const data = userSnap.data();
-        setAlias(data.alias || data.email);
+  // Fallback: populate alias from users list if not set
+  useEffect(() => {
+    if (!alias && currentUser && users.length > 0) {
+      const me = users.find(u => u.id === currentUser.uid || u.email === currentUser.email);
+      if (me && me.alias) {
+        setAlias(me.alias);
       }
-    };
-    fetchAlias();
-  }
-}, [currentUser]);
+    }
+  }, [alias, currentUser, users]);
 
 
   // ✅ 1. Listen to auth state changes - REMOVED duplicate listener since we use AuthContext
@@ -681,6 +679,31 @@ const [selectedDate, setSelectedDate] = useState(new Date());
   const [newTaskDueTime, setNewTaskDueTime] = useState("");
   const [newTaskAssignTo, setNewTaskAssignTo] = useState("");
   const [newTaskBranch, setNewTaskBranch] = useState("");
+  
+  // Ensure current user is always in the assignable users list
+  const assignableUsersWithSelf = useMemo(() => {
+    if (!currentUser) return assignableUsers;
+    
+    // Check if current user is already in the list
+    const isCurrentUserInList = assignableUsers.some(
+      u => u.id === currentUser.uid || u.email === currentUser.email
+    );
+    
+    if (isCurrentUserInList) {
+      return assignableUsers;
+    }
+    
+    // Add current user to the list
+    const currentUserObj = {
+      id: currentUser.uid,
+      email: currentUser.email,
+      alias: alias || currentUser.email,
+      role: role || "staff"
+    };
+    
+    return [currentUserObj, ...assignableUsers];
+  }, [assignableUsers, currentUser, alias, role]);
+  
   // First, add a new state for showing the new task form
   
 
@@ -727,7 +750,7 @@ const [selectedDate, setSelectedDate] = useState(new Date());
 
     try {
       // Find the assigned user's details
-      const assignedUser = users.find(u => 
+      const assignedUser = assignableUsersWithSelf.find(u => 
         u.alias === newTaskAssignTo || 
         u.email === newTaskAssignTo
       );
@@ -736,6 +759,19 @@ const [selectedDate, setSelectedDate] = useState(new Date());
         assignTo: newTaskAssignTo,
         foundUser: assignedUser
       });
+
+      // If no date/time provided, use current date/time
+      let dueDateTime;
+      if (newTaskDueDate && newTaskDueTime) {
+        dueDateTime = new Date(`${newTaskDueDate}T${newTaskDueTime}`).toISOString();
+      } else if (newTaskDueDate) {
+        // Date provided but no time - use date with current time
+        const now = new Date();
+        dueDateTime = new Date(`${newTaskDueDate}T${now.toTimeString().slice(0, 5)}`).toISOString();
+      } else {
+        // No date provided - use current date and time
+        dueDateTime = new Date().toISOString();
+      }
 
       const taskRef = doc(collection(db, "tasks"));
       const newTask = {
@@ -752,9 +788,7 @@ const [selectedDate, setSelectedDate] = useState(new Date());
         creatorAlias: alias || currentUser.email || "",
         // Use the most specific identifier available
         assignTo: assignedUser ? assignedUser.email : newTaskAssignTo,
-        dueDate: newTaskDueDate && newTaskDueTime
-          ? new Date(`${newTaskDueDate}T${newTaskDueTime}`).toISOString()
-          : null,
+        dueDate: dueDateTime,
         replies: [],
         isRead: false,
         isArchived: false,
@@ -1154,7 +1188,7 @@ const [selectedDate, setSelectedDate] = useState(new Date());
                 className="h-8 text-sm w-full border rounded"
               >
                 <option value="">בחר משתמש</option>
-                {assignableUsers.map((user) => (
+                {assignableUsersWithSelf.map((user) => (
                   <option key={user.id} value={user.alias || user.email}>
                     {user.alias || user.email}
                   </option>
@@ -1213,8 +1247,7 @@ const [selectedDate, setSelectedDate] = useState(new Date());
                   type="date" 
                   value={newTaskDueDate} 
                   onChange={(e) => setNewTaskDueDate(e.target.value)} 
-                  className="h-8 text-sm" 
-                  required 
+                  className="h-8 text-sm"
                 />
               </div>
               <div className="flex-1">
@@ -1242,12 +1275,12 @@ const [selectedDate, setSelectedDate] = useState(new Date());
                 </SelectContent>
               </Select>
             </div>
-            <div className="flex justify-end space-x-2 space-x-reverse pt-1">
-              <Button type="submit" size="sm">{'צור משימה'}</Button>
+            <div className="flex flex-col items-center gap-2 pt-1">
+              <Button type="submit" size="sm" className="bg-green-600 hover:bg-green-700 text-white px-12">{'צור משימה'}</Button>
               <Button 
                 type="button" 
-                variant="outline" 
                 size="sm" 
+                className="bg-red-600 hover:bg-red-700 text-white px-12"
                 onClick={() => setShowTaskModal(false)}
               >
                 {'ביטול'}
@@ -1270,7 +1303,7 @@ const [selectedDate, setSelectedDate] = useState(new Date());
                   <SelectValue placeholder="בחר משתמש" />
                 </SelectTrigger>
                 <SelectContent>
-                  {assignableUsers.map((user) => (
+                  {assignableUsersWithSelf.map((user) => (
                     <SelectItem key={user.id} value={user.email}>
                       {user.alias || user.email}
                     </SelectItem>
@@ -1382,7 +1415,7 @@ const [selectedDate, setSelectedDate] = useState(new Date());
             )}
             <div className="text-xs text-gray-500 mt-1 space-x-2 space-x-reverse">
               <span>🗓️ {formatDateTime(task.dueDate)}</span>
-              <span>👤 {assignableUsers.find(u => u.email === task.assignTo)?.alias || task.assignTo}</span>
+              <span>👤 {assignableUsersWithSelf.find(u => u.email === task.assignTo)?.alias || task.assignTo}</span>
               {task.creatorAlias && <span className="font-medium">📝 {task.creatorAlias}</span>}
               <span>🏷️ {task.category}</span>
               <span>{task.priority === 'דחוף' ? '🔥' : task.priority === 'נמוך' ? '⬇️' : '➖'} {task.priority}</span>
@@ -2718,7 +2751,7 @@ const calculatedAnalytics = useMemo(() => {
   </div>
 
   <div className="w-full sm:w-48 text-center sm:text-left text-sm text-gray-500 flex flex-col items-center sm:items-end sm:ml-0">
-                            <span>{'Version 7.6.5'}</span>
+                            <span>{'Version 7.6.6'}</span>
     <button
       className="text-xs text-red-600 underline"
       onClick={() => {

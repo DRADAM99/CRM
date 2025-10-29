@@ -109,16 +109,41 @@ export default function TaskManager({ isTMFullView, setIsTMFullView, blockPositi
   const [alias, setAlias] = useState("");
   const [role, setRole] = useState("");
   const [userExt, setUserExt] = useState("");
+  
+  // Ensure current user is always in the assignable users list
+  const assignableUsersWithSelf = useMemo(() => {
+    if (!currentUser) return assignableUsers;
+    
+    // Check if current user is already in the list
+    const isCurrentUserInList = assignableUsers.some(
+      u => u.id === currentUser.uid || u.email === currentUser.email
+    );
+    
+    if (isCurrentUserInList) {
+      return assignableUsers;
+    }
+    
+    // Add current user to the list
+    const currentUserObj = {
+      id: currentUser.uid,
+      email: currentUser.email,
+      alias: alias || currentUser.email,
+      role: role || "staff"
+    };
+    
+    return [currentUserObj, ...assignableUsers];
+  }, [assignableUsers, currentUser, alias, role]);
 
   const [replyingToTaskId, setReplyingToTaskId] = useState(null);
   const [showOverdueEffects, setShowOverdueEffects] = useState(true);
   const [replyInputValue, setReplyInputValue] = useState("");
   const [kanbanCollapsed, setKanbanCollapsed] = useState({});
   const [kanbanTaskCollapsed, setKanbanTaskCollapsed] = useState({});
-  const [taskCategories, setTaskCategories] = useState(["תוכניות טיפול", "לקבוע סדרה", "תשלומים וזיכויים", "דוחות", "להתקשר", "אחר"]);
+  const defaultTaskCategories = ["תוכניות טיפול", "לקבוע סדרה", "תשלומים וזיכויים", "דוחות", "להתקשר", "אחר"];
+  const [taskCategories, setTaskCategories] = useState(defaultTaskCategories);
   const [taskFilter, setTaskFilter] = useState("הכל");
   const [taskPriorityFilter, setTaskPriorityFilter] = useState("all");
-  const [selectedTaskCategories, setSelectedTaskCategories] = useState(() => taskCategories);
+  const [selectedTaskCategories, setSelectedTaskCategories] = useState(defaultTaskCategories);
   const [taskSearchTerm, setTaskSearchTerm] = useState("");
   const [showDoneTasks, setShowDoneTasks] = useState(false);
   const [userHasSortedTasks, setUserHasSortedTasks] = useState(false);
@@ -181,20 +206,52 @@ export default function TaskManager({ isTMFullView, setIsTMFullView, blockPositi
       try {
         const userRef = doc(db, 'users', currentUser.uid);
         const snap = await getDoc(userRef);
+        const allCategories = ["תוכניות טיפול", "לקבוע סדרה", "תשלומים וזיכויים", "דוחות", "להתקשר", "אחר"];
+        
         if (snap.exists()) {
           const d = snap.data();
+          console.log('📥 Loading task prefs from Firestore:', d.tm_selectedTaskCategories);
           if (d.tm_taskFilter) setTaskFilter(d.tm_taskFilter);
           if (d.tm_taskPriorityFilter) setTaskPriorityFilter(d.tm_taskPriorityFilter);
-          if (Array.isArray(d.tm_selectedTaskCategories)) {
-            savedSelectedRef.current = d.tm_selectedTaskCategories;
-            setSelectedTaskCategories(d.tm_selectedTaskCategories);
+          if (Array.isArray(d.tm_selectedTaskCategories) && d.tm_selectedTaskCategories.length > 0) {
+            // Ensure all categories from the master list are represented
+            // If a category is in the saved list, keep it; if it's in allCategories but not saved, include it too
+            const normalizedSaved = d.tm_selectedTaskCategories.map(normalizeCategory);
+            const normalizedAll = allCategories.map(normalizeCategory);
+            
+            // Check if any master categories are missing from saved preferences
+            const missingCategories = allCategories.filter(cat => 
+              !normalizedSaved.includes(normalizeCategory(cat))
+            );
+            
+            let finalCategories = d.tm_selectedTaskCategories;
+            if (missingCategories.length > 0) {
+              console.log('⚠️ Found missing categories in saved prefs:', missingCategories);
+              // Add missing categories to the saved list
+              finalCategories = [...d.tm_selectedTaskCategories, ...missingCategories];
+              console.log('🔧 Fixed categories:', finalCategories);
+            }
+            
+            console.log('✅ Setting loaded categories:', finalCategories);
+            savedSelectedRef.current = finalCategories;
+            setSelectedTaskCategories(finalCategories);
+          } else {
+            console.log('🔄 No saved categories, defaulting to all:', allCategories);
+            savedSelectedRef.current = allCategories;
+            setSelectedTaskCategories(allCategories);
           }
           if (typeof d.tm_taskSearchTerm === 'string') setTaskSearchTerm(d.tm_taskSearchTerm);
           if (typeof d.tm_showDoneTasks === 'boolean') setShowDoneTasks(d.tm_showDoneTasks);
           if (typeof d.tm_showOverdueEffects === 'boolean') setShowOverdueEffects(d.tm_showOverdueEffects);
+        } else {
+          console.log('🆕 No user document, defaulting to all categories:', allCategories);
+          savedSelectedRef.current = allCategories;
+          setSelectedTaskCategories(allCategories);
         }
         setPrefsLoaded(true);
-      } catch {}
+      } catch (err) {
+        console.error('❌ Error loading prefs:', err);
+      }
     };
     loadPrefs();
   }, [currentUser]);
@@ -202,6 +259,9 @@ export default function TaskManager({ isTMFullView, setIsTMFullView, blockPositi
   // Persist task filters/preferences to Firestore
   useEffect(() => {
     if (!currentUser || !prefsLoaded) return;
+    console.log('💾 Persisting selected categories:', selectedTaskCategories);
+    // Update the ref to keep it in sync with current selection
+    savedSelectedRef.current = selectedTaskCategories;
     const userRef = doc(db, 'users', currentUser.uid);
     updateDoc(userRef, {
       tm_taskFilter: taskFilter,
@@ -211,26 +271,28 @@ export default function TaskManager({ isTMFullView, setIsTMFullView, blockPositi
       tm_showDoneTasks: showDoneTasks,
       tm_showOverdueEffects: showOverdueEffects,
       updatedAt: serverTimestamp(),
-    }).catch(() => {});
+    }).catch((err) => console.error('❌ Error persisting:', err));
   }, [currentUser, prefsLoaded, taskFilter, taskPriorityFilter, selectedTaskCategories, taskSearchTerm, showDoneTasks, showOverdueEffects]);
 
   // Users now come from DataContext - no need to fetch
 
   // Kanban category order persistence in Firestore
+  // This listener is ONLY for category ORDER changes (drag & drop in kanban view)
+  // It should NOT affect which categories are selected/checked
   useEffect(() => {
     if (!currentUser) return;
+    console.log('👂 Starting onSnapshot listener for kanban order');
     const userRef = doc(db, 'users', currentUser.uid);
     const unsubscribe = onSnapshot(userRef, (snap) => {
       if (snap.exists()) {
         const data = snap.data();
+        console.log('🔔 onSnapshot fired, kanbanCategoryOrder:', data.kanbanCategoryOrder);
+        // ONLY update the category ORDER, not the selection
         if (Array.isArray(data.kanbanCategoryOrder) && data.kanbanCategoryOrder.length > 0) {
           const normalizedOrder = data.kanbanCategoryOrder.map(normalizeCategory);
+          console.log('📋 Updating category ORDER only (not selection)');
           setTaskCategories(normalizedOrder);
-          if (savedSelectedRef.current && Array.isArray(savedSelectedRef.current)) {
-            const mapped = savedSelectedRef.current
-              .map(sel => normalizedOrder.find(c => normalizeCategory(c) === normalizeCategory(sel)) || sel);
-            setSelectedTaskCategories(mapped);
-          }
+          // DO NOT update selectedTaskCategories here - that's handled separately by the prefs loader
         }
       }
     });
@@ -312,7 +374,21 @@ export default function TaskManager({ isTMFullView, setIsTMFullView, blockPositi
   const handleCreateTask = async (e) => {
     e.preventDefault();
     if (!currentUser) return;
-    const assignedUser = users.find(u => u.alias === newTaskAssignTo || u.email === newTaskAssignTo);
+    const assignedUser = assignableUsersWithSelf.find(u => u.alias === newTaskAssignTo || u.email === newTaskAssignTo);
+    
+    // If no date/time provided, use current date/time
+    let dueDateTime;
+    if (newTaskDueDate && newTaskDueTime) {
+      dueDateTime = new Date(`${newTaskDueDate}T${newTaskDueTime}`).toISOString();
+    } else if (newTaskDueDate) {
+      // Date provided but no time - use date with current time
+      const now = new Date();
+      dueDateTime = new Date(`${newTaskDueDate}T${now.toTimeString().slice(0, 5)}`).toISOString();
+    } else {
+      // No date provided - use current date and time
+      dueDateTime = new Date().toISOString();
+    }
+    
     const taskRef = doc(collection(db, "tasks"));
     const newTask = {
       id: taskRef.id,
@@ -327,7 +403,7 @@ export default function TaskManager({ isTMFullView, setIsTMFullView, blockPositi
       updatedAt: serverTimestamp(),
       creatorAlias: alias || currentUser.email || "",
       assignTo: assignedUser ? assignedUser.email : newTaskAssignTo,
-      dueDate: newTaskDueDate && newTaskDueTime ? new Date(`${newTaskDueDate}T${newTaskDueTime}`).toISOString() : null,
+      dueDate: dueDateTime,
       replies: [],
       isRead: false,
       isArchived: false,
@@ -591,7 +667,7 @@ export default function TaskManager({ isTMFullView, setIsTMFullView, blockPositi
               <Label className="text-xs">מוקצה ל:</Label>
               <select value={newTaskAssignTo} onChange={(e) => setNewTaskAssignTo(e.target.value)} className="h-8 text-sm w-full border rounded">
                 <option value="">בחר משתמש</option>
-                {assignableUsers.map((user) => (
+                {assignableUsersWithSelf.map((user) => (
                   <option key={user.id} value={user.alias || user.email}>{user.alias || user.email}</option>
                 ))}
               </select>
@@ -623,7 +699,7 @@ export default function TaskManager({ isTMFullView, setIsTMFullView, blockPositi
             <div className="flex gap-2">
               <div className="flex-1">
                 <Label className="text-xs">תאריך:</Label>
-                <Input type="date" value={newTaskDueDate} onChange={(e) => setNewTaskDueDate(e.target.value)} className="h-8 text-sm" required />
+                <Input type="date" value={newTaskDueDate} onChange={(e) => setNewTaskDueDate(e.target.value)} className="h-8 text-sm" />
               </div>
               <div className="flex-1">
                 <Label className="text-xs">שעה:</Label>
@@ -643,9 +719,9 @@ export default function TaskManager({ isTMFullView, setIsTMFullView, blockPositi
                 </SelectContent>
               </Select>
             </div>
-            <div className="flex justify-end space-x-2 space-x-reverse pt-1">
-              <Button type="submit" size="sm">{'צור משימה'}</Button>
-              <Button type="button" variant="outline" size="sm" onClick={() => setShowTaskModal(false)}>{'ביטול'}</Button>
+            <div className="flex flex-col items-center gap-2 pt-1">
+              <Button type="submit" size="sm" className="bg-green-600 hover:bg-green-700 text-white px-12">{'צור משימה'}</Button>
+              <Button type="button" size="sm" className="bg-red-600 hover:bg-red-700 text-white px-12" onClick={() => setShowTaskModal(false)}>{'ביטול'}</Button>
             </div>
           </form>
         </div>
@@ -683,7 +759,7 @@ export default function TaskManager({ isTMFullView, setIsTMFullView, blockPositi
             {task.subtitle && (<p className={`text-sm text-gray-600 mb-2 ${task.done ? 'line-through' : ''}`}>{renderTextWithPhone(task.subtitle)}</p>)}
             <div className="text-xs text-gray-500 mt-1 space-x-2 space-x-reverse">
               <span>🗓️ {formatDateTime(task.dueDate)}</span>
-              <span>👤 {assignableUsers.find(u => u.email === task.assignTo)?.alias || task.assignTo}</span>
+              <span>👤 {assignableUsersWithSelf.find(u => u.email === task.assignTo)?.alias || task.assignTo}</span>
               {task.creatorAlias && <span className="font-medium">📝 {task.creatorAlias}</span>}
               <span>🏷️ {task.category}</span>
               <span>{task.priority === 'דחוף' ? '🔥' : task.priority === 'נמוך' ? '⬇️' : '➖'} {task.priority}</span>
@@ -693,8 +769,8 @@ export default function TaskManager({ isTMFullView, setIsTMFullView, blockPositi
           <div className="flex flex-col items-end gap-1 min-w-[70px]">
             {task.branch && (<span className={`mb-1 inline-block rounded-full px-2 py-0.5 text-xs font-medium ${branchColor(task.branch)}`}>{task.branch}</span>)}
             <div className="flex items-center gap-1">
-              <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => { setEditingTaskId(task.id); setEditingTitle(task.title); setEditingSubtitle(task.subtitle || ''); setEditingPriority(task.priority); setEditingCategory(task.category); if (task.dueDate) { const due = new Date(task.dueDate); if (!isNaN(due.getTime())) { setEditingDueDate(due.toLocaleDateString('en-CA')); setEditingDueTime(due.toTimeString().slice(0, 5)); } } setEditingAssignTo(task.assignTo || ''); setEditingBranch(task.branch || ''); }}><Pencil className="h-4 w-4" /></Button></TooltipTrigger><TooltipContent>ערוך משימה</TooltipContent></Tooltip>
-              <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8 relative" onClick={() => { setReplyingToTaskId(task.id); setReplyInputValue(""); }}><MessageCircle className="h-4 w-4" /></Button></TooltipTrigger><TooltipContent>הוסף תגובה</TooltipContent></Tooltip>
+              <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => { setEditingTaskId(task.id); setEditingTitle(task.title); setEditingSubtitle(task.subtitle || ''); setEditingPriority(task.priority); setEditingCategory(task.category); if (task.dueDate) { const due = new Date(task.dueDate); if (!isNaN(due.getTime())) { setEditingDueDate(due.toLocaleDateString('en-CA')); setEditingDueTime(due.toTimeString().slice(0, 5)); } } setEditingAssignTo(task.assignTo || ''); setEditingBranch(task.branch || ''); }}><Pencil className="h-4 w-4" /></Button></TooltipTrigger><TooltipContent>שינוי משימה</TooltipContent></Tooltip>
+              <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8 relative" onClick={() => { setReplyingToTaskId(task.id); setReplyInputValue(""); }}><MessageCircle className="h-4 w-4" /></Button></TooltipTrigger><TooltipContent>הוסיפי תגובה</TooltipContent></Tooltip>
               {!task.done && (<Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" className={`w-6 h-6 relative ${task.hasUnreadNudges ? 'text-orange-500' : 'text-gray-400'} hover:text-orange-600`} title="שלח תזכורת" onClick={(e) => { e.stopPropagation(); handleNudgeTask(task.id); }} onPointerDown={(e) => e.stopPropagation()}><Bell className="h-4 w-4" />{task.hasUnreadNudges && (<span className="absolute -top-1 -right-1 h-2 w-2 bg-orange-500 rounded-full" />)}</Button></TooltipTrigger><TooltipContent>שלח תזכורת</TooltipContent></Tooltip>)}
             </div>
           </div>
@@ -715,7 +791,7 @@ export default function TaskManager({ isTMFullView, setIsTMFullView, blockPositi
 
         {!task.done && replyingToTaskId === task.id && (
           <div className="mt-2">
-            <input type="text" placeholder="הוסף תגובה..." className="w-full text-sm border rounded p-1 rtl" autoFocus value={replyInputValue} onChange={e => setReplyInputValue(e.target.value)} onKeyDown={e => { if (e.key === ' ' || e.code === 'Space') { e.stopPropagation(); } if (e.key === 'Enter' && replyInputValue.trim()) { handleTaskReply(task.id, replyInputValue.trim()); setReplyInputValue(""); setReplyingToTaskId(null); } else if (e.key === 'Escape') { setReplyingToTaskId(null); setReplyInputValue(""); } }} onBlur={() => { setReplyingToTaskId(null); setReplyInputValue(""); }} />
+            <input type="text" placeholder="הוסיפי תגובה..." className="w-full text-sm border rounded p-1 rtl" autoFocus value={replyInputValue} onChange={e => setReplyInputValue(e.target.value)} onKeyDown={e => { if (e.key === ' ' || e.code === 'Space') { e.stopPropagation(); } if (e.key === 'Enter' && replyInputValue.trim()) { handleTaskReply(task.id, replyInputValue.trim()); setReplyInputValue(""); setReplyingToTaskId(null); } else if (e.key === 'Escape') { setReplyingToTaskId(null); setReplyInputValue(""); } }} onBlur={() => { setReplyingToTaskId(null); setReplyInputValue(""); }} />
           </div>
         )}
 
@@ -777,8 +853,8 @@ export default function TaskManager({ isTMFullView, setIsTMFullView, blockPositi
   }, [tasks]);
 
   useEffect(() => {
-    if (onCalendarDataChange) onCalendarDataChange({ events: taskEvents, users: assignableUsers, taskCategories });
-  }, [taskEvents, assignableUsers, taskCategories, onCalendarDataChange]);
+    if (onCalendarDataChange) onCalendarDataChange({ events: taskEvents, users: assignableUsersWithSelf, taskCategories });
+  }, [taskEvents, assignableUsersWithSelf, taskCategories, onCalendarDataChange]);
 
   // Listen to window event to open a task from calendar
   useEffect(() => {
@@ -872,7 +948,7 @@ export default function TaskManager({ isTMFullView, setIsTMFullView, blockPositi
             <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
               <Button variant="outline" size="icon" className="w-8 h-8 text-red-600 hover:bg-red-50 hover:text-red-700" title="מחק משימות שבוצעו" onClick={handleClearDoneTasks} disabled={!tasks.some(task => task.done)}><span role="img" aria-label="Clear Done">🧹</span></Button>
           <Button variant="outline" size="sm" title="היסטוריית משימות" onClick={() => setShowHistoryModal(true)}><span role="img" aria-label="History">📜</span></Button>
-              <Button size="sm" className="w-full sm:w-auto" onClick={() => { setNewTaskTitle(""); setNewTaskSubtitle(""); setNewTaskPriority("רגיל"); setNewTaskCategory(taskCategories[0] || ""); setNewTaskDueDate(""); setNewTaskDueTime(""); const myUser = assignableUsers.find(u => u.email === currentUser?.email || u.alias === currentUser?.alias); setNewTaskAssignTo(myUser ? (myUser.alias || myUser.email) : (currentUser?.alias || currentUser?.email || "")); setShowTaskModal(true); }}>{'+ משימה'}</Button>
+              <Button size="sm" className="w-full sm:w-auto" onClick={() => { setNewTaskTitle(""); setNewTaskSubtitle(""); setNewTaskPriority("רגיל"); setNewTaskCategory(taskCategories[0] || ""); setNewTaskDueDate(""); setNewTaskDueTime(""); const myUser = assignableUsersWithSelf.find(u => u.email === currentUser?.email || u.alias === currentUser?.alias); setNewTaskAssignTo(myUser ? (myUser.alias || myUser.email) : (currentUser?.alias || currentUser?.email || "")); setShowTaskModal(true); }}>{'+ משימה'}</Button>
             </div>
           </div>
         </div>
@@ -889,7 +965,7 @@ export default function TaskManager({ isTMFullView, setIsTMFullView, blockPositi
                         {kanbanCollapsed[category] ? <ChevronLeft className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
                       </Button>
                       <h3 className="font-semibold text-center flex-grow">{category} ({sortedAndFilteredTasks.filter(task => task.category === category).length})</h3>
-                      <Button variant="ghost" size="icon" className="w-6 h-6 text-gray-500 hover:text-blue-600 shrink-0" title={`הוסף ל${category}`} onClick={() => { setNewTaskCategory(category); setShowTaskModal(true); }}><span role="img" aria-label="Add">➕</span></Button>
+                      <Button variant="ghost" size="icon" className="w-6 h-6 text-gray-500 hover:text-blue-600 shrink-0" title={`הוסיפי ל${category}`} onClick={() => { setNewTaskCategory(category); setShowTaskModal(true); }}><span role="img" aria-label="Add">➕</span></Button>
                     </div>
                     <div className="flex-1 overflow-y-auto w-full min-w-0 box-border" data-category={category} data-droppable="true">
                       <div className="space-y-2 w-full min-w-0 box-border">
@@ -910,12 +986,12 @@ export default function TaskManager({ isTMFullView, setIsTMFullView, blockPositi
                                       </div>
                                     </TooltipTrigger>
                                     <TooltipContent side="top" align="end" className="max-w-xs text-xs text-right whitespace-pre-line">
-                                      {`🗓️ ${formatDateTime(task.dueDate)}\n👤 ${assignableUsers.find(u => u.email === task.assignTo)?.alias || task.assignTo}\n${task.creatorAlias ? `📝 ${task.creatorAlias}\n` : ''}🏷️ ${task.category}\n${task.priority === 'דחוף' ? '🔥' : task.priority === 'נמוך' ? '⬇️' : '➖'} ${task.priority}`}
+                                      {`🗓️ ${formatDateTime(task.dueDate)}\n👤 ${assignableUsersWithSelf.find(u => u.email === task.assignTo)?.alias || task.assignTo}\n${task.creatorAlias ? `📝 ${task.creatorAlias}\n` : ''}🏷️ ${task.category}\n${task.priority === 'דחוף' ? '🔥' : task.priority === 'נמוך' ? '⬇️' : '➖'} ${task.priority}`}
                                     </TooltipContent>
                                   </Tooltip>
                                   <div className="flex items-center gap-1">
-                                    <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => { setEditingTaskId(task.id); setEditingTitle(task.title); setEditingSubtitle(task.subtitle || ''); setEditingPriority(task.priority); setEditingCategory(task.category); if (task.dueDate) { const due = new Date(task.dueDate); if (!isNaN(due.getTime())) { setEditingDueDate(due.toLocaleDateString('en-CA')); setEditingDueTime(due.toTimeString().slice(0, 5)); } } setEditingAssignTo(task.assignTo || ''); setEditingBranch(task.branch || ''); }}><Pencil className="h-4 w-4" /></Button></TooltipTrigger><TooltipContent>ערוך משימה</TooltipContent></Tooltip>
-                                    <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8 relative" onClick={() => { setReplyingToTaskId(task.id); setReplyInputValue(""); }}><MessageCircle className="h-4 w-4" /></Button></TooltipTrigger><TooltipContent>הוסף תגובה</TooltipContent></Tooltip>
+                                    <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => { setEditingTaskId(task.id); setEditingTitle(task.title); setEditingSubtitle(task.subtitle || ''); setEditingPriority(task.priority); setEditingCategory(task.category); if (task.dueDate) { const due = new Date(task.dueDate); if (!isNaN(due.getTime())) { setEditingDueDate(due.toLocaleDateString('en-CA')); setEditingDueTime(due.toTimeString().slice(0, 5)); } } setEditingAssignTo(task.assignTo || ''); setEditingBranch(task.branch || ''); }}><Pencil className="h-4 w-4" /></Button></TooltipTrigger><TooltipContent>שינוי משימה</TooltipContent></Tooltip>
+                                    <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8 relative" onClick={() => { setReplyingToTaskId(task.id); setReplyInputValue(""); }}><MessageCircle className="h-4 w-4" /></Button></TooltipTrigger><TooltipContent>הוסיפי תגובה</TooltipContent></Tooltip>
                                     {!task.done && (<Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" className="w-6 h-6 relative text-gray-400 hover:text-orange-600" title="שלח תזכורת" onClick={(e) => { e.stopPropagation(); handleNudgeTask(task.id); }} onPointerDown={(e) => e.stopPropagation()}><Bell className="h-4 w-4" /></Button></TooltipTrigger><TooltipContent>שלח תזכורת</TooltipContent></Tooltip>)}
                                   </div>
                                 </div>
@@ -958,7 +1034,7 @@ export default function TaskManager({ isTMFullView, setIsTMFullView, blockPositi
                 {activeTaskForOverlay.subtitle && (<p className={`text-xs mt-0.5 ${activeTaskForOverlay.done ? "line-through text-gray-400" : "text-gray-600"}`}>{activeTaskForOverlay.subtitle}</p>)}
                 <div className="text-xs text-gray-500 mt-1 space-x-2 space-x-reverse">
                   <span>🗓️ {formatDateTime(activeTaskForOverlay.dueDate)}</span>
-                  <span>👤 {assignableUsers.find(u => u.email === activeTaskForOverlay.assignTo)?.alias || activeTaskForOverlay.assignTo}</span>
+                  <span>👤 {assignableUsersWithSelf.find(u => u.email === activeTaskForOverlay.assignTo)?.alias || activeTaskForOverlay.assignTo}</span>
                   {activeTaskForOverlay.creatorAlias && <span className="font-medium">📝 {activeTaskForOverlay.creatorAlias}</span>}
                   <span>🏷️ {activeTaskForOverlay.category}</span>
                   <span>{activeTaskForOverlay.priority === 'דחוף' ? '🔥' : activeTaskForOverlay.priority === 'נמוך' ? '⬇️' : '➖'} {activeTaskForOverlay.priority}</span>
