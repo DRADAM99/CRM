@@ -42,6 +42,7 @@ export default function LeadManager({ isFullView, setIsFullView, blockPosition, 
   const [editLeadSource, setEditLeadSource] = useState("");
   const [editLeadAppointmentDateTime, setEditLeadAppointmentDateTime] = useState("");
   const [editLeadBranch, setEditLeadBranch] = useState("");
+  const [editLeadIsHot, setEditLeadIsHot] = useState(false);
   const [newConversationText, setNewConversationText] = useState("");
   const [showConvUpdate, setShowConvUpdate] = useState(null);
   const [leadSortBy, setLeadSortBy] = useState("priority");
@@ -192,6 +193,7 @@ export default function LeadManager({ isFullView, setIsFullView, blockPosition, 
           setEditLeadAppointmentDateTime(lead.appointmentDateTime || "");
           setNewConversationText("");
           setEditLeadBranch(lead.branch || "");
+          setEditLeadIsHot(lead.isHot || false);
           setExpandedLeadId(e.detail.leadId);
         }
       }
@@ -248,6 +250,7 @@ export default function LeadManager({ isFullView, setIsFullView, blockPosition, 
     setEditLeadAppointmentDateTime(lead.appointmentDateTime || "");
     setNewConversationText("");
     setEditLeadBranch(lead.branch || "");
+    setEditLeadIsHot(lead.isHot || false);
   }, []);
 
   const handleSaveLead = useCallback(async (e, leadId) => {
@@ -259,7 +262,7 @@ export default function LeadManager({ isFullView, setIsFullView, blockPosition, 
       }
       const leadRef = doc(db, 'leads', leadId); const leadDoc = await getDoc(leadRef); if (!leadDoc.exists()) throw new Error('Lead not found');
       const originalLead = leadDoc.data();
-      const updateData = { fullName: editLeadFullName, phoneNumber: editLeadPhone, message: editLeadMessage, status: editLeadStatus, source: editLeadSource, branch: editLeadBranch, appointmentDateTime: editLeadStatus === 'תור נקבע' ? (appointmentDate || null) : null, updatedAt: serverTimestamp(), updatedBy: currentUser.uid };
+      const updateData = { fullName: editLeadFullName, phoneNumber: editLeadPhone, message: editLeadMessage, status: editLeadStatus, source: editLeadSource, branch: editLeadBranch, isHot: editLeadIsHot, appointmentDateTime: editLeadStatus === 'תור נקבע' ? (appointmentDate || null) : null, updatedAt: serverTimestamp(), updatedBy: currentUser.uid };
       if (originalLead.status !== editLeadStatus) { updateData.followUpCall = { active: false, count: 0 }; }
       await updateDoc(leadRef, updateData);
       if (originalLead.status !== 'תור נקבע' && editLeadStatus === 'תור נקבע' && appointmentDate) {
@@ -269,7 +272,7 @@ export default function LeadManager({ isFullView, setIsFullView, blockPosition, 
       }
       setEditingLeadId(null); setEditLeadAppointmentDateTime("");
     } catch { alert("שגיאה בשמירת הליד"); }
-  }, [currentUser, alias, editLeadFullName, editLeadPhone, editLeadMessage, editLeadStatus, editLeadSource, editLeadAppointmentDateTime, editLeadBranch]);
+  }, [currentUser, alias, editLeadFullName, editLeadPhone, editLeadMessage, editLeadStatus, editLeadSource, editLeadAppointmentDateTime, editLeadBranch, editLeadIsHot]);
 
   const handleCollapseLead = useCallback((leadId) => {
     setExpandedLeadId(null);
@@ -507,6 +510,16 @@ export default function LeadManager({ isFullView, setIsFullView, blockPosition, 
                                     </SelectContent>
                                   </Select>
                                 </Label>
+                              </div>
+                              <div className="flex items-center gap-2 pt-2">
+                                <input
+                                  type="checkbox"
+                                  id={`edit-lead-hot-${lead.id}`}
+                                  checked={editLeadIsHot}
+                                  onChange={(e) => setEditLeadIsHot(e.target.checked)}
+                                  className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                                />
+                                <Label htmlFor={`edit-lead-hot-${lead.id}`} className="text-sm font-medium cursor-pointer">ליד חם 🔥</Label>
                               </div>
                               <div className="border-t pt-3">
                                 <div className="flex justify-between items-center mb-2">
