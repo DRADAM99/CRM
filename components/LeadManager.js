@@ -11,7 +11,7 @@ import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { FaWhatsapp, FaCodeBranch } from "react-icons/fa";
+import { FaWhatsapp, FaCodeBranch, FaFacebook, FaInstagram, FaSpotify, FaGlobe, FaUserFriends, FaEllipsisH } from "react-icons/fa";
 import { BRANCHES, branchColor } from "@/lib/branches";
 import { leadStatusConfig, leadColorTab, leadPriorityValue } from "@/lib/leadStatus";
 import { Search, ChevronDown } from "lucide-react";
@@ -64,7 +64,20 @@ export default function LeadManager({ isFullView, setIsFullView, blockPosition, 
   const [newLeadMessage, setNewLeadMessage] = useState("");
   const [newLeadStatus, setNewLeadStatus] = useState("חדש");
   const [newLeadSource, setNewLeadSource] = useState("");
-  const [newLeadIsHot, setNewLeadIsHot] = useState(true);
+  const [newLeadIsHot, setNewLeadIsHot] = useState(false);
+  const [newLeadSourceOther, setNewLeadSourceOther] = useState("");
+  const sourceOptions = ["אתר", "פייסבוק", "אינסטגרם", "פודקאסט", "המלצה", "אחר"];
+  const getSourceIcon = (source) => {
+    switch(source) {
+      case "אתר": return <FaGlobe className="w-4 h-4" />;
+      case "פייסבוק": return <FaFacebook className="w-4 h-4" />;
+      case "אינסטגרם": return <FaInstagram className="w-4 h-4" />;
+      case "פודקאסט": return <FaSpotify className="w-4 h-4" />;
+      case "המלצה": return <FaUserFriends className="w-4 h-4" />;
+      case "אחר": return <FaEllipsisH className="w-4 h-4" />;
+      default: return null;
+    }
+  };
   const [showDuplicateConfirm, setShowDuplicateConfirm] = useState(false);
   const [leadToDuplicate, setLeadToDuplicate] = useState(null);
   const [confirmingDeleteLeadId, setConfirmingDeleteLeadId] = useState(null);
@@ -276,10 +289,11 @@ export default function LeadManager({ isFullView, setIsFullView, blockPosition, 
   const handleAddNewLead = useCallback(async (e) => {
     e.preventDefault(); if (!newLeadFullName.trim() || !newLeadPhone.trim()) { alert("אנא מלא שם מלא ומספר טלפון."); return; }
     try {
-      await addDoc(collection(db, "leads"), { createdAt: serverTimestamp(), fullName: newLeadFullName.trim(), phoneNumber: newLeadPhone.trim(), message: newLeadMessage.trim(), status: newLeadStatus, source: newLeadSource.trim(), conversationSummary: [], isHot: newLeadIsHot, followUpCall: { active: false, count: 0 } });
-      setNewLeadFullName(""); setNewLeadPhone(""); setNewLeadMessage(""); setNewLeadStatus("חדש"); setNewLeadSource(""); setNewLeadIsHot(true); setShowAddLeadModal(false);
+      const finalSource = newLeadSource === "אחר" ? newLeadSourceOther.trim() : newLeadSource;
+      await addDoc(collection(db, "leads"), { createdAt: serverTimestamp(), fullName: newLeadFullName.trim(), phoneNumber: newLeadPhone.trim(), message: newLeadMessage.trim(), status: newLeadStatus, source: finalSource, conversationSummary: [], isHot: newLeadIsHot, followUpCall: { active: false, count: 0 } });
+      setNewLeadFullName(""); setNewLeadPhone(""); setNewLeadMessage(""); setNewLeadStatus("חדש"); setNewLeadSource(""); setNewLeadSourceOther(""); setNewLeadIsHot(false); setShowAddLeadModal(false);
     } catch { alert("שגיאה בהוספת ליד חדש. נסה שוב."); }
-  }, [newLeadFullName, newLeadPhone, newLeadMessage, newLeadStatus, newLeadSource, newLeadIsHot]);
+  }, [newLeadFullName, newLeadPhone, newLeadMessage, newLeadStatus, newLeadSource, newLeadSourceOther, newLeadIsHot]);
 
   const handleDeleteLead = async (leadId) => {
     if (!(currentUser?.role === "admin" || role === "admin")) { alert("רק אדמין יכול למחוק לידים"); return; }
@@ -332,9 +346,11 @@ export default function LeadManager({ isFullView, setIsFullView, blockPosition, 
         {isFullView ? (
           <div className="flex flex-col gap-2">
             <div className="flex justify-between items-center">
-              <CardTitle className="text-xl font-bold">{'ניהול לידים (מלא)'}</CardTitle>
+              <div className="flex items-center gap-3">
+                <CardTitle className="text-xl font-bold">{'ניהול לידים (מלא)'}</CardTitle>
+                <Button size="sm" onClick={() => setShowAddLeadModal(true)} className="bg-green-600 hover:bg-green-700 text-white">{'+ הוסיפי ליד'}</Button>
+              </div>
               <div className="flex gap-2">
-                <Button size="sm" onClick={() => setShowAddLeadModal(true)}>{'+ הוסף ליד'}</Button>
                 <Button onClick={() => setIsFullView(false)} size="sm" variant="outline">{'תצוגה מקוצרת'}</Button>
                 <Button size="xs" onClick={onToggleBlockOrder} variant="outline">{'מיקום: '}{blockPosition}</Button>
               </div>
@@ -495,12 +511,12 @@ export default function LeadManager({ isFullView, setIsFullView, blockPosition, 
                               <div className="border-t pt-3">
                                 <div className="flex justify-between items-center mb-2">
                                   <div className="font-semibold text-sm">{'היסטוריית שיחה:'}</div>
-                                  <Button type="button" variant="link" size="sm" onClick={() => setShowConvUpdate(showConvUpdate === lead.id ? null : lead.id)} className="text-blue-600 hover:underline p-0 h-auto">{showConvUpdate === lead.id ? 'הסתר הוספה' : '+ הוסף עדכון'}</Button>
+                                  <Button type="button" variant="link" size="sm" onClick={() => setShowConvUpdate(showConvUpdate === lead.id ? null : lead.id)} className="text-blue-600 hover:underline p-0 h-auto">{showConvUpdate === lead.id ? 'הסתר הוספה' : '+ הוסיפי עדכון'}</Button>
                                 </div>
                                 {showConvUpdate === lead.id && (
                                   <div className="flex gap-2 mb-3">
                                     <Textarea className="text-sm" rows={2} value={newConversationText} onChange={(ev) => setNewConversationText(ev.target.value)} placeholder="כתוב עדכון שיחה..." />
-                                    <Button size="sm" type="button" onClick={() => handleAddConversation(lead.id)} className="shrink-0">{'הוסף'}</Button>
+                                    <Button size="sm" type="button" onClick={() => handleAddConversation(lead.id)} className="shrink-0">{'הוסיפי'}</Button>
                                   </div>
                                 )}
                                 <ul className="space-y-1.5 max-h-40 overflow-y-auto border rounded p-2 bg-white">
@@ -514,7 +530,7 @@ export default function LeadManager({ isFullView, setIsFullView, blockPosition, 
                                 </ul>
                               </div>
                               <div className="border-t pt-3">
-                                <Label className="font-semibold text-sm block mb-1">{'הוסף משימה מהליד:'}</Label>
+                                <Label className="font-semibold text-sm block mb-1">{'הוסיפי משימה מהליד:'}</Label>
                                 <div className="flex flex-col md:flex-row gap-2">
                                   <Input type="text" className="h-8 text-sm flex-1" placeholder="תיאור משימה..." />
                                   <Select value={""}>
@@ -571,6 +587,120 @@ export default function LeadManager({ isFullView, setIsFullView, blockPosition, 
           </ul>
         )}
       </CardContent>
+
+      {/* Add Lead Modal */}
+      {showAddLeadModal && (
+        <div className="fixed inset-0 flex items-center justify-center bg-black/60 z-50 p-4" onClick={() => setShowAddLeadModal(false)}>
+          <div className="bg-white p-6 rounded-lg shadow-xl w-full max-w-lg" onClick={(e) => e.stopPropagation()}>
+            <h2 className="text-lg font-semibold mb-4 text-right">{'הוספת ליד חדש'}</h2>
+            <form onSubmit={handleAddNewLead} className="space-y-4 text-right" dir="rtl">
+              
+              <div>
+                <Label htmlFor="new-lead-name" className="block text-sm font-medium mb-1">שם מלא <span className="text-red-500">*</span></Label>
+                <Input
+                  id="new-lead-name" 
+                  type="text" 
+                  value={newLeadFullName}
+                  onChange={(e) => setNewLeadFullName(e.target.value)} 
+                  required
+                />
+              </div>
+              
+              <div>
+                <Label htmlFor="new-lead-phone" className="block text-sm font-medium mb-1">מספר טלפון <span className="text-red-500">*</span></Label>
+                <Input
+                  id="new-lead-phone" 
+                  type="tel" 
+                  value={newLeadPhone}
+                  onChange={(e) => setNewLeadPhone(e.target.value)} 
+                  required
+                />
+              </div>
+              
+              <div>
+                <Label htmlFor="new-lead-message" className="block text-sm font-medium mb-1">הודעה / הערה</Label>
+                <Textarea
+                  id="new-lead-message" 
+                  value={newLeadMessage}
+                  onChange={(e) => setNewLeadMessage(e.target.value)} 
+                  rows={3}
+                  placeholder="פרטים ראשוניים, סיבת פניה..."
+                />
+              </div>
+
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="new-lead-hot"
+                  checked={newLeadIsHot}
+                  onChange={(e) => setNewLeadIsHot(e.target.checked)}
+                  className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                />
+                <Label htmlFor="new-lead-hot" className="text-sm font-medium">ליד חם 🔥</Label>
+              </div>
+              
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="new-lead-status" className="block text-sm font-medium mb-1">סטטוס</Label>
+                  <Select value={newLeadStatus} onValueChange={setNewLeadStatus}>
+                    <SelectTrigger id="new-lead-status" className="text-right" dir="rtl">
+                      <div className="flex items-center gap-2 w-full" style={{ justifyContent: 'flex-end' }}>
+                        <span className={`w-3 h-3 rounded-full flex-shrink-0 ${leadStatusConfig[newLeadStatus]?.color || 'bg-gray-300'}`}></span>
+                        <span className="flex-1 text-right">{newLeadStatus}</span>
+                      </div>
+                    </SelectTrigger>
+                    <SelectContent className="text-right text-sm" dir="rtl">
+                      {Object.keys(leadStatusConfig).filter(k => k !== 'Default').map(status => (
+                        <SelectItem key={status} value={status} className="text-sm cursor-pointer" showDefaultCheck={false} dir="rtl">
+                          <div className="flex items-center gap-2 w-full pr-1" style={{ justifyContent: 'flex-end' }}>
+                            <span className={`w-3 h-3 rounded-full flex-shrink-0 ${leadStatusConfig[status].color}`}></span>
+                            <span className="flex-1 text-right text-sm">{status}</span>
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label htmlFor="new-lead-source" className="block text-sm font-medium mb-1">מקור הגעה</Label>
+                  <Select value={newLeadSource} onValueChange={setNewLeadSource}>
+                    <SelectTrigger id="new-lead-source" className="text-right" dir="rtl">
+                      <div className="flex items-center gap-2 w-full" style={{ justifyContent: 'flex-end' }}>
+                        {newLeadSource && <span className="flex-shrink-0">{getSourceIcon(newLeadSource)}</span>}
+                        <span className="flex-1 text-right">{newLeadSource || "בחר מקור..."}</span>
+                      </div>
+                    </SelectTrigger>
+                    <SelectContent className="text-right text-sm" dir="rtl">
+                      {sourceOptions.map(source => (
+                        <SelectItem key={source} value={source} className="text-sm cursor-pointer" dir="rtl">
+                          <div className="flex items-center gap-2 w-full pr-1" style={{ justifyContent: 'flex-end' }}>
+                            <span className="flex-shrink-0">{getSourceIcon(source)}</span>
+                            <span className="flex-1 text-right">{source}</span>
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {newLeadSource === "אחר" && (
+                    <Input
+                      type="text"
+                      value={newLeadSourceOther}
+                      onChange={(e) => setNewLeadSourceOther(e.target.value)}
+                      placeholder="הזן מקור מותאם אישית..."
+                      className="mt-2"
+                    />
+                  )}
+                </div>
+              </div>
+              
+              <div className="mt-6 flex flex-col items-center gap-3">
+                <Button type="submit" className="bg-green-600 hover:bg-green-700 text-white px-8">הוסיפי ליד</Button>
+                <Button type="button" className="bg-red-600 hover:bg-red-700 text-white" onClick={() => setShowAddLeadModal(false)}>ביטול</Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </Card>
   );
 }
