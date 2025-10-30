@@ -918,11 +918,27 @@ export default function TaskManager({ isTMFullView, setIsTMFullView, blockPositi
                 <Search className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
                 <Input type="search" placeholder="חפש משימות..." className="h-8 text-sm pl-8 w-full sm:w-[180px]" value={taskSearchTerm} onChange={(e) => setTaskSearchTerm(e.target.value)} />
               </div>
+              <Button
+                size="sm"
+                className="w-full sm:w-auto bg-green-600 hover:bg-green-700 text-white"
+                onClick={() => {
+                  setNewTaskTitle("");
+                  setNewTaskSubtitle("");
+                  setNewTaskPriority("רגיל");
+                  setNewTaskCategory(taskCategories[0] || "");
+                  setNewTaskDueDate("");
+                  setNewTaskDueTime("");
+                  const myUser = assignableUsersWithSelf.find(u => u.email === currentUser?.email || u.alias === currentUser?.alias);
+                  setNewTaskAssignTo(myUser ? (myUser.alias || myUser.email) : (currentUser?.alias || currentUser?.email || ""));
+                  setShowTaskModal(true);
+                }}
+              >
+                {'+ משימה'}
+              </Button>
             </div>
             <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
               <Button variant="outline" size="icon" className="w-8 h-8 text-red-600 hover:bg-red-50 hover:text-red-700" title="מחק משימות שבוצעו" onClick={handleClearDoneTasks} disabled={!tasks.some(task => task.done)}><span role="img" aria-label="Clear Done">🧹</span></Button>
-          <Button variant="outline" size="sm" title="היסטוריית משימות" onClick={() => setShowHistoryModal(true)}><span role="img" aria-label="History">📜</span></Button>
-              <Button size="sm" className="w-full sm:w-auto" onClick={() => { setNewTaskTitle(""); setNewTaskSubtitle(""); setNewTaskPriority("רגיל"); setNewTaskCategory(taskCategories[0] || ""); setNewTaskDueDate(""); setNewTaskDueTime(""); const myUser = assignableUsersWithSelf.find(u => u.email === currentUser?.email || u.alias === currentUser?.alias); setNewTaskAssignTo(myUser ? (myUser.alias || myUser.email) : (currentUser?.alias || currentUser?.email || "")); setShowTaskModal(true); }}>{'+ משימה'}</Button>
+              <Button variant="outline" size="sm" title="היסטוריית משימות" onClick={() => setShowHistoryModal(true)}><span role="img" aria-label="History">📜</span></Button>
             </div>
           </div>
         </div>

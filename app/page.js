@@ -40,7 +40,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Search, RotateCcw, Bell, ChevronDown, Pencil, MessageCircle, Check, X, ChevronLeft } from 'lucide-react';
+import { Search, RotateCcw, Bell, ChevronDown, Pencil, MessageCircle, Check, X, ChevronLeft, Sunrise, Sun, Sunset, MoonStar } from 'lucide-react';
 import NotesAndLinks from "@/components/NotesAndLinks";
 import TaskManager from "@/components/TaskManager";
 import LeadManager from "@/components/LeadManager";
@@ -586,7 +586,20 @@ const [selectedDate, setSelectedDate] = useState(new Date());
   const [isFullView, setIsFullView] = useState(() => getLayoutPref('dashboard_isFullView', false));
   const [mounted, setMounted] = useState(false);
   const [currentDateTime, setCurrentDateTime] = useState('');
+  const [greeting, setGreeting] = useState({ message: 'שלום', period: 'morning' });
   const defaultBlockOrder = { TM: 1, Calendar: 2, Leads: 3 };
+  const greetingIconMap = useMemo(() => ({
+    morning: Sunrise,
+    afternoon: Sun,
+    evening: Sunset,
+    night: MoonStar,
+  }), []);
+  const greetingColorMap = useMemo(() => ({
+    morning: 'text-amber-500',
+    afternoon: 'text-yellow-500',
+    evening: 'text-orange-500',
+    night: 'text-indigo-400',
+  }), []);
   const [blockOrder, setBlockOrder] = useState(() => getLayoutPref('dashboard_blockOrder', defaultBlockOrder));
   const [taskCalendarData, setTaskCalendarData] = useState({ events: [], users: [], taskCategories: [] });
   const [leadCalendarData, setLeadCalendarData] = useState({ events: [] });
@@ -1661,8 +1674,25 @@ useEffect(() => {
 
   useEffect(() => {
     const updateTime = () => {
-      const formattedDateTime = moment().format('dddd, D MMMM YYYY HH:mm');
-      setCurrentDateTime(formattedDateTime);
+      const now = moment();
+      setCurrentDateTime(now.format('dddd, D MMMM YYYY HH:mm'));
+
+      const hour = now.hour();
+      let message = 'לילה טוב';
+      let period = 'night';
+
+      if (hour >= 5 && hour < 12) {
+        message = 'בוקר טוב';
+        period = 'morning';
+      } else if (hour >= 12 && hour < 17) {
+        message = 'צהרים טובים';
+        period = 'afternoon';
+      } else if (hour >= 17 && hour < 20) {
+        message = 'ערב טוב';
+        period = 'evening';
+      }
+
+      setGreeting({ message, period });
     };
     updateTime();
     const intervalId = setInterval(updateTime, 60000);
@@ -2685,6 +2715,11 @@ const calculatedAnalytics = useMemo(() => {
       return <div className="flex items-center justify-center min-h-screen">בודק הרשאות...</div>;
     }
     
+  const GreetingIcon = greetingIconMap[greeting.period];
+  const greetingColor = greetingColorMap[greeting.period] || 'text-slate-500';
+  const greetingTarget = alias || (currentUser?.email || '');
+  const greetingLine = greetingTarget ? `${greeting.message}, ${greetingTarget}` : greeting.message;
+
   return (
     <TooltipProvider>
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
@@ -2692,7 +2727,10 @@ const calculatedAnalytics = useMemo(() => {
       <header dir="rtl" className="flex flex-col sm:flex-row items-center justify-between p-2 sm:p-4 border-b bg-white shadow-sm sticky top-0 z-20 min-h-[90px]">
   <div className="w-full sm:w-48 text-center sm:text-right text-sm text-gray-600 flex flex-col items-center sm:items-start sm:mr-0">
     <div className="w-full text-center sm:text-right">{currentDateTime || 'טוען תאריך...'}</div>
-    <div className="text-xs text-gray-700 w-full text-center sm:text-right">{`שלום, ${alias || (currentUser?.email || "")}`}</div>
+    <div className="text-xs text-gray-700 w-full text-center sm:text-right flex items-center justify-center sm:justify-end gap-1">
+      {GreetingIcon ? <GreetingIcon className={`h-4 w-4 ${greetingColor}`} aria-hidden="true" /> : null}
+      <span>{greetingLine}</span>
+    </div>
   </div>
 
   <div className="flex-1 flex items-center justify-center relative px-4">
