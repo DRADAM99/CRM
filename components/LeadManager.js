@@ -32,7 +32,7 @@ function formatDateTime(date) {
 
 export default function LeadManager({ isFullView, setIsFullView, blockPosition, onToggleBlockOrder, onCalendarDataChange }) {
   const { currentUser } = useAuth();
-  const { leads, assignableUsers } = useData();
+  const { leads, assignableUsers, currentUserData } = useData();
   const [taskCategories, setTaskCategories] = useState(["להתקשר", "לקבוע סדרה", "דוחות", "תשלומים", "תוכניות טיפול", "אחר"]);
   const [editingLeadId, setEditingLeadId] = useState(null);
   const [editLeadFullName, setEditLeadFullName] = useState("");
@@ -52,8 +52,9 @@ export default function LeadManager({ isFullView, setIsFullView, blockPosition, 
   const [leadSearchTerm, setLeadSearchTerm] = useState("");
   const [leadSortDirection, setLeadSortDirection] = useState('desc');
   const allLeadCategories = useMemo(() => Object.keys(leadStatusConfig).filter(k => k !== 'Default'), []);
-  const [selectedLeadCategories, setSelectedLeadCategories] = useState(allLeadCategories);
+  const [selectedLeadCategories, setSelectedLeadCategories] = useState([]);
   const [prefsLoaded, setPrefsLoaded] = useState(false);
+  const savedSelectedRef = useRef(null);
   const [showAnalytics, setShowAnalytics] = useState(false);
   const [analyticsTimeFilter, setAnalyticsTimeFilter] = useState("month");
   const [analyticsFilterFrom, setAnalyticsFilterFrom] = useState("");
@@ -82,9 +83,9 @@ export default function LeadManager({ isFullView, setIsFullView, blockPosition, 
   const [showDuplicateConfirm, setShowDuplicateConfirm] = useState(false);
   const [leadToDuplicate, setLeadToDuplicate] = useState(null);
   const [confirmingDeleteLeadId, setConfirmingDeleteLeadId] = useState(null);
-  const [alias, setAlias] = useState("");
-  const [role, setRole] = useState("");
-  const [userExt, setUserExt] = useState("");
+  const alias = currentUserData?.alias || "";
+  const role = currentUserData?.role || "";
+  const userExt = currentUserData?.EXT || "";
 
   // Load persisted lead filters/preferences and block layout from Firestore
   useEffect(() => {
@@ -101,18 +102,40 @@ export default function LeadManager({ isFullView, setIsFullView, blockPosition, 
           if (typeof d.lead_filterFrom === 'string') setLeadFilterFrom(d.lead_filterFrom);
           if (typeof d.lead_filterTo === 'string') setLeadFilterTo(d.lead_filterTo);
           if (typeof d.lead_searchTerm === 'string') setLeadSearchTerm(d.lead_searchTerm);
-          if (Array.isArray(d.lead_selectedCategories)) setSelectedLeadCategories(d.lead_selectedCategories);
+          
+          // Handle category selection properly
+          if (Array.isArray(d.lead_selectedCategories) && d.lead_selectedCategories.length > 0) {
+            savedSelectedRef.current = d.lead_selectedCategories;
+            setSelectedLeadCategories(d.lead_selectedCategories);
+          } else {
+            // If no saved preferences, default to all categories
+            savedSelectedRef.current = allLeadCategories;
+            setSelectedLeadCategories(allLeadCategories);
+          }
+          
           if (typeof d.leads_isFullView === 'boolean') setIsFullView(d.leads_isFullView);
+        } else {
+          // No user document exists, default to all categories
+          savedSelectedRef.current = allLeadCategories;
+          setSelectedLeadCategories(allLeadCategories);
         }
         setPrefsLoaded(true);
-      } catch {}
+      } catch (err) {
+        console.error('Error loading lead prefs:', err);
+        // On error, default to all categories
+        savedSelectedRef.current = allLeadCategories;
+        setSelectedLeadCategories(allLeadCategories);
+        setPrefsLoaded(true);
+      }
     };
     loadPrefs();
-  }, [currentUser, setIsFullView]);
+  }, [currentUser, setIsFullView, allLeadCategories]);
 
   // Persist lead filters/preferences and block layout to Firestore
   useEffect(() => {
     if (!currentUser || !prefsLoaded) return;
+    // Update the ref to keep it in sync with current selection
+    savedSelectedRef.current = selectedLeadCategories;
     const userRef = doc(db, 'users', currentUser.uid);
     updateDoc(userRef, {
       lead_sortBy: leadSortBy,
@@ -124,7 +147,7 @@ export default function LeadManager({ isFullView, setIsFullView, blockPosition, 
       lead_selectedCategories: selectedLeadCategories,
       leads_isFullView: isFullView,
       updatedAt: serverTimestamp(),
-    }).catch(() => {});
+    }).catch((err) => console.error('Error persisting lead prefs:', err));
   }, [currentUser, prefsLoaded, leadSortBy, leadSortDirection, leadTimeFilter, leadFilterFrom, leadFilterTo, leadSearchTerm, selectedLeadCategories, isFullView]);
 
   // Bridge analytics toggle to page.js (to show the original analytics panel)
@@ -133,34 +156,6 @@ export default function LeadManager({ isFullView, setIsFullView, blockPosition, 
       window.dispatchEvent(new CustomEvent('toggle-lead-analytics', { detail: { open: showAnalytics } }));
     } catch {}
   }, [showAnalytics]);
-
-  // Users now come from DataContext
-
-  // Fetch user alias/role/EXT
-  useEffect(() => {
-    const fetchUserData = async () => {
-      if (!currentUser) return;
-      try {
-        const userRef = doc(db, "users", currentUser.uid);
-        const userSnap = await getDoc(userRef);
-        if (userSnap.exists()) {
-          const data = userSnap.data();
-          setAlias(data.alias || currentUser.email || "");
-          setRole(data.role || "staff");
-          setUserExt(data.EXT || "");
-        }
-      } catch {}
-    };
-    fetchUserData();
-  }, [currentUser]);
-
-  // Fallback alias if missing after users load
-  useEffect(() => {
-    if (!alias && currentUser && assignableUsers.length) {
-      const me = assignableUsers.find(u => u.id === currentUser.uid || u.email === currentUser.email);
-      if (me && (me.alias || me.email)) setAlias(me.alias || me.email);
-    }
-  }, [alias, currentUser, assignableUsers]);
 
   // Leads now come from DataContext
 

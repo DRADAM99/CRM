@@ -105,10 +105,10 @@ const IOSSwitch = styled((props) => (
 export default function TaskManager({ isTMFullView, setIsTMFullView, blockPosition, onToggleBlockOrder, onCalendarDataChange }) {
   const { currentUser } = useAuth();
   const { toast } = useToast();
-  const { tasks, setTasks, users, assignableUsers } = useData();
-  const [alias, setAlias] = useState("");
-  const [role, setRole] = useState("");
-  const [userExt, setUserExt] = useState("");
+  const { tasks, setTasks, users, assignableUsers, currentUserData } = useData();
+  const alias = currentUserData?.alias || "";
+  const role = currentUserData?.role || "";
+  const userExt = currentUserData?.EXT || "";
   
   // Ensure current user is always in the assignable users list
   const assignableUsersWithSelf = useMemo(() => {
@@ -172,32 +172,6 @@ export default function TaskManager({ isTMFullView, setIsTMFullView, blockPositi
 
   const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [archivedTasks, setArchivedTasks] = useState([]);
-
-  // Fetch user's alias/role/EXT
-  useEffect(() => {
-    const fetchUserData = async () => {
-      if (!currentUser) return;
-      try {
-        const userRef = doc(db, "users", currentUser.uid);
-        const userSnap = await getDoc(userRef);
-        if (userSnap.exists()) {
-          const data = userSnap.data();
-          setAlias(data.alias || currentUser.email || "");
-          setRole(data.role || "staff");
-          setUserExt(data.EXT || "");
-        }
-      } catch {}
-    };
-    fetchUserData();
-  }, [currentUser]);
-
-  // Fallback alias population once users list is available (in case alias missing on first render)
-  useEffect(() => {
-    if (!alias && currentUser) {
-      const me = users.find(u => u.id === currentUser.uid || u.email === currentUser.email);
-      if (me && (me.alias || me.email)) setAlias(me.alias || me.email);
-    }
-  }, [alias, currentUser, users]);
 
   // Load persisted task filters/preferences from Firestore
   useEffect(() => {
@@ -678,7 +652,7 @@ export default function TaskManager({ isTMFullView, setIsTMFullView, blockPositi
             </div>
             <div>
               <Label className="text-xs">תיאור:</Label>
-              <Textarea value={newTaskSubtitle} onChange={(e) => setNewTaskSubtitle(e.target.value)} rows={2} className="text-sm" onKeyDown={e => { if (e.key === ' ' || e.code === 'Space') e.stopPropagation(); }} />
+              <Textarea value={newTaskSubtitle} onChange={(e) => setNewTaskSubtitle(e.target.value)} rows={2} className="text-sm" onKeyDown={e => { if (e.key === ' ' || e.code === 'Space') e.stopPropagation(); if (e.key === 'Enter') e.stopPropagation(); }} />
             </div>
             <div className="flex gap-2">
               <div className="flex-1">

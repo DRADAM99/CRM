@@ -1,4 +1,4 @@
-// Version 7.6.6- fixed new lead dialog functionaliy and UI
+// Version 7.6.7- Enter key in task description, Alias loading, Lead category filter persistence
 "use client";
 
 // Utility functions for layout persistence
@@ -259,13 +259,13 @@ export default function Dashboard() {
   const [taskCategories, setTaskCategories] = useState(defaultTaskCategories);
 
   const { currentUser } = useAuth();
-  const { tasks, setTasks, leads, setLeads, users, assignableUsers } = useData();
+  const { tasks, setTasks, leads, setLeads, users, assignableUsers, currentUserData } = useData();
   const { toast } = useToast();
   const router = useRouter();
   const [loading, setLoading] = useState(true);
-  const [role, setRole] = useState("");
-  const [alias, setAlias] = useState("");
-  const [userExt, setUserExt] = useState("");
+  const role = currentUserData?.role || "";
+  const alias = currentUserData?.alias || "";
+  const userExt = currentUserData?.EXT || "";
   // Single tasks state declaration
   const [replyingToTaskId, setReplyingToTaskId] = useState(null);
   const [showOverdueEffects, setShowOverdueEffects] = useState(true);
@@ -537,44 +537,6 @@ const updateKanbanCategoryOrder = async (newOrder) => {
     }
     setLoading(false);
   }, [loading, currentUser, router]);
-  
-  // Fetch user's alias, role, and EXT
-  useEffect(() => {
-    const fetchUserData = async () => {
-      if (!currentUser) return;
-      
-      try {
-        const userRef = doc(db, "users", currentUser.uid);
-        const userSnap = await getDoc(userRef);
-        if (userSnap.exists()) {
-          const data = userSnap.data();
-          setAlias(data.alias || currentUser.email || "");
-          setRole(data.role || "staff");
-          setUserExt(data.EXT || "");
-        } else {
-          // Fallback if document doesn't exist
-          setAlias(currentUser.email || "");
-          setRole("staff");
-        }
-      } catch (error) {
-        console.error("Error fetching user data:", error);
-        setAlias(currentUser.email || "");
-      }
-    };
-
-    fetchUserData();
-  }, [currentUser]);
-
-  // Fallback: populate alias from users list if not set
-  useEffect(() => {
-    if (!alias && currentUser && users.length > 0) {
-      const me = users.find(u => u.id === currentUser.uid || u.email === currentUser.email);
-      if (me && me.alias) {
-        setAlias(me.alias);
-      }
-    }
-  }, [alias, currentUser, users]);
-
 
   // ✅ 1. Listen to auth state changes - REMOVED duplicate listener since we use AuthContext
   useEffect(() => {
@@ -592,8 +554,8 @@ const updateKanbanCategoryOrder = async (newOrder) => {
 
   // ✅ 3. Optional loading screen (handled in return)
 
-  const handleAliasUpdate = async () => {
-    console.log("Clicked save alias. Current alias:", alias);
+  const handleAliasUpdate = async (newAlias) => {
+    console.log("Clicked save alias. Current alias:", newAlias);
     if (!currentUser) return;
     const ref = doc(db, "users", currentUser.uid);
     const snap = await getDoc(ref);
@@ -601,15 +563,16 @@ const updateKanbanCategoryOrder = async (newOrder) => {
     if (!snap.exists()) {
       await setDoc(ref, {
         email: currentUser.email,
-        alias: alias,
+        alias: newAlias,
         role: "staff", // Default role for new users
         createdAt: new Date()
       });
     } else {
       await updateDoc(ref, {
-        alias: alias
+        alias: newAlias
       });
     }
+    // Trigger a refetch by updating the context - the useEffect in DataContext will handle this
   };
   
   const [justClosedLeadId, setJustClosedLeadId] = useState(null);
@@ -2751,7 +2714,7 @@ const calculatedAnalytics = useMemo(() => {
   </div>
 
   <div className="w-full sm:w-48 text-center sm:text-left text-sm text-gray-500 flex flex-col items-center sm:items-end sm:ml-0">
-                            <span>{'Version 7.6.6'}</span>
+                            <span>{'Version 7.6.7'}</span>
     <button
       className="text-xs text-red-600 underline"
       onClick={() => {

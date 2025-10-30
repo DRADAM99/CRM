@@ -1,7 +1,7 @@
 "use client";
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { db } from '@/firebase';
-import { collection, onSnapshot, getDocs, query, orderBy } from 'firebase/firestore';
+import { collection, onSnapshot, getDocs, query, orderBy, doc, getDoc } from 'firebase/firestore';
 import { useAuth } from './AuthContext';
 
 const DataContext = createContext();
@@ -12,7 +12,51 @@ export function DataProvider({ children }) {
   const [leads, setLeads] = useState([]);
   const [users, setUsers] = useState([]);
   const [assignableUsers, setAssignableUsers] = useState([]);
+  const [currentUserData, setCurrentUserData] = useState(null);
   const [loading, setLoading] = useState(true);
+
+  // Fetch current user's full data including alias
+  useEffect(() => {
+    const fetchCurrentUserData = async () => {
+      if (!currentUser) {
+        setCurrentUserData(null);
+        return;
+      }
+      try {
+        const userRef = doc(db, "users", currentUser.uid);
+        const userSnap = await getDoc(userRef);
+        if (userSnap.exists()) {
+          const data = userSnap.data();
+          setCurrentUserData({
+            uid: currentUser.uid,
+            email: currentUser.email,
+            alias: data.alias || currentUser.email || "",
+            role: data.role || "staff",
+            EXT: data.EXT || ""
+          });
+        } else {
+          // Fallback if no user document exists
+          setCurrentUserData({
+            uid: currentUser.uid,
+            email: currentUser.email,
+            alias: currentUser.email || "",
+            role: "staff",
+            EXT: ""
+          });
+        }
+      } catch (error) {
+        console.error("Error fetching current user data:", error);
+        setCurrentUserData({
+          uid: currentUser.uid,
+          email: currentUser.email,
+          alias: currentUser.email || "",
+          role: "staff",
+          EXT: ""
+        });
+      }
+    };
+    fetchCurrentUserData();
+  }, [currentUser]);
 
   // Single users fetch
   useEffect(() => {
@@ -112,6 +156,7 @@ export function DataProvider({ children }) {
     leads,
     users,
     assignableUsers,
+    currentUserData,
     loading,
     setTasks, // Allow components to update local state
     setLeads
