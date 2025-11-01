@@ -695,6 +695,11 @@ const [selectedDate, setSelectedDate] = useState(new Date());
     saveLayoutPref('dashboard_isCalendarFullView', isCalendarFullView);
   }, [isCalendarFullView]);
 
+  // Persist task manager full view preference
+  useEffect(() => {
+    saveLayoutPref('dashboard_isTMFullView', isTMFullView);
+  }, [isTMFullView]);
+
   // Persist block order preference
   useEffect(() => {
     saveLayoutPref('dashboard_blockOrder', blockOrder);
