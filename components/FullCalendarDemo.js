@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import FullCalendar from '@fullcalendar/react';
 import dayGridPlugin from '@fullcalendar/daygrid';
 import timeGridPlugin from '@fullcalendar/timegrid';
@@ -205,14 +205,30 @@ export default function FullCalendarDemo({ isCalendarFullView, taskCategories: p
   }, [dataUsers, currentUser]);
 
   // Transform tasks and leads from DataContext into calendar events
+  const normalizeDueDate = useCallback((rawValue) => {
+    if (!rawValue) return null;
+    if (rawValue instanceof Date) {
+      return isNaN(rawValue.getTime()) ? null : rawValue;
+    }
+    if (typeof rawValue?.toDate === 'function') {
+      const converted = rawValue.toDate();
+      return converted instanceof Date && !isNaN(converted.getTime()) ? converted : null;
+    }
+    const parsed = new Date(rawValue);
+    return isNaN(parsed.getTime()) ? null : parsed;
+  }, []);
+
   useEffect(() => {
-    const taskEvents = allTasks.map(task => ({
-      ...task,
-      type: 'task',
-      start: task.dueDate,
-      end: task.dueDate ? new Date(task.dueDate.getTime() + 20 * 60 * 1000) : null,
-      color: CATEGORY_COLORS[task.category],
-    }));
+    const taskEvents = allTasks.map(task => {
+      const start = normalizeDueDate(task.dueDate);
+      return {
+        ...task,
+        type: 'task',
+        start,
+        end: start ? new Date(start.getTime() + 20 * 60 * 1000) : null,
+        color: CATEGORY_COLORS[task.category],
+      };
+    });
     
     const leadEvents = allLeads
       .filter(lead => lead.status === 'תור נקבע' && lead.appointmentDateTime)
@@ -232,7 +248,7 @@ export default function FullCalendarDemo({ isCalendarFullView, taskCategories: p
       
     setEvents([...taskEvents, ...leadEvents]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [allTasks, allLeads]);
+  }, [allTasks, allLeads, normalizeDueDate]);
 
   // Detect touch device (iPad, etc.)
   useEffect(() => {

@@ -456,32 +456,38 @@ export default function TaskManager({ isTMFullView, setIsTMFullView, blockPositi
 
   const handleEditTask = useCallback((task) => {
     if (!task) return;
+    setShowTaskModal(false);
     setEditingTaskId(task.id);
-    setEditingAssignTo(task.assignTo);
-    setEditingTitle(task.title);
+    const assignedUser = assignableUsersWithSelf.find(
+      (u) => u.email === task.assignTo || u.alias === task.assignTo
+    );
+    setEditingAssignTo(assignedUser ? (assignedUser.alias || assignedUser.email) : (task.assignTo || ""));
+    setEditingTitle(task.title || "");
     setEditingSubtitle(task.subtitle || "");
-    setEditingPriority(task.priority);
-    setEditingCategory(task.category);
-    try {
-      if (task.dueDate) {
-        const due = new Date(task.dueDate);
-        if (!isNaN(due.getTime())) {
-          const dateStr = due.toLocaleDateString('en-CA');
-          const timeStr = due.toTimeString().slice(0, 5);
-          setEditingDueDate(dateStr);
-          setEditingDueTime(timeStr);
-          return;
-        }
+    setEditingPriority(task.priority || "רגיל");
+    setEditingCategory(task.category || taskCategories[0] || "");
+    setEditingBranch(task.branch || "");
+    let parsedDue = null;
+    if (task.dueDate) {
+      if (task.dueDate instanceof Date) {
+        parsedDue = task.dueDate;
+      } else if (typeof task.dueDate?.toDate === 'function') {
+        parsedDue = task.dueDate.toDate();
+      } else {
+        const tentative = new Date(task.dueDate);
+        if (!isNaN(tentative.getTime())) parsedDue = tentative;
       }
-      const now = new Date();
-      setEditingDueDate(now.toLocaleDateString('en-CA'));
-      setEditingDueTime(now.toTimeString().slice(0, 5));
-    } catch {
-      const now = new Date();
-      setEditingDueDate(now.toLocaleDateString('en-CA'));
-      setEditingDueTime(now.toTimeString().slice(0, 5));
     }
-  }, []);
+    if (parsedDue && !isNaN(parsedDue.getTime())) {
+      setEditingDueDate(parsedDue.toLocaleDateString('en-CA'));
+      setEditingDueTime(parsedDue.toTimeString().slice(0, 5));
+    } else {
+      setEditingDueDate("");
+      setEditingDueTime("");
+    }
+    setKanbanCollapsed((prev) => (task.category ? { ...prev, [task.category]: false } : prev));
+    setKanbanTaskCollapsed((prev) => ({ ...prev, [task.id]: false }));
+  }, [taskCategories, assignableUsersWithSelf]);
 
   const handleSaveTask = useCallback(async (e) => {
     e.preventDefault();
@@ -495,11 +501,39 @@ export default function TaskManager({ isTMFullView, setIsTMFullView, blockPositi
         if (!isNaN(newDate.getTime())) dueDateTime = newDate;
       }
     } catch {}
+    const assignedUser = assignableUsersWithSelf.find(
+      (u) => u.alias === editingAssignTo || u.email === editingAssignTo
+    );
+    const assignToValue = assignedUser ? assignedUser.email : editingAssignTo;
     try {
       const taskRef = doc(db, "tasks", editingTaskId);
-      await updateDoc(taskRef, { assignTo: editingAssignTo, title: editingTitle, subtitle: editingSubtitle, priority: editingPriority, category: editingCategory, dueDate: dueDateTime ? dueDateTime.toISOString() : null, done: false, completedBy: null, completedAt: null, updatedAt: serverTimestamp() });
+      await updateDoc(taskRef, {
+        assignTo: assignToValue,
+        title: editingTitle,
+        subtitle: editingSubtitle,
+        priority: editingPriority,
+        category: editingCategory,
+        dueDate: dueDateTime ? dueDateTime.toISOString() : null,
+        branch: editingBranch || null,
+        done: false,
+        completedBy: null,
+        completedAt: null,
+        updatedAt: serverTimestamp(),
+      });
     } catch {}
-    setTasks(prev => prev.map(t => t.id === editingTaskId ? { ...t, assignTo: editingAssignTo, title: editingTitle, subtitle: editingSubtitle, priority: editingPriority, category: editingCategory, dueDate: dueDateTime ? dueDateTime.toISOString() : null, done: false, completedBy: null, completedAt: null, branch: editingBranch } : t));
+    setTasks(prev => prev.map(t => t.id === editingTaskId ? {
+      ...t,
+      assignTo: assignToValue,
+      title: editingTitle,
+      subtitle: editingSubtitle,
+      priority: editingPriority,
+      category: editingCategory,
+      dueDate: dueDateTime ? dueDateTime : null,
+      done: false,
+      completedBy: null,
+      completedAt: null,
+      branch: editingBranch || null,
+    } : t));
     setEditingTaskId(null);
     setEditingAssignTo("");
     setEditingTitle("");
@@ -509,7 +543,7 @@ export default function TaskManager({ isTMFullView, setIsTMFullView, blockPositi
     setEditingDueDate("");
     setEditingDueTime("");
     setEditingBranch('');
-  }, [editingTaskId, editingAssignTo, editingTitle, editingSubtitle, editingPriority, editingCategory, editingDueDate, editingDueTime, taskCategories, editingBranch]);
+  }, [editingTaskId, editingAssignTo, editingTitle, editingSubtitle, editingPriority, editingCategory, editingDueDate, editingDueTime, taskCategories, editingBranch, assignableUsersWithSelf]);
 
   const handleCancelEdit = useCallback(() => {
     setEditingTaskId(null);
@@ -520,6 +554,7 @@ export default function TaskManager({ isTMFullView, setIsTMFullView, blockPositi
     setEditingCategory(taskCategories[0] || "");
     setEditingDueDate("");
     setEditingDueTime("");
+    setEditingBranch('');
   }, [taskCategories]);
 
   const handleClearDoneTasks = useCallback(async () => {
@@ -682,9 +717,13 @@ export default function TaskManager({ isTMFullView, setIsTMFullView, blockPositi
             </div>
             <div className="flex-1">
               <Label className="text-xs">סניף:</Label>
-              <Select value={newTaskBranch} onValueChange={setNewTaskBranch}>
+              <Select
+                value={newTaskBranch || "none"}
+                onValueChange={(value) => setNewTaskBranch(value === "none" ? "" : value)}
+              >
                 <SelectTrigger className="h-8 text-sm"><SelectValue placeholder="בחר סניף..." /></SelectTrigger>
                 <SelectContent>
+                  <SelectItem value="none">ללא</SelectItem>
                   {BRANCHES.filter(b => b.value).map(b => (
                     <SelectItem key={b.value} value={b.value}>
                       <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${b.color}`}>{b.label}</span>
@@ -696,6 +735,137 @@ export default function TaskManager({ isTMFullView, setIsTMFullView, blockPositi
             <div className="flex flex-col items-center gap-2 pt-1">
               <Button type="submit" size="sm" className="bg-green-600 hover:bg-green-700 text-white px-12">{'צור משימה'}</Button>
               <Button type="button" size="sm" className="bg-red-600 hover:bg-red-700 text-white px-12" onClick={() => setShowTaskModal(false)}>{'ביטול'}</Button>
+            </div>
+          </form>
+        </div>
+      );
+    }
+
+    if (editingTaskId === task.id) {
+      return (
+        <div className="p-3 border rounded bg-blue-50 shadow-md">
+          <form onSubmit={handleSaveTask} className="space-y-2">
+            <div>
+              <Label className="text-xs">מוקצה ל:</Label>
+              <select
+                value={editingAssignTo}
+                onChange={(e) => setEditingAssignTo(e.target.value)}
+                className="h-8 text-sm w-full border rounded"
+              >
+                <option value="">בחר משתמש</option>
+                {assignableUsersWithSelf.map((user) => (
+                  <option key={user.id || user.email} value={user.alias || user.email}>
+                    {user.alias || user.email}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <Label className="text-xs">כותרת:</Label>
+              <Input
+                type="text"
+                value={editingTitle}
+                onChange={(e) => setEditingTitle(e.target.value)}
+                className="h-8 text-sm"
+                required
+                onKeyDown={(e) => {
+                  if (e.key === ' ' || e.code === 'Space') e.stopPropagation();
+                }}
+              />
+            </div>
+            <div>
+              <Label className="text-xs">תיאור:</Label>
+              <Textarea
+                value={editingSubtitle}
+                onChange={(e) => setEditingSubtitle(e.target.value)}
+                rows={2}
+                className="text-sm"
+                onKeyDown={(e) => {
+                  if (e.key === ' ' || e.code === 'Space') e.stopPropagation();
+                  if (e.key === 'Enter') e.stopPropagation();
+                }}
+              />
+            </div>
+            <div className="flex gap-2">
+              <div className="flex-1">
+                <Label className="text-xs">עדיפות:</Label>
+                <Select value={editingPriority} onValueChange={setEditingPriority}>
+                  <SelectTrigger className="h-8 text-sm">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {taskPriorities.map((p) => (
+                      <SelectItem key={p} value={p}>
+                        {p}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex-1">
+                <Label className="text-xs">קטגוריה:</Label>
+                <Select value={editingCategory} onValueChange={setEditingCategory}>
+                  <SelectTrigger className="h-8 text-sm">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {taskCategories.map((cat) => (
+                      <SelectItem key={cat} value={cat}>
+                        {cat}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <div className="flex-1">
+                <Label className="text-xs">תאריך:</Label>
+                <Input
+                  type="date"
+                  value={editingDueDate}
+                  onChange={(e) => setEditingDueDate(e.target.value)}
+                  className="h-8 text-sm"
+                />
+              </div>
+              <div className="flex-1">
+                <Label className="text-xs">שעה:</Label>
+                <Input
+                  type="time"
+                  value={editingDueTime}
+                  onChange={(e) => setEditingDueTime(e.target.value)}
+                  className="h-8 text-sm"
+                />
+              </div>
+            </div>
+            <div className="flex-1">
+              <Label className="text-xs">סניף:</Label>
+              <Select
+                value={editingBranch || "none"}
+                onValueChange={(value) => setEditingBranch(value === "none" ? "" : value)}
+              >
+                <SelectTrigger className="h-8 text-sm">
+                  <SelectValue placeholder="בחר סניף..." />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">ללא</SelectItem>
+                  {BRANCHES.filter((b) => b.value).map((b) => (
+                    <SelectItem key={b.value} value={b.value}>
+                      <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${b.color}`}>
+                        {b.label}
+                      </span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex justify-end gap-2 pt-1">
+              <Button type="submit" size="sm" className="bg-green-600 hover:bg-green-700 text-white px-6">
+                {'שמור'}
+              </Button>
+              <Button type="button" variant="outline" size="sm" onClick={handleCancelEdit}>
+                {'ביטול'}
+              </Button>
             </div>
           </form>
         </div>
@@ -743,7 +913,7 @@ export default function TaskManager({ isTMFullView, setIsTMFullView, blockPositi
           <div className="flex flex-col items-end gap-1 min-w-[70px]">
             {task.branch && (<span className={`mb-1 inline-block rounded-full px-2 py-0.5 text-xs font-medium ${branchColor(task.branch)}`}>{task.branch}</span>)}
             <div className="flex items-center gap-1">
-              <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => { setEditingTaskId(task.id); setEditingTitle(task.title); setEditingSubtitle(task.subtitle || ''); setEditingPriority(task.priority); setEditingCategory(task.category); if (task.dueDate) { const due = new Date(task.dueDate); if (!isNaN(due.getTime())) { setEditingDueDate(due.toLocaleDateString('en-CA')); setEditingDueTime(due.toTimeString().slice(0, 5)); } } setEditingAssignTo(task.assignTo || ''); setEditingBranch(task.branch || ''); }}><Pencil className="h-4 w-4" /></Button></TooltipTrigger><TooltipContent>שינוי משימה</TooltipContent></Tooltip>
+              <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleEditTask(task)}><Pencil className="h-4 w-4" /></Button></TooltipTrigger><TooltipContent>שינוי משימה</TooltipContent></Tooltip>
               <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8 relative" onClick={() => { setReplyingToTaskId(task.id); setReplyInputValue(""); }}><MessageCircle className="h-4 w-4" /></Button></TooltipTrigger><TooltipContent>הוסיפי תגובה</TooltipContent></Tooltip>
               {!task.done && (<Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" className={`w-6 h-6 relative ${task.hasUnreadNudges ? 'text-orange-500' : 'text-gray-400'} hover:text-orange-600`} title="שלח תזכורת" onClick={(e) => { e.stopPropagation(); handleNudgeTask(task.id); }} onPointerDown={(e) => e.stopPropagation()}><Bell className="h-4 w-4" />{task.hasUnreadNudges && (<span className="absolute -top-1 -right-1 h-2 w-2 bg-orange-500 rounded-full" />)}</Button></TooltipTrigger><TooltipContent>שלח תזכורת</TooltipContent></Tooltip>)}
             </div>
@@ -980,7 +1150,7 @@ export default function TaskManager({ isTMFullView, setIsTMFullView, blockPositi
                                     </TooltipContent>
                                   </Tooltip>
                                   <div className="flex items-center gap-1">
-                                    <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => { setEditingTaskId(task.id); setEditingTitle(task.title); setEditingSubtitle(task.subtitle || ''); setEditingPriority(task.priority); setEditingCategory(task.category); if (task.dueDate) { const due = new Date(task.dueDate); if (!isNaN(due.getTime())) { setEditingDueDate(due.toLocaleDateString('en-CA')); setEditingDueTime(due.toTimeString().slice(0, 5)); } } setEditingAssignTo(task.assignTo || ''); setEditingBranch(task.branch || ''); }}><Pencil className="h-4 w-4" /></Button></TooltipTrigger><TooltipContent>שינוי משימה</TooltipContent></Tooltip>
+                                    <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleEditTask(task)}><Pencil className="h-4 w-4" /></Button></TooltipTrigger><TooltipContent>שינוי משימה</TooltipContent></Tooltip>
                                     <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8 relative" onClick={() => { setReplyingToTaskId(task.id); setReplyInputValue(""); }}><MessageCircle className="h-4 w-4" /></Button></TooltipTrigger><TooltipContent>הוסיפי תגובה</TooltipContent></Tooltip>
                                     {!task.done && (<Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" className="w-6 h-6 relative text-gray-400 hover:text-orange-600" title="שלח תזכורת" onClick={(e) => { e.stopPropagation(); handleNudgeTask(task.id); }} onPointerDown={(e) => e.stopPropagation()}><Bell className="h-4 w-4" /></Button></TooltipTrigger><TooltipContent>שלח תזכורת</TooltipContent></Tooltip>)}
                                   </div>
