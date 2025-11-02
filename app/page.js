@@ -1,4 +1,4 @@
-// Version 7.6.8 - Task edit optional due date, calendar null due date fix, alias loading, lead category filter persistence
+// Version 7.6.9 - Added CandidatesBlock status waiting list, new toggle for hiding calendar.
 "use client";
 
 // Utility functions for layout persistence
@@ -689,11 +689,16 @@ const [selectedDate, setSelectedDate] = useState(new Date());
 
   // Add state for calendar full view
   const [isCalendarFullView, setIsCalendarFullView] = useState(() => getLayoutPref('dashboard_isCalendarFullView', false));
+  const [isCalendarVisible, setIsCalendarVisible] = useState(() => getLayoutPref('dashboard_isCalendarVisible', true));
 
   // Persist calendar full view preference
   useEffect(() => {
     saveLayoutPref('dashboard_isCalendarFullView', isCalendarFullView);
   }, [isCalendarFullView]);
+
+  useEffect(() => {
+    saveLayoutPref('dashboard_isCalendarVisible', isCalendarVisible);
+  }, [isCalendarVisible]);
 
   // Persist task manager full view preference
   useEffect(() => {
@@ -2736,6 +2741,14 @@ const calculatedAnalytics = useMemo(() => {
       {GreetingIcon ? <GreetingIcon className={`h-4 w-4 ${greetingColor}`} aria-hidden="true" /> : null}
       <span>{greetingLine}</span>
     </div>
+    <Button
+      size="sm"
+      variant="outline"
+      className="mt-2"
+      onClick={() => setIsCalendarVisible(v => !v)}
+    >
+      {isCalendarVisible ? 'הסתר יומן' : 'הצג יומן'}
+    </Button>
   </div>
 
   <div className="flex-1 flex items-center justify-center relative px-4">
@@ -2757,7 +2770,7 @@ const calculatedAnalytics = useMemo(() => {
   </div>
 
   <div className="w-full sm:w-48 text-center sm:text-left text-sm text-gray-500 flex flex-col items-center sm:items-end sm:ml-0">
-                            <span>{'Version 7.6.8'}</span>
+                            <span>{'Version 7.6.9'}</span>
     <button
       className="text-xs text-red-600 underline"
       onClick={() => {
@@ -2793,28 +2806,29 @@ const calculatedAnalytics = useMemo(() => {
           
 
           
-          <div style={{ order: blockOrder.Calendar }} className={`col-span-1 ${isCalendarFullView ? 'lg:col-span-12' : 'lg:col-span-4'} transition-all duration-300 ease-in-out`}>
-             <Card className="h-full flex flex-col">
-              <CardHeader>
-                <div className="flex justify-between items-center">
-                    <CardTitle>{'לוח שנה'}</CardTitle>
-                    <div className="flex gap-2">
-                      <Button size="sm" onClick={() => setIsCalendarFullView(v => !v)} variant="outline">
-                        {isCalendarFullView ? 'תצוגה מקוצרת' : 'תצוגה מלאה'}
-                      </Button>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Button size="xs" onClick={() => toggleBlockOrder("Calendar")}> {'מיקום: '}{blockOrder.Calendar} </Button>
-                        </TooltipTrigger>
-                        <TooltipContent>{'שנה מיקום בלוק'}</TooltipContent>
-                      </Tooltip>
-                    </div>
-                </div>
-                
-              </CardHeader>
-              <CardContent className="flex flex-col flex-grow h-full">
-                 <div className="flex-1 min-h-[400px] h-full">
-                   <FullCalendarDemo
+          {isCalendarVisible && (
+            <div style={{ order: blockOrder.Calendar }} className={`col-span-1 ${isCalendarFullView ? 'lg:col-span-12' : 'lg:col-span-4'} transition-all duration-300 ease-in-out`}>
+               <Card className="h-full flex flex-col">
+                <CardHeader>
+                  <div className="flex justify-between items-center">
+                      <CardTitle>{'לוח שנה'}</CardTitle>
+                      <div className="flex gap-2">
+                        <Button size="sm" onClick={() => setIsCalendarFullView(v => !v)} variant="outline">
+                          {isCalendarFullView ? 'תצוגה מקוצרת' : 'תצוגה מלאה'}
+                        </Button>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button size="xs" onClick={() => toggleBlockOrder("Calendar")}> {'מיקום: '}{blockOrder.Calendar} </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>{'שנה מיקום בלוק'}</TooltipContent>
+                        </Tooltip>
+                      </div>
+                  </div>
+                  
+                </CardHeader>
+                <CardContent className="flex flex-col flex-grow h-full">
+                   <div className="flex-1 min-h-[400px] h-full">
+                     <FullCalendarDemo
           selectedDate={selectedDate}
           setSelectedDate={setSelectedDate}
                 scrollToTime={new Date()}
@@ -2858,10 +2872,11 @@ const calculatedAnalytics = useMemo(() => {
                       taskCategories={taskCalendarData?.taskCategories || []}
                       users={taskCalendarData?.users || []}
                    />
-                 </div>
-              </CardContent>
-            </Card>
-          </div>
+                   </div>
+                </CardContent>
+              </Card>
+            </div>
+          )}
 
           
           <div style={{ order: blockOrder.Leads }} className={`col-span-1 ${isFullView ? 'lg:col-span-8' : 'lg:col-span-4'} transition-all duration-300 ease-in-out`} >

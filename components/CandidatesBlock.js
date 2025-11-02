@@ -17,6 +17,7 @@ import { useData } from "@/app/context/DataContext";
 // --- Status config (copy from page.js) ---
 const leadStatusConfig = {
   "נקבע יעוץ": { color: "bg-green-500", priority: 1 },
+  "רשימת המתנה": { color: "bg-teal-400", priority: 1.5 },
   "הומלץ טיפול": { color: "bg-blue-500", priority: 2 },
   "לא הומלץ טיפול": { color: "bg-gray-400", priority: 3 },
   "ניתן מידע": { color: "bg-yellow-400", priority: 4 },
@@ -32,6 +33,7 @@ const leadColorTab = (status) => leadStatusConfig[status]?.color || leadStatusCo
 
 const candidatesStatuses = [
   "נקבע יעוץ",
+  "רשימת המתנה",
   "הומלץ טיפול",
   "לא הומלץ טיפול",
   "ניתן מידע",
