@@ -2734,60 +2734,101 @@ const calculatedAnalytics = useMemo(() => {
     <TooltipProvider>
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
         
-      <header dir="rtl" className="flex flex-col sm:flex-row items-center justify-between p-2 sm:p-4 border-b bg-white shadow-sm sticky top-0 z-20 min-h-[90px]">
-  <div className="w-full sm:w-48 text-center sm:text-right text-sm text-gray-600 flex flex-col items-center sm:items-start sm:mr-0">
-    <div className="w-full text-center sm:text-right">{currentDateTime || 'טוען תאריך...'}</div>
-    <div className="text-xs text-gray-700 w-full text-center sm:text-right flex items-center justify-center sm:justify-end gap-1">
-      {GreetingIcon ? <GreetingIcon className={`h-4 w-4 ${greetingColor}`} aria-hidden="true" /> : null}
-      <span>{greetingLine}</span>
+      <header dir="rtl" className="border-b bg-white shadow-sm sticky top-0 z-20">
+  {/* Mobile Header - Single Row */}
+  <div className="flex sm:hidden items-start justify-between px-2 py-1.5 relative">
+    {/* Top Left - Version & Logout */}
+    <div className="flex flex-col items-start text-[10px] text-gray-500">
+      <span className="leading-tight">v7.6.9</span>
+      <button
+        className="text-[10px] text-red-600 underline leading-tight"
+        onClick={() => {
+          import("firebase/auth").then(({ signOut }) =>
+            signOut(auth).then(() => router.push("/login"))
+          );
+        }}
+      >
+        התנתק
+      </button>
     </div>
-    <Button
-      size="sm"
-      variant="outline"
-      className="mt-2"
-      onClick={() => setIsCalendarVisible(v => !v)}
-    >
-      {isCalendarVisible ? 'הסתר יומן' : 'הצג יומן'}
-    </Button>
+
+    {/* Top Center - Logo */}
+    <div className="flex items-center justify-center absolute left-1/2 -translate-x-1/2">
+      <Image
+        src="/logo.png"
+        alt="Logo"
+        width={90}
+        height={36}
+        className="h-8"
+      />
+    </div>
+
+    {/* Top Right - DateTime & Greeting */}
+    <div className="flex flex-col items-end text-[10px] text-gray-600">
+      <div className="leading-tight">{currentDateTime || 'טוען...'}</div>
+      <div className="flex items-center gap-0.5 leading-tight text-gray-700">
+        {GreetingIcon ? <GreetingIcon className={`h-3 w-3 ${greetingColor}`} aria-hidden="true" /> : null}
+        <span className="truncate max-w-[100px]">{greeting.message}</span>
+      </div>
+    </div>
   </div>
 
-  <div className="flex-1 flex items-center justify-center relative px-4">
-    <div className="absolute right-2 hidden sm:flex gap-2">
-      <NotesAndLinks section="links" />
+  {/* Desktop Header - Original Layout */}
+  <div className="hidden sm:flex flex-row items-center justify-between p-4 min-h-[90px]">
+    <div className="w-48 text-right text-sm text-gray-600 flex flex-col items-start">
+      <div className="w-full text-right">{currentDateTime || 'טוען תאריך...'}</div>
+      <div className="text-xs text-gray-700 w-full text-right flex items-center justify-end gap-1">
+        {GreetingIcon ? <GreetingIcon className={`h-4 w-4 ${greetingColor}`} aria-hidden="true" /> : null}
+        <span>{greetingLine}</span>
+      </div>
+      <Button
+        size="sm"
+        variant="outline"
+        className="mt-2"
+        onClick={() => setIsCalendarVisible(v => !v)}
+      >
+        {isCalendarVisible ? 'הסתר יומן' : 'הצג יומן'}
+      </Button>
     </div>
 
-    <Image
-      src="/logo.png"
-      alt="Logo"
-      width={140}
-      height={56}
-      className="h-10 sm:h-14 inline-block"
-    />
+    <div className="flex-1 flex items-center justify-center relative px-4">
+      <div className="absolute right-2 flex gap-2">
+        <NotesAndLinks section="links" />
+      </div>
 
-    <div className="absolute left-0 hidden sm:flex gap-2">
-      <NotesAndLinks section="notes" />
+      <Image
+        src="/logo.png"
+        alt="Logo"
+        width={140}
+        height={56}
+        className="h-14 inline-block"
+      />
+
+      <div className="absolute left-0 flex gap-2">
+        <NotesAndLinks section="notes" />
+      </div>
     </div>
-  </div>
 
-  <div className="w-full sm:w-48 text-center sm:text-left text-sm text-gray-500 flex flex-col items-center sm:items-end sm:ml-0">
-                            <span>{'Version 7.6.9'}</span>
-    <button
-      className="text-xs text-red-600 underline"
-      onClick={() => {
-        import("firebase/auth").then(({ signOut }) =>
-          signOut(auth).then(() => router.push("/login"))
-        );
-      }}
-    >
-      התנתק
-    </button>
-    <UserManagement role={role} />
+    <div className="w-48 text-left text-sm text-gray-500 flex flex-col items-end">
+      <span>{'Version 7.6.9'}</span>
+      <button
+        className="text-xs text-red-600 underline"
+        onClick={() => {
+          import("firebase/auth").then(({ signOut }) =>
+            signOut(auth).then(() => router.push("/login"))
+          );
+        }}
+      >
+        התנתק
+      </button>
+      <UserManagement role={role} />
+    </div>
   </div>
 </header>
 
 
         
-        <div dir="rtl" className="grid grid-cols-1 lg:grid-cols-12 gap-2 sm:gap-4 p-2 sm:p-4 bg-gray-50 min-h-[calc(100vh-90px)]">
+        <div dir="rtl" className="grid grid-cols-1 lg:grid-cols-12 gap-2 sm:gap-4 p-2 sm:p-4 bg-gray-50 min-h-[calc(100vh-90px)] overflow-x-hidden max-w-full">
         <CandidatesBlock
   isFullView={isLeadsFullView}
   setIsFullView={setIsLeadsFullView}

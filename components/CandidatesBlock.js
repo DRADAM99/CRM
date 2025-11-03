@@ -458,20 +458,20 @@ export default function CandidatesBlock({ isFullView: parentIsFullView, setIsFul
                 </Button>
               </div>
             </div>
-            <div className="flex flex-wrap items-center gap-x-4 gap-y-2 mt-2 border-t pt-2">
-              <div>
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-2 mt-2 border-t pt-2">
+              <div className="w-full sm:w-auto">
                 <Label className="ml-1 text-sm font-medium">{'סטטוס:'}</Label>
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button variant="outline" size="sm" className="h-8 text-sm w-[180px] justify-between">
-                      <span>
+                    <Button variant="outline" size="sm" className="h-8 text-sm w-full sm:w-[180px] justify-between">
+                      <span className="truncate">
                         {selectedStatuses.length === candidatesStatuses.length
                           ? "כל הסטטוסים"
                           : selectedStatuses.length === 1
                             ? candidatesStatuses.find(cat => cat === selectedStatuses[0])
                             : `${selectedStatuses.length} נבחרו`}
                       </span>
-                      <ChevronDown className="h-4 w-4 opacity-50" />
+                      <ChevronDown className="h-4 w-4 opacity-50 flex-shrink-0" />
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent className="w-[180px]" dir="rtl">
@@ -492,37 +492,39 @@ export default function CandidatesBlock({ isFullView: parentIsFullView, setIsFul
                   </DropdownMenuContent>
                 </DropdownMenu>
               </div>
-              <div className="relative">
+              <div className="relative w-full sm:w-auto flex-grow sm:flex-grow-0">
                 <Search className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
                 <Input
                   type="search"
                   placeholder="חפש מועמד..."
-                  className="h-8 text-sm pl-8 w-[180px]"
+                  className="h-8 text-sm pl-8 w-full sm:w-[180px]"
                   value={searchTerm}
                   onChange={e => setSearchTerm(e.target.value)}
                 />
               </div>
-              <div>
-                <Label className="ml-1 text-sm font-medium">{'סדר לפי:'}</Label>
-                <Select value={sortBy} onValueChange={setSortBy}>
-                  <SelectTrigger className="h-8 text-sm w-[120px]"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="priority">עדיפות</SelectItem>
-                    <SelectItem value="date">תאריך יצירה</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label className="ml-1 text-sm font-medium">{'כיוון:'}</Label>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="h-8 text-sm w-[40px] px-2"
-                  onClick={() => setSortDirection(dir => dir === 'asc' ? 'desc' : 'asc')}
-                  title={sortDirection === 'asc' ? 'סדר עולה' : 'סדר יורד'}
-                >
-                  {sortDirection === 'asc' ? '⬆️' : '⬇️'}
-                </Button>
+              <div className="flex items-center gap-2 w-full sm:w-auto">
+                <div className="flex-1 sm:flex-initial">
+                  <Label className="ml-1 text-sm font-medium">{'סדר לפי:'}</Label>
+                  <Select value={sortBy} onValueChange={setSortBy}>
+                    <SelectTrigger className="h-8 text-sm w-full sm:w-[120px]"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="priority">עדיפות</SelectItem>
+                      <SelectItem value="date">תאריך יצירה</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label className="ml-1 text-sm font-medium">{'כיוון:'}</Label>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-8 text-sm w-[40px] px-2"
+                    onClick={() => setSortDirection(dir => dir === 'asc' ? 'desc' : 'asc')}
+                    title={sortDirection === 'asc' ? 'סדר עולה' : 'סדר יורד'}
+                  >
+                    {sortDirection === 'asc' ? '⬆️' : '⬇️'}
+                  </Button>
+                </div>
               </div>
             </div>
           </div>
@@ -531,7 +533,7 @@ export default function CandidatesBlock({ isFullView: parentIsFullView, setIsFul
           {parentIsFullView ? (
             // --- Expanded Table View ---
             <div className="flex-grow overflow-auto">
-              <table className="w-full table-fixed text-sm border-collapse">
+              <table className="w-full table-fixed text-sm border-collapse min-w-[600px]">
                 <thead className="sticky top-0 bg-gray-100 z-10">
                   <tr>
                     <th className="px-2 py-2 text-right font-semibold w-16">{'עדיפות'}</th>
