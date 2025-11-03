@@ -30,6 +30,24 @@ function formatDateTime(date) {
   } catch { return ""; }
 }
 
+function formatDate(date) {
+  if (!date) return "";
+  try {
+    const d = new Date(date);
+    if (isNaN(d.getTime())) return "";
+    return d.toLocaleDateString("he-IL");
+  } catch { return ""; }
+}
+
+function formatTime(date) {
+  if (!date) return "";
+  try {
+    const d = new Date(date);
+    if (isNaN(d.getTime())) return "";
+    return d.toLocaleTimeString("he-IL", { hour: "2-digit", minute: "2-digit", hour12: false });
+  } catch { return ""; }
+}
+
 export default function LeadManager({ isFullView, setIsFullView, blockPosition, onToggleBlockOrder, onCalendarDataChange }) {
   const { currentUser } = useAuth();
   const { leads, assignableUsers, currentUserData } = useData();
@@ -431,14 +449,13 @@ export default function LeadManager({ isFullView, setIsFullView, blockPosition, 
             <table className="w-full table-fixed text-sm border-collapse">
               <thead className="sticky top-0 bg-gray-100 z-10">
                 <tr>
-                  <th className="px-2 py-2 text-right font-semibold w-16">{'עדיפות'}</th>
-                  <th className="px-2 py-2 text-right font-semibold w-32">{'תאריך'}</th>
-                  <th className="px-2 py-2 text-right font-semibold w-40">{'שם מלא'}</th>
-                  <th className="px-2 py-2 text-right font-semibold w-32">{'טלפון'}</th>
-                  <th className="px-2 py-2 text-right font-semibold">{'הודעה'}</th>
-                  <th className="px-2 py-2 text-right font-semibold w-36">{'סטטוס'}</th>
-                  <th className="px-2 py-2 text-center font-semibold w-16">{'פולואפ'}</th>
-                  <th className="px-2 py-2 text-right font-semibold w-28">{'פעולות'}</th>
+                  <th className="px-1 py-2 text-right font-semibold w-12"></th>
+                  <th className="px-1 py-2 text-right font-semibold w-28">{'תאריך'}</th>
+                  <th className="px-1 py-2 text-right font-semibold w-36">{'שם מלא'}</th>
+                  <th className="px-1 py-2 text-right font-semibold w-28">{'טלפון'}</th>
+                  <th className="px-1 py-2 text-right font-semibold">{'הודעה'}</th>
+                  <th className="px-1 py-2 text-center font-semibold w-16">{'פולואפ'}</th>
+                  <th className="px-1 py-2 text-right font-semibold w-28">{'פעולות'}</th>
                 </tr>
               </thead>
               <tbody>
@@ -448,24 +465,26 @@ export default function LeadManager({ isFullView, setIsFullView, blockPosition, 
                   return (
                     <React.Fragment key={`lead-rows-${lead.id}`}>
                       <tr className="border-b hover:bg-gray-50 group">
-                        <td className="px-2 py-2 align-top"><div className={`w-3 h-6 ${colorTab} rounded mx-auto`} /></td>
-                        <td className="px-2 py-2 align-top whitespace-nowrap">{formatDateTime(lead.createdAt)}</td>
-                        <td className="px-2 py-2 align-top font-medium">{lead.isHot && <span className="mr-1">🔥</span>}{lead.fullName}</td>
-                        <td className="px-2 py-2 align-top whitespace-nowrap">{lead.isHot && <span className="mr-1">🔥</span>}{lead.phoneNumber}</td>
-                        <td className="px-2 py-2 align-top truncate" title={lead.message}>{lead.message}</td>
-                        <td className="px-2 py-2 align-top">{lead.status}</td>
-                        <td className="px-2 py-2 align-top text-center">
+                        <td className="px-1 py-2 align-top"><div className={`w-4 h-8 ${colorTab} rounded mx-auto`} /></td>
+                        <td className="px-1 py-2 align-top">
+                          <div className="text-xs leading-tight">{formatDate(lead.createdAt)}</div>
+                          <div className="text-xs text-gray-500 leading-tight">{formatTime(lead.createdAt)}</div>
+                        </td>
+                        <td className="px-1 py-2 align-top font-medium truncate">{lead.isHot && <span className="mr-1">🔥</span>}{lead.fullName}</td>
+                        <td className="px-1 py-2 align-top whitespace-nowrap text-xs">{lead.phoneNumber}</td>
+                        <td className="px-1 py-2 align-top truncate text-xs" title={lead.message}>{lead.message}</td>
+                        <td className="px-1 py-2 align-top text-center">
                           <button className="relative group" style={{ outline: 'none', border: 'none', background: 'none', cursor: 'pointer' }} onClick={() => { if (holdLeadId === lead.id) return; if (!lead.followUpCall?.active && (!lead.followUpCall || lead.followUpCall.count === 0)) { handleFollowUpClick(lead); } else if (lead.followUpCall?.active) { handleFollowUpClick(lead); } }} onMouseDown={() => handleHoldStart(lead)} onMouseUp={handleHoldEnd} onMouseLeave={handleHoldEnd} tabIndex={0} aria-label="סמן פולואפ טלפון">
-                            <svg width="28" height="28" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <svg width="24" height="24" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
                               <circle cx="14" cy="14" r="13" stroke={lead.followUpCall?.active ? '#22c55e' : '#e5e7eb'} strokeWidth="2" fill={lead.followUpCall?.active ? '#22c55e' : 'white'} />
                               <circle cx="14" cy="14" r="13" stroke="#22c55e" strokeWidth="3" fill="none" strokeDasharray={2 * Math.PI * 13} strokeDashoffset={(1 - (holdLeadId === lead.id ? holdProgress : 0)) * 2 * Math.PI * 13} style={{ transition: 'stroke-dashoffset 0.1s linear' }} />
                               <path d="M19.5 17.5c-1.5 0-3-.5-4.5-2s-2-3-2-4.5c0-.5.5-1 1-1h2c.5 0 1 .5 1 1 0 .5.5 1 1 1s1-.5 1-1c0-2-1.5-3.5-3.5-3.5S9.5 9.5 9.5 11.5c0 4.5 3.5 8 8 8 .5 0 1-.5 1-1v-2c0-.5-.5-1-1-1z" fill={lead.followUpCall?.active ? 'white' : '#a3a3a3'} />
                             </svg>
-                            {lead.followUpCall?.active && lead.followUpCall?.count > 1 && (<span className="absolute -top-1 -right-1 bg-green-600 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center border-2 border-white">{lead.followUpCall.count}</span>)}
+                            {lead.followUpCall?.active && lead.followUpCall?.count > 1 && (<span className="absolute -top-1 -right-1 bg-green-600 text-white text-xs rounded-full w-4 h-4 flex items-center justify-center border border-white">{lead.followUpCall.count}</span>)}
                           </button>
                         </td>
-                        <td className="px-2 py-2 align-top">
-                          <div className="flex items-center justify-start gap-1">
+                        <td className="px-1 py-2 align-top">
+                          <div className="flex items-center justify-start gap-0.5">
                             <Tooltip><TooltipTrigger asChild><Button size="icon" variant="ghost" className="w-6 h-6 text-gray-500 hover:text-blue-600" title="פתח לעריכה" onClick={async () => { if (lead.id === expandedLeadId) { const fakeEvent = { preventDefault: () => {} }; await handleSaveLead(fakeEvent, lead.id); setExpandedLeadId(null); } else { handleEditLead(lead); setExpandedLeadId(lead.id); } }}><span role="img" aria-label="Edit" className="w-3 h-3">✎</span></Button></TooltipTrigger><TooltipContent>{'פתח/ערוך ליד'}</TooltipContent></Tooltip>
                             <Tooltip><TooltipTrigger asChild><a href={`https://wa.me/${lead.phoneNumber}`} target="_blank" rel="noopener noreferrer"><Button size="icon" variant="ghost" className="w-6 h-6 text-green-600 hover:text-green-700"><FaWhatsapp className="w-3 h-3" /></Button></a></TooltipTrigger><TooltipContent>{'שלח וואטסאפ'}</TooltipContent></Tooltip>
                             <Tooltip><TooltipTrigger asChild><Button size="icon" variant="ghost" className="w-6 h-6 text-blue-600 hover:text-blue-700" onClick={() => handleClick2Call(lead.phoneNumber)}><span role="img" aria-label="Call" className="w-3 h-3">📞</span></Button></TooltipTrigger><TooltipContent>{'התקשר דרך המרכזיה'}</TooltipContent></Tooltip>
