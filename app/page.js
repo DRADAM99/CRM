@@ -1,4 +1,4 @@
-// Version 7.6.9 - Added CandidatesBlock status waiting list, new toggle for hiding calendar.
+// Version 7.7 - mobile UI improvements, click2call mobile support.
 "use client";
 
 // Utility functions for layout persistence
@@ -335,6 +335,25 @@ const handleCreateTaskFromLead = async (lead) => {
   }
 };
 const handleClick2Call = async (phoneNumber) => {
+  // Detect mobile phone (not tablets)
+  const isMobilePhone = /iPhone|Android/i.test(navigator.userAgent) && 
+                        !/iPad|tablet/i.test(navigator.userAgent) &&
+                        window.matchMedia("(max-width: 480px)").matches;
+  
+  // Strip # prefix if present
+  const cleanNumber = phoneNumber.replace(/^#/, '');
+  
+  // Mobile fallback: use tel: link with callback system
+  if (isMobilePhone && !userExt) {
+    const localCallbackNumber = "0723911351";
+    const defaultExt = "101#";
+    const passcode = "3636#";
+    const telLink = `tel:${localCallbackNumber},${defaultExt},${passcode},${cleanNumber}`;
+    window.location.href = telLink;
+    return;
+  }
+  
+  // Desktop or user with EXT: use PBX API
   if (!userExt) {
     toast({
       title: "לא מוגדר שלוחה",
@@ -343,11 +362,12 @@ const handleClick2Call = async (phoneNumber) => {
     });
     return;
   }
+  
   const apiUrl = "https://master.ippbx.co.il/ippbx_api/v1.4/api/info/click2call";
   const payload = {
     token_id: "22K3TWfeifaCPUyA",
-    phone_number: phoneNumber,
-    extension_number: userExt, // <-- Use user's EXT
+    phone_number: cleanNumber,
+    extension_number: userExt,
     extension_password: "bdb307dc55bf1e679c296ee5c73215cb"
   };
   try {
@@ -361,7 +381,7 @@ const handleClick2Call = async (phoneNumber) => {
     if (response.ok) {
       toast({
         title: "התקשרות מתבצעת",
-        description: `שיחה ל-${phoneNumber} הופעלה דרך המרכזיה.`
+        description: `שיחה ל-${cleanNumber} הופעלה דרך המרכזיה.`
       });
     } else {
       const errorText = await response.text();
@@ -2739,7 +2759,7 @@ const calculatedAnalytics = useMemo(() => {
   <div className="flex sm:hidden items-start justify-between px-2 py-1.5 relative">
     {/* Top Left - Version & Logout */}
     <div className="flex flex-col items-start text-[10px] text-gray-500">
-      <span className="leading-tight">v7.6.9</span>
+      <span className="leading-tight">v7.7</span>
       <button
         className="text-[10px] text-red-600 underline leading-tight"
         onClick={() => {
@@ -2841,6 +2861,7 @@ const calculatedAnalytics = useMemo(() => {
               blockPosition={blockOrder.TM}
               onToggleBlockOrder={() => toggleBlockOrder("TM")}
               onCalendarDataChange={setTaskCalendarData}
+              handleClick2Call={handleClick2Call}
             />
                   </div>
 

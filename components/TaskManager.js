@@ -102,7 +102,7 @@ const IOSSwitch = styled((props) => (
   },
 }));
 
-export default function TaskManager({ isTMFullView, setIsTMFullView, blockPosition, onToggleBlockOrder, onCalendarDataChange }) {
+export default function TaskManager({ isTMFullView, setIsTMFullView, blockPosition, onToggleBlockOrder, onCalendarDataChange, handleClick2Call }) {
   const { currentUser } = useAuth();
   const { toast } = useToast();
   const { tasks, setTasks, users, assignableUsers, currentUserData } = useData();
@@ -885,7 +885,16 @@ export default function TaskManager({ isTMFullView, setIsTMFullView, blockPositi
       while ((match = regex.exec(text)) !== null) {
         const phone = match[1]; const number = phone.slice(1);
         parts.push(text.slice(lastIndex, match.index));
-        parts.push(<span key={match.index} className="inline-flex items-center gap-1">{phone}</span>);
+        parts.push(
+          <span key={match.index} className="inline-flex items-center gap-1">
+            {phone}
+            {handleClick2Call && (
+              <Button size="xs" variant="ghost" className="p-0 ml-1 text-blue-600 hover:text-blue-800" onClick={() => handleClick2Call(number)} title="התקשר">
+                <span role="img" aria-label="Call">📞</span>
+              </Button>
+            )}
+          </span>
+        );
         lastIndex = match.index + phone.length;
       }
       parts.push(text.slice(lastIndex));
