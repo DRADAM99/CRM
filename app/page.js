@@ -2830,7 +2830,7 @@ const calculatedAnalytics = useMemo(() => {
     </div>
 
     <div className="w-48 text-left text-sm text-gray-500 flex flex-col items-end">
-      <span>{'Version 7.6.9'}</span>
+      <span>{'Version 7.7'}</span>
       <button
         className="text-xs text-red-600 underline"
         onClick={() => {
