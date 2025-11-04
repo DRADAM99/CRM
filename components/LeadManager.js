@@ -122,7 +122,7 @@ export default function LeadManager({ isFullView, setIsFullView, blockPosition, 
           if (typeof d.lead_searchTerm === 'string') setLeadSearchTerm(d.lead_searchTerm);
           
           // Handle category selection properly
-          if (Array.isArray(d.lead_selectedCategories) && d.lead_selectedCategories.length > 0) {
+          if (d.lead_selectedCategories !== undefined && Array.isArray(d.lead_selectedCategories)) {
             savedSelectedRef.current = d.lead_selectedCategories;
             setSelectedLeadCategories(d.lead_selectedCategories);
           } else {
