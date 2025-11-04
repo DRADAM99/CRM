@@ -2941,7 +2941,7 @@ const calculatedAnalytics = useMemo(() => {
           )}
 
           
-          <div style={{ order: blockOrder.Leads }} className={`col-span-1 ${isFullView ? 'lg:col-span-8' : 'lg:col-span-4'} transition-all duration-300 ease-in-out`} >
+          <div style={{ order: blockOrder.Leads }} className={`col-span-1 ${isFullView ? 'lg:col-span-12' : 'lg:col-span-4'} transition-all duration-300 ease-in-out`} >
             <LeadManager
               isFullView={isFullView}
               setIsFullView={setIsFullView}

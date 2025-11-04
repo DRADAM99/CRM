@@ -317,8 +317,29 @@ export default function LeadManager({ isFullView, setIsFullView, blockPosition, 
     try { await deleteDoc(doc(db, "leads", leadId)); setConfirmingDeleteLeadId(null); } catch { alert("שגיאה במחיקת ליד"); setConfirmingDeleteLeadId(null); }
   };
 
-  const handleDuplicateLead = async (lead) => {
-    try { const duplicatedLead = { ...lead, fullName: lead.fullName + " משוכפל", createdAt: new Date(), isHot: true }; delete duplicatedLead.id; await addDoc(collection(db, "leads"), duplicatedLead); alert("הליד שוכפל"); } catch { alert("שגיאה בשכפול ליד"); }
+  const handleDuplicateLead = (lead) => {
+    setLeadToDuplicate(lead);
+    setShowDuplicateConfirm(true);
+  };
+
+  const confirmDuplicateLead = async () => {
+    if (!leadToDuplicate) return;
+    try { 
+      const duplicatedLead = { 
+        ...leadToDuplicate, 
+        fullName: leadToDuplicate.fullName + " משוכפל", 
+        createdAt: serverTimestamp(), 
+        isHot: true 
+      }; 
+      delete duplicatedLead.id; 
+      await addDoc(collection(db, "leads"), duplicatedLead); 
+      alert("הליד שוכפל"); 
+    } catch { 
+      alert("שגיאה בשכפול ליד"); 
+    } finally {
+      setShowDuplicateConfirm(false);
+      setLeadToDuplicate(null);
+    }
   };
 
   const handleFollowUpClick = async (lead) => {
@@ -725,6 +746,34 @@ export default function LeadManager({ isFullView, setIsFullView, blockPosition, 
                 <Button type="button" className="bg-red-600 hover:bg-red-700 text-white" onClick={() => setShowAddLeadModal(false)}>ביטול</Button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Duplicate Lead Confirmation Modal */}
+      {showDuplicateConfirm && (
+        <div className="fixed inset-0 flex items-center justify-center bg-black/60 z-50 p-4" onClick={() => setShowDuplicateConfirm(false)}>
+          <div className="bg-white p-6 rounded-lg shadow-xl w-full max-w-md" onClick={(e) => e.stopPropagation()}>
+            <h2 className="text-lg font-semibold mb-4 text-right" dir="rtl">אישור שכפול ליד</h2>
+            <p className="text-right mb-6" dir="rtl">האם את בטוחה שאת רוצה לשכפל את הליד הזה?</p>
+            <div className="flex gap-3 justify-center">
+              <Button 
+                onClick={confirmDuplicateLead}
+                className="bg-green-600 hover:bg-green-700 text-white px-6"
+              >
+                כן, שכפל
+              </Button>
+              <Button 
+                onClick={() => {
+                  setShowDuplicateConfirm(false);
+                  setLeadToDuplicate(null);
+                }}
+                variant="outline"
+                className="px-6"
+              >
+                ביטול
+              </Button>
+            </div>
           </div>
         </div>
       )}
