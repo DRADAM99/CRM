@@ -300,6 +300,45 @@ export default function TaskManager({ isTMFullView, setIsTMFullView, blockPositi
     return () => unsubscribe();
   }, [currentUser]);
 
+  // Listen for nudge notifications
+  useEffect(() => {
+    if (!currentUser) return;
+    
+    const notificationsRef = collection(db, "notifications");
+    const q = query(
+      notificationsRef,
+      orderBy("createdAt", "desc")
+    );
+    
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      snapshot.docChanges().forEach((change) => {
+        if (change.type === "added") {
+          const notif = change.doc.data();
+          // Only show toast for new nudge notifications intended for current user
+          if (notif.type === 'task_nudge' && 
+              !notif.isRead && 
+              (notif.recipientId === currentUser.email || 
+               notif.recipientId === currentUser.uid ||
+               notif.recipientId === alias)) {
+            
+            // Show toast to receiver
+            toast({
+              title: "תזכורת חדשה!",
+              description: `${notif.senderAlias} שלח/ה לך תזכורת על: ${notif.taskTitle}`,
+              duration: 5000,
+            });
+            
+            // Mark notification as read to avoid showing it again
+            const notifRef = doc(db, "notifications", change.doc.id);
+            updateDoc(notifRef, { isRead: true }).catch(() => {});
+          }
+        }
+      });
+    });
+    
+    return () => unsubscribe();
+  }, [currentUser, alias, toast]);
+
   const updateKanbanCategoryOrder = async (newOrder) => {
     setTaskCategories(newOrder);
     if (currentUser) {
@@ -459,12 +498,17 @@ export default function TaskManager({ isTMFullView, setIsTMFullView, blockPositi
       const newNudge = { timestamp: now, userId: currentUser.uid, userAlias: currentUser.alias || currentUser.email };
       const taskDoc = await getDoc(taskRef);
       const taskData = taskDoc.data();
+      
+      // Find the assignee's alias
+      const assignee = assignableUsersWithSelf.find(u => u.email === taskData.assignTo || u.alias === taskData.assignTo);
+      const assigneeAlias = assignee ? (assignee.alias || assignee.email) : taskData.assignTo;
+      
       await updateDoc(taskRef, { nudges: arrayUnion(newNudge), lastNudgedAt: now, hasUnreadNudges: true, updatedAt: now });
       if (taskData.assignTo !== currentUser.email) {
         const notificationRef = doc(collection(db, "notifications"));
-        await setDoc(notificationRef, { type: 'task_nudge', taskId, taskTitle: taskData.title, senderId: currentUser.uid, senderAlias: currentUser.alias || currentUser.email, recipientId: taskData.assignTo, createdAt: now, isRead: false });
+        await setDoc(notificationRef, { type: 'task_nudge', taskId, taskTitle: taskData.title, senderId: currentUser.uid, senderAlias: currentUser.alias || currentUser.email, recipientId: taskData.assignTo, recipientAlias: assigneeAlias, createdAt: now, isRead: false });
       }
-      toast({ title: "תזכורת נשלחה", description: "נשלחה תזכורת למשתמש המוקצה למשימה" });
+      toast({ title: "תזכורת נשלחה", description: `נשלחה תזכורת ל-${assigneeAlias}` });
     } catch {
       toast({ title: "שגיאה", description: "לא ניתן היה לשלוח תזכורת", variant: "destructive" });
     }
