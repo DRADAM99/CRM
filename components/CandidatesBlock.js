@@ -105,7 +105,7 @@ export default function CandidatesBlock({ isFullView: parentIsFullView, setIsFul
   const [newTaskDueDate, setNewTaskDueDate] = useState("");
   const [newTaskDueTime, setNewTaskDueTime] = useState("");
   // Add state for task categories (assignableUsers now from DataContext)
-  const [taskCategories, setTaskCategories] = useState(["להתקשר", "לקבוע סדרה", "דוחות", "תשלומים", "תוכניות טיפול", "אחר"]);
+  const [taskCategories, setTaskCategories] = useState(["להתקשר", "לקבוע סדרה", "דוחות", "תשלומים וזיכויים", "תוכניות טיפול", "אחר"]);
   // Add state for full width toggle
   const [isFullWidth, setIsFullWidth] = useState(() => getPref('candidates_isFullWidth', false));
 

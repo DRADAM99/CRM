@@ -1,4 +1,4 @@
-// Version 7.7 - mobile UI improvements, click2call mobile support.
+// Version 7.7.1 - Task manager improvements: nudge and תוכניות טיפול bug fix.
 "use client";
 
 // Utility functions for layout persistence
@@ -2830,7 +2830,7 @@ const calculatedAnalytics = useMemo(() => {
     </div>
 
     <div className="w-48 text-left text-sm text-gray-500 flex flex-col items-end">
-      <span>{'Version 7.7'}</span>
+      <span>{'Version 7.7.1'}</span>
       <button
         className="text-xs text-red-600 underline"
         onClick={() => {

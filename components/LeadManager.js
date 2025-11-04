@@ -51,7 +51,7 @@ function formatTime(date) {
 export default function LeadManager({ isFullView, setIsFullView, blockPosition, onToggleBlockOrder, onCalendarDataChange }) {
   const { currentUser } = useAuth();
   const { leads, assignableUsers, currentUserData } = useData();
-  const [taskCategories, setTaskCategories] = useState(["להתקשר", "לקבוע סדרה", "דוחות", "תשלומים", "תוכניות טיפול", "אחר"]);
+  const [taskCategories, setTaskCategories] = useState(["להתקשר", "לקבוע סדרה", "דוחות", "תשלומים וזיכויים", "תוכניות טיפול", "אחר"]);
   const [editingLeadId, setEditingLeadId] = useState(null);
   const [editLeadFullName, setEditLeadFullName] = useState("");
   const [editLeadPhone, setEditLeadPhone] = useState("");

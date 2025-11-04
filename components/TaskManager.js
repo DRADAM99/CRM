@@ -33,7 +33,19 @@ import { TaskTabs } from "./TaskTabs";
 const taskPriorities = ["דחוף", "רגיל", "נמוך"];
 // BRANCHES and branchColor are shared from lib/branches
 
-const normalizeCategory = (s) => (typeof s === 'string' ? s.replace(/\u00A0/g, ' ').replace(/\s+/g, ' ').trim() : s);
+// Category name mappings to ensure consistency (old → new)
+const categoryNameMappings = {
+  'תוכנית טיפול': 'תוכניות טיפול',  // singular → plural
+  'תשלומים': 'תשלומים וזיכויים'       // short → full
+};
+
+const normalizeCategory = (s) => {
+  if (typeof s !== 'string') return s;
+  // First normalize whitespace
+  let normalized = s.replace(/\u00A0/g, ' ').replace(/\s+/g, ' ').trim();
+  // Then apply category name mappings
+  return categoryNameMappings[normalized] || normalized;
+};
 
 function formatDateTime(date) {
   if (!date) return "";
@@ -172,6 +184,8 @@ export default function TaskManager({ isTMFullView, setIsTMFullView, blockPositi
 
   const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [archivedTasks, setArchivedTasks] = useState([]);
+  const [showNudgesModal, setShowNudgesModal] = useState(false);
+  const [selectedTaskForNudges, setSelectedTaskForNudges] = useState(null);
 
   // Load persisted task filters/preferences from Firestore
   useEffect(() => {
@@ -198,11 +212,12 @@ export default function TaskManager({ isTMFullView, setIsTMFullView, blockPositi
               !normalizedSaved.includes(normalizeCategory(cat))
             );
             
-            let finalCategories = d.tm_selectedTaskCategories;
+            // Always use normalized versions to ensure consistency
+            let finalCategories = normalizedSaved;
             if (missingCategories.length > 0) {
               console.log('⚠️ Found missing categories in saved prefs:', missingCategories);
               // Add missing categories to the saved list
-              finalCategories = [...d.tm_selectedTaskCategories, ...missingCategories];
+              finalCategories = [...normalizedSaved, ...missingCategories];
               console.log('🔧 Fixed categories:', finalCategories);
             }
             
@@ -262,6 +277,7 @@ export default function TaskManager({ isTMFullView, setIsTMFullView, blockPositi
         const data = snap.data();
         console.log('🔔 onSnapshot fired, kanbanCategoryOrder:', data.kanbanCategoryOrder);
         // ONLY update the category ORDER, not the selection
+        // Apply normalization to ensure consistency (e.g., "תוכנית טיפול" → "תוכניות טיפול")
         if (Array.isArray(data.kanbanCategoryOrder) && data.kanbanCategoryOrder.length > 0) {
           const normalizedOrder = data.kanbanCategoryOrder.map(normalizeCategory);
           console.log('📋 Updating category ORDER only (not selection)');
@@ -443,7 +459,7 @@ export default function TaskManager({ isTMFullView, setIsTMFullView, blockPositi
       const newNudge = { timestamp: now, userId: currentUser.uid, userAlias: currentUser.alias || currentUser.email };
       const taskDoc = await getDoc(taskRef);
       const taskData = taskDoc.data();
-      await updateDoc(taskRef, { nudges: arrayUnion(newNudge), lastNudgedAt: now, updatedAt: now });
+      await updateDoc(taskRef, { nudges: arrayUnion(newNudge), lastNudgedAt: now, hasUnreadNudges: true, updatedAt: now });
       if (taskData.assignTo !== currentUser.email) {
         const notificationRef = doc(collection(db, "notifications"));
         await setDoc(notificationRef, { type: 'task_nudge', taskId, taskTitle: taskData.title, senderId: currentUser.uid, senderAlias: currentUser.alias || currentUser.email, recipientId: taskData.assignTo, createdAt: now, isRead: false });
@@ -451,6 +467,25 @@ export default function TaskManager({ isTMFullView, setIsTMFullView, blockPositi
       toast({ title: "תזכורת נשלחה", description: "נשלחה תזכורת למשתמש המוקצה למשימה" });
     } catch {
       toast({ title: "שגיאה", description: "לא ניתן היה לשלוח תזכורת", variant: "destructive" });
+    }
+  };
+
+  const handleShowNudges = (task) => {
+    setSelectedTaskForNudges(task);
+    setShowNudgesModal(true);
+  };
+
+  const handleDismissNudges = async (taskId) => {
+    if (!currentUser) return;
+    try {
+      const taskRef = doc(db, "tasks", taskId);
+      await updateDoc(taskRef, { hasUnreadNudges: false, updatedAt: serverTimestamp() });
+      setTasks(prev => prev.map(t => t.id === taskId ? { ...t, hasUnreadNudges: false } : t));
+      setShowNudgesModal(false);
+      setSelectedTaskForNudges(null);
+      toast({ title: "תזכורות נקראו", description: "התזכורות סומנו כנקראו" });
+    } catch {
+      toast({ title: "שגיאה", description: "לא ניתן לסמן תזכורות", variant: "destructive" });
     }
   };
 
@@ -924,7 +959,32 @@ export default function TaskManager({ isTMFullView, setIsTMFullView, blockPositi
             <div className="flex items-center gap-1">
               <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleEditTask(task)}><Pencil className="h-4 w-4" /></Button></TooltipTrigger><TooltipContent>שינוי משימה</TooltipContent></Tooltip>
               <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8 relative" onClick={() => { setReplyingToTaskId(task.id); setReplyInputValue(""); }}><MessageCircle className="h-4 w-4" /></Button></TooltipTrigger><TooltipContent>הוסיפי תגובה</TooltipContent></Tooltip>
-              {!task.done && (<Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" className={`w-6 h-6 relative ${task.hasUnreadNudges ? 'text-orange-500' : 'text-gray-400'} hover:text-orange-600`} title="שלח תזכורת" onClick={(e) => { e.stopPropagation(); handleNudgeTask(task.id); }} onPointerDown={(e) => e.stopPropagation()}><Bell className="h-4 w-4" />{task.hasUnreadNudges && (<span className="absolute -top-1 -right-1 h-2 w-2 bg-orange-500 rounded-full" />)}</Button></TooltipTrigger><TooltipContent>שלח תזכורת</TooltipContent></Tooltip>)}
+              {!task.done && (() => {
+                const isAssignee = task.assignTo === currentUser?.email || task.assignTo === currentUser?.uid || task.assignTo === alias;
+                const hasUnread = task.hasUnreadNudges === true;
+                const shouldShowNudges = isAssignee && hasUnread;
+                return (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button 
+                        variant="ghost" 
+                        size="icon" 
+                        className={`w-6 h-6 relative ${hasUnread ? 'text-orange-500' : 'text-gray-400'} hover:text-orange-600`} 
+                        title={shouldShowNudges ? 'צפה בתזכורות' : 'שלח תזכורת'}
+                        onClick={(e) => { 
+                          e.stopPropagation(); 
+                          shouldShowNudges ? handleShowNudges(task) : handleNudgeTask(task.id); 
+                        }} 
+                        onPointerDown={(e) => e.stopPropagation()}
+                      >
+                        <Bell className="h-4 w-4" />
+                        {hasUnread && (<span className="absolute -top-1 -right-1 h-2 w-2 bg-orange-500 rounded-full" />)}
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>{shouldShowNudges ? 'צפה בתזכורות' : 'שלח תזכורת'}</TooltipContent>
+                  </Tooltip>
+                );
+              })()}
             </div>
           </div>
         </div>
@@ -968,7 +1028,9 @@ export default function TaskManager({ isTMFullView, setIsTMFullView, blockPositi
       const assigneeMatch = taskFilter === "הכל" || (taskFilter === "שלי" && (task.assignTo === currentUser?.email || task.assignTo === currentUser?.alias)) || (taskFilter === "אחרים" && task.assignTo !== currentUser?.email && task.assignTo !== currentUser?.alias);
       const doneMatch = showDoneTasks || !task.done;
       const priorityMatch = taskPriorityFilter === 'all' || task.priority === taskPriorityFilter;
-      const categoryMatch = selectedTaskCategories.length === 0 || selectedTaskCategories.includes(task.category);
+      // Normalize task category for comparison to handle legacy category names
+      const normalizedTaskCategory = normalizeCategory(task.category);
+      const categoryMatch = selectedTaskCategories.length === 0 || selectedTaskCategories.map(normalizeCategory).includes(normalizedTaskCategory);
       const searchTermMatch = !lowerSearchTerm || task.title.toLowerCase().includes(lowerSearchTerm) || (task.subtitle && task.subtitle.toLowerCase().includes(lowerSearchTerm));
       return assigneeMatch && doneMatch && priorityMatch && categoryMatch && searchTermMatch;
     });
@@ -1161,7 +1223,32 @@ export default function TaskManager({ isTMFullView, setIsTMFullView, blockPositi
                                   <div className="flex items-center gap-1">
                                     <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleEditTask(task)}><Pencil className="h-4 w-4" /></Button></TooltipTrigger><TooltipContent>שינוי משימה</TooltipContent></Tooltip>
                                     <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8 relative" onClick={() => { setReplyingToTaskId(task.id); setReplyInputValue(""); }}><MessageCircle className="h-4 w-4" /></Button></TooltipTrigger><TooltipContent>הוסיפי תגובה</TooltipContent></Tooltip>
-                                    {!task.done && (<Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" className="w-6 h-6 relative text-gray-400 hover:text-orange-600" title="שלח תזכורת" onClick={(e) => { e.stopPropagation(); handleNudgeTask(task.id); }} onPointerDown={(e) => e.stopPropagation()}><Bell className="h-4 w-4" /></Button></TooltipTrigger><TooltipContent>שלח תזכורת</TooltipContent></Tooltip>)}
+                                    {!task.done && (() => {
+                                      const isAssignee = task.assignTo === currentUser?.email || task.assignTo === currentUser?.uid || task.assignTo === alias;
+                                      const hasUnread = task.hasUnreadNudges === true;
+                                      const shouldShowNudges = isAssignee && hasUnread;
+                                      return (
+                                        <Tooltip>
+                                          <TooltipTrigger asChild>
+                                            <Button 
+                                              variant="ghost" 
+                                              size="icon" 
+                                              className={`w-6 h-6 relative ${hasUnread ? 'text-orange-500' : 'text-gray-400'} hover:text-orange-600`}
+                                              title={shouldShowNudges ? 'צפה בתזכורות' : 'שלח תזכורת'}
+                                              onClick={(e) => { 
+                                                e.stopPropagation(); 
+                                                shouldShowNudges ? handleShowNudges(task) : handleNudgeTask(task.id); 
+                                              }} 
+                                              onPointerDown={(e) => e.stopPropagation()}
+                                            >
+                                              <Bell className="h-4 w-4" />
+                                              {hasUnread && (<span className="absolute -top-1 -right-1 h-2 w-2 bg-orange-500 rounded-full" />)}
+                                            </Button>
+                                          </TooltipTrigger>
+                                          <TooltipContent>{shouldShowNudges ? 'צפה בתזכורות' : 'שלח תזכורת'}</TooltipContent>
+                                        </Tooltip>
+                                      );
+                                    })()}
                                   </div>
                                 </div>
                               ) : (
@@ -1285,6 +1372,61 @@ export default function TaskManager({ isTMFullView, setIsTMFullView, blockPositi
             </div>
             <div className="mt-auto pt-4 border-t flex justify-end shrink-0">
               <Button variant="outline" onClick={() => setShowHistoryModal(false)}>{'סגור'}</Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showNudgesModal && selectedTaskForNudges && (
+        <div className="fixed inset-0 flex items-center justify-center bg-black/60 z-50 p-4" onClick={() => { setShowNudgesModal(false); setSelectedTaskForNudges(null); }}>
+          <div className="bg-white p-6 rounded-lg shadow-xl w-full max-w-lg max-h-[80vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+            <div className="flex justify-between items-center mb-4 shrink-0">
+              <h2 className="text-lg font-semibold text-right">{'תזכורות למשימה'}</h2>
+            </div>
+            <div className="mb-4">
+              <div className="font-medium text-gray-800 mb-1">{selectedTaskForNudges.title}</div>
+              {selectedTaskForNudges.subtitle && (
+                <div className="text-sm text-gray-600">{selectedTaskForNudges.subtitle}</div>
+              )}
+            </div>
+            <div className="overflow-y-auto flex-grow mb-4 border rounded p-3 bg-gray-50">
+              {selectedTaskForNudges.nudges && selectedTaskForNudges.nudges.length > 0 ? (
+                <ul className="space-y-3">
+                  {selectedTaskForNudges.nudges
+                    .slice()
+                    .sort((a, b) => {
+                      const aTime = a.timestamp?.toDate ? a.timestamp.toDate().getTime() : new Date(a.timestamp).getTime();
+                      const bTime = b.timestamp?.toDate ? b.timestamp.toDate().getTime() : new Date(b.timestamp).getTime();
+                      return bTime - aTime;
+                    })
+                    .map((nudge, index) => {
+                      const timestamp = nudge.timestamp?.toDate ? nudge.timestamp.toDate() : new Date(nudge.timestamp);
+                      return (
+                        <li key={`nudge-${index}`} className="p-3 border rounded bg-white text-sm text-right">
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="font-semibold text-orange-600">🔔 {nudge.userAlias || 'משתמש לא ידוע'}</span>
+                            <span className="text-xs text-gray-500">{formatDateTime(timestamp)}</span>
+                          </div>
+                          <div className="text-xs text-gray-600">
+                            {'שלח/ה תזכורת על משימה זו'}
+                          </div>
+                        </li>
+                      );
+                    })}
+                </ul>
+              ) : (
+                <div className="text-center text-gray-500 py-6">{'אין תזכורות למשימה זו'}</div>
+              )}
+            </div>
+            <div className="mt-auto pt-4 border-t flex justify-end gap-2 shrink-0">
+              <Button 
+                variant="default" 
+                onClick={() => handleDismissNudges(selectedTaskForNudges.id)}
+                className="bg-green-600 hover:bg-green-700"
+              >
+                {'סמן כנקרא'}
+              </Button>
+              <Button variant="outline" onClick={() => { setShowNudgesModal(false); setSelectedTaskForNudges(null); }}>{'סגור'}</Button>
             </div>
           </div>
         </div>
