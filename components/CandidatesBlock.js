@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
 import { db } from "../firebase";
-import { collection, onSnapshot, addDoc, updateDoc, doc, serverTimestamp, arrayUnion, setDoc, getDocs, Timestamp } from "firebase/firestore";
+import { collection, onSnapshot, addDoc, updateDoc, doc, serverTimestamp, arrayUnion, setDoc, getDocs, getDoc, Timestamp } from "firebase/firestore";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -77,12 +77,14 @@ export default function CandidatesBlock({ isFullView: parentIsFullView, setIsFul
   const { currentUser } = useAuth();
   const { leads, assignableUsers } = useData();
   // --- State ---
-  // Multi-select status filter
-  const [selectedStatuses, setSelectedStatuses] = useState(() => getPref('candidates_selectedStatuses', candidatesStatuses));
-  const [searchTerm, setSearchTerm] = useState(() => getPref('candidates_searchTerm', ""));
+  // Multi-select status filter - now from Firestore for cross-device persistence
+  const [selectedStatuses, setSelectedStatuses] = useState(candidatesStatuses);
+  const [searchTerm, setSearchTerm] = useState("");
   const [blockOrder, setBlockOrder] = useState(() => getPref('candidates_blockOrder', 4));
-  const [sortBy, setSortBy] = useState(() => getPref('candidates_sortBy', "priority"));
-  const [sortDirection, setSortDirection] = useState(() => getPref('candidates_sortDirection', "desc"));
+  const [sortBy, setSortBy] = useState("priority");
+  const [sortDirection, setSortDirection] = useState("desc");
+  const [prefsLoaded, setPrefsLoaded] = useState(false);
+  const savedSelectedRef = useRef(null);
   const [editingLeadId, setEditingLeadId] = useState(null);
   const [editLeadFullName, setEditLeadFullName] = useState("");
   const [editLeadPhone, setEditLeadPhone] = useState("");
@@ -109,26 +111,61 @@ export default function CandidatesBlock({ isFullView: parentIsFullView, setIsFul
   // Add state for full width toggle
   const [isFullWidth, setIsFullWidth] = useState(() => getPref('candidates_isFullWidth', false));
 
-  const didMountStatuses = useRef(false);
-
-  // --- Persist filters and view ---
+  // Load persisted preferences from Firestore
   useEffect(() => {
-    if (didMountStatuses.current) {
-      savePref('candidates_selectedStatuses', selectedStatuses);
-    } else {
-      didMountStatuses.current = true;
-    }
-  }, [selectedStatuses]);
+    if (!currentUser) return;
+    const loadPrefs = async () => {
+      try {
+        const userRef = doc(db, 'users', currentUser.uid);
+        const snap = await getDoc(userRef);
+        if (snap.exists()) {
+          const d = snap.data();
+          if (d.candidates_sortBy) setSortBy(d.candidates_sortBy);
+          if (d.candidates_sortDirection) setSortDirection(d.candidates_sortDirection);
+          if (typeof d.candidates_searchTerm === 'string') setSearchTerm(d.candidates_searchTerm);
+          
+          // Handle status selection properly - check if field exists explicitly
+          if ('candidates_selectedStatuses' in d && Array.isArray(d.candidates_selectedStatuses)) {
+            savedSelectedRef.current = d.candidates_selectedStatuses;
+            setSelectedStatuses(d.candidates_selectedStatuses);
+          } else {
+            // Only default to all statuses if never saved before
+            savedSelectedRef.current = candidatesStatuses;
+            setSelectedStatuses(candidatesStatuses);
+          }
+        } else {
+          // No user document exists, default to all statuses
+          savedSelectedRef.current = candidatesStatuses;
+          setSelectedStatuses(candidatesStatuses);
+        }
+        setPrefsLoaded(true);
+      } catch (err) {
+        console.error('Error loading candidates prefs:', err);
+        // On error, default to all statuses
+        savedSelectedRef.current = candidatesStatuses;
+        setSelectedStatuses(candidatesStatuses);
+        setPrefsLoaded(true);
+      }
+    };
+    loadPrefs();
+  }, [currentUser]);
 
+  // Persist preferences to Firestore
   useEffect(() => {
-    if (!parentIsFullView) {
-      savePref('candidates_searchTerm', searchTerm);
-      savePref('candidates_sortBy', sortBy);
-      savePref('candidates_sortDirection', sortDirection);
-    }
-  }, [selectedStatuses, searchTerm, sortBy, sortDirection, parentIsFullView]);
+    if (!currentUser || !prefsLoaded) return;
+    // Update the ref to keep it in sync with current selection
+    savedSelectedRef.current = selectedStatuses;
+    const userRef = doc(db, 'users', currentUser.uid);
+    updateDoc(userRef, {
+      candidates_sortBy: sortBy,
+      candidates_sortDirection: sortDirection,
+      candidates_searchTerm: searchTerm,
+      candidates_selectedStatuses: selectedStatuses,
+      updatedAt: serverTimestamp(),
+    }).catch((err) => console.error('Error persisting candidates prefs:', err));
+  }, [currentUser, prefsLoaded, sortBy, sortDirection, searchTerm, selectedStatuses]);
 
-  // Persist full width preference
+  // Persist full width preference to localStorage (less critical, can stay local)
   useEffect(() => {
     savePref('candidates_isFullWidth', isFullWidth);
   }, [isFullWidth]);

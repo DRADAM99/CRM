@@ -103,7 +103,6 @@ export default function LeadManager({ isFullView, setIsFullView, blockPosition, 
   const [confirmingDeleteLeadId, setConfirmingDeleteLeadId] = useState(null);
   const alias = currentUserData?.alias || "";
   const role = currentUserData?.role || "";
-  const userExt = currentUserData?.EXT || "";
 
   // Load persisted lead filters/preferences and block layout from Firestore
   useEffect(() => {
@@ -121,12 +120,12 @@ export default function LeadManager({ isFullView, setIsFullView, blockPosition, 
           if (typeof d.lead_filterTo === 'string') setLeadFilterTo(d.lead_filterTo);
           if (typeof d.lead_searchTerm === 'string') setLeadSearchTerm(d.lead_searchTerm);
           
-          // Handle category selection properly
-          if (d.lead_selectedCategories !== undefined && Array.isArray(d.lead_selectedCategories)) {
+          // Handle category selection properly - check if field exists explicitly
+          if ('lead_selectedCategories' in d && Array.isArray(d.lead_selectedCategories)) {
             savedSelectedRef.current = d.lead_selectedCategories;
             setSelectedLeadCategories(d.lead_selectedCategories);
           } else {
-            // If no saved preferences, default to all categories
+            // Only default to all categories if never saved before
             savedSelectedRef.current = allLeadCategories;
             setSelectedLeadCategories(allLeadCategories);
           }
@@ -147,7 +146,7 @@ export default function LeadManager({ isFullView, setIsFullView, blockPosition, 
       }
     };
     loadPrefs();
-  }, [currentUser, setIsFullView, allLeadCategories]);
+  }, [currentUser, setIsFullView]);
 
   // Persist lead filters/preferences and block layout to Firestore
   useEffect(() => {
@@ -360,6 +359,7 @@ export default function LeadManager({ isFullView, setIsFullView, blockPosition, 
 
   // Click2Call
   const handleClick2Call = async (phoneNumber) => {
+    const userExt = currentUserData?.EXT || "";
     if (!userExt) { alert("לא הוגדרה שלוחה (EXT) למשתמש זה. פנה למנהל המערכת."); return; }
     const apiUrl = "https://master.ippbx.co.il/ippbx_api/v1.4/api/info/click2call";
     const payload = { token_id: "22K3TWfeifaCPUyA", phone_number: phoneNumber, extension_number: userExt, extension_password: "bdb307dc55bf1e679c296ee5c73215cb" };

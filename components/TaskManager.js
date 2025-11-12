@@ -201,7 +201,7 @@ export default function TaskManager({ isTMFullView, setIsTMFullView, blockPositi
           console.log('📥 Loading task prefs from Firestore:', d.tm_selectedTaskCategories);
           if (d.tm_taskFilter) setTaskFilter(d.tm_taskFilter);
           if (d.tm_taskPriorityFilter) setTaskPriorityFilter(d.tm_taskPriorityFilter);
-          if (Array.isArray(d.tm_selectedTaskCategories) && d.tm_selectedTaskCategories.length > 0) {
+          if ('tm_selectedTaskCategories' in d && Array.isArray(d.tm_selectedTaskCategories)) {
             // Ensure all categories from the master list are represented
             // If a category is in the saved list, keep it; if it's in allCategories but not saved, include it too
             const normalizedSaved = d.tm_selectedTaskCategories.map(normalizeCategory);
