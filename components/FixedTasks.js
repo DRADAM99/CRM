@@ -67,6 +67,7 @@ export default function FixedTasks({ currentUser, users = [], isVisible = true, 
   const [currentDayIndex, setCurrentDayIndex] = useState(0);
   const [touchStart, setTouchStart] = useState(null);
   const [touchEnd, setTouchEnd] = useState(null);
+  const [isTransitioning, setIsTransitioning] = useState(false);
   const alias = users.find(u => u.id === currentUser?.uid)?.alias || currentUser?.email || "";
 
   // Detect mobile
@@ -162,17 +163,29 @@ export default function FixedTasks({ currentUser, users = [], isVisible = true, 
 
   // Navigate to previous week
   const goToPrevWeek = () => {
-    setCurrentWeekStart(prev => addDays(prev, -7));
+    setIsTransitioning(true);
+    setTimeout(() => {
+      setCurrentWeekStart(prev => addDays(prev, -7));
+      setTimeout(() => setIsTransitioning(false), 50);
+    }, 150);
   };
 
   // Navigate to next week
   const goToNextWeek = () => {
-    setCurrentWeekStart(prev => addDays(prev, 7));
+    setIsTransitioning(true);
+    setTimeout(() => {
+      setCurrentWeekStart(prev => addDays(prev, 7));
+      setTimeout(() => setIsTransitioning(false), 50);
+    }, 150);
   };
 
   // Navigate to current week
   const goToCurrentWeek = () => {
-    setCurrentWeekStart(startOfWeek(new Date(), { locale: he }));
+    setIsTransitioning(true);
+    setTimeout(() => {
+      setCurrentWeekStart(startOfWeek(new Date(), { locale: he }));
+      setTimeout(() => setIsTransitioning(false), 50);
+    }, 150);
   };
 
   // Handle checkbox toggle
@@ -575,7 +588,14 @@ export default function FixedTasks({ currentUser, users = [], isVisible = true, 
       </div>
 
       {/* Week info */}
-      <div style={{ textAlign: 'center', marginBottom: 16, fontSize: 14, color: '#666' }}>
+      <div style={{ 
+        textAlign: 'center', 
+        marginBottom: 16, 
+        fontSize: 14, 
+        color: '#666',
+        opacity: isTransitioning ? 0.3 : 1,
+        transition: 'opacity 0.2s ease'
+      }}>
         {format(currentWeekStart, 'dd/MM/yyyy', { locale: he })} - {format(addDays(currentWeekStart, 4), 'dd/MM/yyyy', { locale: he })}
       </div>
 
@@ -606,6 +626,11 @@ export default function FixedTasks({ currentUser, users = [], isVisible = true, 
             onTouchStart={handleTouchStart}
             onTouchMove={handleTouchMove}
             onTouchEnd={handleTouchEnd}
+            style={{
+              opacity: isTransitioning ? 0 : 1,
+              transform: isTransitioning ? 'translateY(-10px)' : 'translateY(0)',
+              transition: 'opacity 0.3s ease, transform 0.3s ease'
+            }}
           >
             {renderDayCard(DAYS[currentDayIndex], currentDayIndex)}
           </div>
@@ -616,7 +641,10 @@ export default function FixedTasks({ currentUser, users = [], isVisible = true, 
           display: 'grid',
           gridTemplateColumns: 'repeat(5, 1fr)',
           gap: 16,
-          overflowX: 'auto'
+          overflowX: 'auto',
+          opacity: isTransitioning ? 0 : 1,
+          transform: isTransitioning ? 'translateY(-10px)' : 'translateY(0)',
+          transition: 'opacity 0.3s ease, transform 0.3s ease'
         }}>
           {DAYS.map((day, index) => renderDayCard(day, index))}
         </div>
