@@ -221,5 +221,14 @@ service cloud.firestore {
       allow update, delete: if isAdmin();
     }
 
+    // ────────────────
+    // Fixed Tasks Weekly Collection
+    // ────────────────
+    match /fixedTasksWeekly/{weekId} {
+      // Allow all authenticated users to read and write
+      // This is a collaborative workspace for weekly recurring tasks
+      allow read, write: if isAuthenticated();
+    }
+
   } // END documents
 } // END service 

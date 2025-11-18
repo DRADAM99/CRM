@@ -1,4 +1,4 @@
-// Version 7.7.2 - Added הוסיפי מטופל button in CandidatesBlock.
+// Version 7.7.3 - Added Fixed Tasks block
 "use client";
 
 // Utility functions for layout persistence
@@ -44,6 +44,8 @@ import { Search, RotateCcw, Bell, ChevronDown, Pencil, MessageCircle, Check, X, 
 import NotesAndLinks from "@/components/NotesAndLinks";
 import TaskManager from "@/components/TaskManager";
 import LeadManager from "@/components/LeadManager";
+import FixedTasks from "@/components/FixedTasks";
+import FixedTasksAnalytics from "@/components/FixedTasksAnalytics";
 import {
   collection,
   getDocs,
@@ -282,6 +284,7 @@ export default function Dashboard() {
   const [leadTaskDueTime, setLeadTaskDueTime] = useState("");
   const [showFunnel, setShowFunnel] = useState(false); // State to control funnel visibility
   const [showTimeline, setShowTimeline] = useState(false); // State to control timeline visibility
+  const [fixedTasksVisible, setFixedTasksVisible] = useState(() => getLayoutPref('dashboard_fixedTasksVisible', true)); // State to control fixed tasks visibility
   
   // Add this handler for category drag end
 const handleCategoryDragEnd = (event) => {
@@ -719,6 +722,16 @@ const [selectedDate, setSelectedDate] = useState(new Date());
   useEffect(() => {
     saveLayoutPref('dashboard_isCalendarVisible', isCalendarVisible);
   }, [isCalendarVisible]);
+
+  // Persist fixed tasks visibility preference
+  useEffect(() => {
+    saveLayoutPref('dashboard_fixedTasksVisible', fixedTasksVisible);
+  }, [fixedTasksVisible]);
+
+  // Handler to toggle fixed tasks visibility
+  const toggleFixedTasksVisibility = useCallback(() => {
+    setFixedTasksVisible(prev => !prev);
+  }, []);
 
   // Persist task manager full view preference
   useEffect(() => {
@@ -2759,7 +2772,7 @@ const calculatedAnalytics = useMemo(() => {
   <div className="flex sm:hidden items-start justify-between px-2 py-1.5 relative">
     {/* Top Left - Version & Logout */}
     <div className="flex flex-col items-start text-[10px] text-gray-500">
-      <span className="leading-tight">v7.7.2</span>
+      <span className="leading-tight">v7.7.3</span>
       <button
         className="text-[10px] text-red-600 underline leading-tight"
         onClick={() => {
@@ -2830,7 +2843,7 @@ const calculatedAnalytics = useMemo(() => {
     </div>
 
     <div className="w-48 text-left text-sm text-gray-500 flex flex-col items-end">
-      <span>{'Version 7.7.2'}</span>
+      <span>{'Version 7.7.3'}</span>
       <button
         className="text-xs text-red-600 underline"
         onClick={() => {
@@ -2846,7 +2859,13 @@ const calculatedAnalytics = useMemo(() => {
   </div>
 </header>
 
-
+        {/* Fixed Tasks Component - Full Width */}
+        <FixedTasks 
+          currentUser={currentUser} 
+          users={users}
+          isVisible={fixedTasksVisible}
+          onToggleVisibility={toggleFixedTasksVisibility}
+        />
         
         <div dir="rtl" className="grid grid-cols-1 lg:grid-cols-12 gap-2 sm:gap-4 p-2 sm:p-4 bg-gray-50 min-h-[calc(100vh-90px)] overflow-x-hidden max-w-full">
         <CandidatesBlock
@@ -2862,6 +2881,8 @@ const calculatedAnalytics = useMemo(() => {
               onToggleBlockOrder={() => toggleBlockOrder("TM")}
               onCalendarDataChange={setTaskCalendarData}
               handleClick2Call={handleClick2Call}
+              fixedTasksVisible={fixedTasksVisible}
+              onToggleFixedTasks={toggleFixedTasksVisibility}
             />
                   </div>
 
@@ -3207,6 +3228,15 @@ const calculatedAnalytics = useMemo(() => {
                                 </div>
                             </div>
                         )}
+                        
+                        {/* Fixed Tasks Analytics Section */}
+                        <div className="mt-8 pt-8 border-t">
+                          <FixedTasksAnalytics 
+                            timeFilter={analyticsTimeFilter}
+                            filterFrom={analyticsFilterFrom}
+                            filterTo={analyticsFilterTo}
+                          />
+                        </div>
                      </CardContent>
                  </Card>
              </div>

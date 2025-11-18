@@ -114,7 +114,7 @@ const IOSSwitch = styled((props) => (
   },
 }));
 
-export default function TaskManager({ isTMFullView, setIsTMFullView, blockPosition, onToggleBlockOrder, onCalendarDataChange, handleClick2Call }) {
+export default function TaskManager({ isTMFullView, setIsTMFullView, blockPosition, onToggleBlockOrder, onCalendarDataChange, handleClick2Call, fixedTasksVisible, onToggleFixedTasks }) {
   const { currentUser } = useAuth();
   const { toast } = useToast();
   const { tasks, setTasks, users, assignableUsers, currentUserData } = useData();
@@ -1145,6 +1145,18 @@ export default function TaskManager({ isTMFullView, setIsTMFullView, blockPositi
       <CardHeader className="space-y-3">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
           <CardTitle className="text-xl font-bold">{'מנהל המשימות'}</CardTitle>
+          {onToggleFixedTasks && (
+            <div className="flex justify-center items-center flex-1">
+              <Button 
+                variant={fixedTasksVisible ? "default" : "outline"} 
+                size="sm" 
+                onClick={onToggleFixedTasks}
+                className="bg-blue-500 hover:bg-blue-600 text-white"
+              >
+                {fixedTasksVisible ? '👁️ הסתר משימות קבועות' : '👁️ הצג משימות קבועות'}
+              </Button>
+            </div>
+          )}
           <div className="flex flex-wrap items-center gap-2">
             <Button variant="outline" size="sm" onClick={() => setIsTMFullView(!isTMFullView)} className="w-full sm:w-auto">{isTMFullView ? "תצוגה מוקטנת" : "תצוגה מלאה"}</Button>
             <Button size="xs" onClick={onToggleBlockOrder} className="w-full sm:w-auto">{'מיקום: '}{blockPosition}</Button>
