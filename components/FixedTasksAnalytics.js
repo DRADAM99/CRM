@@ -261,7 +261,7 @@ export default function FixedTasksAnalytics({ timeFilter = 'month', filterFrom, 
           <Card>
             <CardContent className="p-4 text-center">
               <div className="text-2xl font-bold text-gray-600">{analytics.totalExpected}</div>
-              <div className="text-sm text-gray-600">סה"כ משימות</div>
+              <div className="text-sm text-gray-600">סה&quot;כ משימות</div>
             </CardContent>
           </Card>
           
