@@ -1,4 +1,4 @@
-// Version 7.7.1 - Task manager improvements: nudge and תוכניות טיפול bug fix.
+// Version 7.7.2 - Added הוסיפי מטופל button in CandidatesBlock.
 "use client";
 
 // Utility functions for layout persistence
@@ -2759,7 +2759,7 @@ const calculatedAnalytics = useMemo(() => {
   <div className="flex sm:hidden items-start justify-between px-2 py-1.5 relative">
     {/* Top Left - Version & Logout */}
     <div className="flex flex-col items-start text-[10px] text-gray-500">
-      <span className="leading-tight">v7.7</span>
+      <span className="leading-tight">v7.7.2</span>
       <button
         className="text-[10px] text-red-600 underline leading-tight"
         onClick={() => {
@@ -2830,7 +2830,7 @@ const calculatedAnalytics = useMemo(() => {
     </div>
 
     <div className="w-48 text-left text-sm text-gray-500 flex flex-col items-end">
-      <span>{'Version 7.7.1'}</span>
+      <span>{'Version 7.7.2'}</span>
       <button
         className="text-xs text-red-600 underline"
         onClick={() => {
