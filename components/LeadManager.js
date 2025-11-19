@@ -72,6 +72,7 @@ export default function LeadManager({ isFullView, setIsFullView, blockPosition, 
   const allLeadCategories = useMemo(() => Object.keys(leadStatusConfig).filter(k => k !== 'Default'), []);
   const [selectedLeadCategories, setSelectedLeadCategories] = useState([]);
   const [prefsLoaded, setPrefsLoaded] = useState(false);
+  const [persistenceReady, setPersistenceReady] = useState(false);
   const savedSelectedRef = useRef(null);
   const [showAnalytics, setShowAnalytics] = useState(false);
   const [analyticsTimeFilter, setAnalyticsTimeFilter] = useState("month");
@@ -137,20 +138,22 @@ export default function LeadManager({ isFullView, setIsFullView, blockPosition, 
           setSelectedLeadCategories(allLeadCategories);
         }
         setPrefsLoaded(true);
+        setTimeout(() => setPersistenceReady(true), 500);
       } catch (err) {
         console.error('Error loading lead prefs:', err);
         // On error, default to all categories
         savedSelectedRef.current = allLeadCategories;
         setSelectedLeadCategories(allLeadCategories);
         setPrefsLoaded(true);
+        setTimeout(() => setPersistenceReady(true), 500);
       }
     };
     loadPrefs();
-  }, [currentUser, setIsFullView]);
+  }, [currentUser, setIsFullView, allLeadCategories]);
 
   // Persist lead filters/preferences and block layout to Firestore
   useEffect(() => {
-    if (!currentUser || !prefsLoaded) return;
+    if (!currentUser || !prefsLoaded || !persistenceReady) return;
     // Update the ref to keep it in sync with current selection
     savedSelectedRef.current = selectedLeadCategories;
     const userRef = doc(db, 'users', currentUser.uid);
@@ -165,7 +168,7 @@ export default function LeadManager({ isFullView, setIsFullView, blockPosition, 
       leads_isFullView: isFullView,
       updatedAt: serverTimestamp(),
     }).catch((err) => console.error('Error persisting lead prefs:', err));
-  }, [currentUser, prefsLoaded, leadSortBy, leadSortDirection, leadTimeFilter, leadFilterFrom, leadFilterTo, leadSearchTerm, selectedLeadCategories, isFullView]);
+  }, [currentUser, prefsLoaded, persistenceReady, leadSortBy, leadSortDirection, leadTimeFilter, leadFilterFrom, leadFilterTo, leadSearchTerm, selectedLeadCategories, isFullView]);
 
   // Bridge analytics toggle to page.js (to show the original analytics panel)
   useEffect(() => {

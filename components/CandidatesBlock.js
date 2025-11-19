@@ -98,6 +98,7 @@ export default function CandidatesBlock({ isFullView: parentIsFullView, setIsFul
   const [sortBy, setSortBy] = useState("priority");
   const [sortDirection, setSortDirection] = useState("desc");
   const [prefsLoaded, setPrefsLoaded] = useState(false);
+  const [persistenceReady, setPersistenceReady] = useState(false);
   const savedSelectedRef = useRef(null);
   const [editingLeadId, setEditingLeadId] = useState(null);
   const [editLeadFullName, setEditLeadFullName] = useState("");
@@ -162,12 +163,14 @@ export default function CandidatesBlock({ isFullView: parentIsFullView, setIsFul
           setSelectedStatuses(candidatesStatuses);
         }
         setPrefsLoaded(true);
+        setTimeout(() => setPersistenceReady(true), 500);
       } catch (err) {
         console.error('Error loading candidates prefs:', err);
         // On error, default to all statuses
         savedSelectedRef.current = candidatesStatuses;
         setSelectedStatuses(candidatesStatuses);
         setPrefsLoaded(true);
+        setTimeout(() => setPersistenceReady(true), 500);
       }
     };
     loadPrefs();
@@ -175,7 +178,7 @@ export default function CandidatesBlock({ isFullView: parentIsFullView, setIsFul
 
   // Persist preferences to Firestore
   useEffect(() => {
-    if (!currentUser || !prefsLoaded) return;
+    if (!currentUser || !prefsLoaded || !persistenceReady) return;
     // Update the ref to keep it in sync with current selection
     savedSelectedRef.current = selectedStatuses;
     const userRef = doc(db, 'users', currentUser.uid);
@@ -186,7 +189,7 @@ export default function CandidatesBlock({ isFullView: parentIsFullView, setIsFul
       candidates_selectedStatuses: selectedStatuses,
       updatedAt: serverTimestamp(),
     }).catch((err) => console.error('Error persisting candidates prefs:', err));
-  }, [currentUser, prefsLoaded, sortBy, sortDirection, searchTerm, selectedStatuses]);
+  }, [currentUser, prefsLoaded, persistenceReady, sortBy, sortDirection, searchTerm, selectedStatuses]);
 
   // Persist full width preference to localStorage (less critical, can stay local)
   useEffect(() => {
