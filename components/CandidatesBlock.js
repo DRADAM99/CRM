@@ -100,6 +100,7 @@ export default function CandidatesBlock({ isFullView: parentIsFullView, setIsFul
   const [prefsLoaded, setPrefsLoaded] = useState(false);
   const [persistenceReady, setPersistenceReady] = useState(false);
   const savedSelectedRef = useRef(null);
+  const hasLoadedFromFirestore = useRef(false);
   const [editingLeadId, setEditingLeadId] = useState(null);
   const [editLeadFullName, setEditLeadFullName] = useState("");
   const [editLeadPhone, setEditLeadPhone] = useState("");
@@ -137,35 +138,53 @@ export default function CandidatesBlock({ isFullView: parentIsFullView, setIsFul
 
   // Load persisted preferences from Firestore
   useEffect(() => {
-    if (!currentUser) return;
+    if (!currentUser) {
+      console.log('📥 CandidatesBlock: No currentUser, skipping load');
+      return;
+    }
+    console.log('📥 CandidatesBlock: Starting to load preferences for user:', currentUser.uid);
     const loadPrefs = async () => {
       try {
         const userRef = doc(db, 'users', currentUser.uid);
-        const snap = await getDoc(userRef);
+        const snap = await getDoc(userRef, { source: 'server' });
         if (snap.exists()) {
+          hasLoadedFromFirestore.current = true;
           const d = snap.data();
+          console.log('📥 CandidatesBlock: User document exists:', {
+            candidates_selectedStatuses: d.candidates_selectedStatuses,
+            hasField: 'candidates_selectedStatuses' in d,
+            isArray: Array.isArray(d.candidates_selectedStatuses)
+          });
           if (d.candidates_sortBy) setSortBy(d.candidates_sortBy);
           if (d.candidates_sortDirection) setSortDirection(d.candidates_sortDirection);
           if (typeof d.candidates_searchTerm === 'string') setSearchTerm(d.candidates_searchTerm);
           
           // Handle status selection properly - check if field exists explicitly
           if ('candidates_selectedStatuses' in d && Array.isArray(d.candidates_selectedStatuses)) {
+            console.log('✅ CandidatesBlock: Setting statuses from Firestore:', d.candidates_selectedStatuses);
             savedSelectedRef.current = d.candidates_selectedStatuses;
             setSelectedStatuses(d.candidates_selectedStatuses);
           } else {
             // Only default to all statuses if never saved before
+            console.log('⚠️ CandidatesBlock: No saved statuses, defaulting to all');
             savedSelectedRef.current = candidatesStatuses;
             setSelectedStatuses(candidatesStatuses);
           }
         } else {
           // No user document exists, default to all statuses
+          hasLoadedFromFirestore.current = true;
+          console.log('⚠️ CandidatesBlock: No user document, defaulting to all');
           savedSelectedRef.current = candidatesStatuses;
           setSelectedStatuses(candidatesStatuses);
         }
+        console.log('✅ CandidatesBlock: Setting prefsLoaded=true, will set persistenceReady in 500ms');
         setPrefsLoaded(true);
-        setTimeout(() => setPersistenceReady(true), 500);
+        setTimeout(() => {
+          console.log('✅ CandidatesBlock: Setting persistenceReady=true');
+          setPersistenceReady(true);
+        }, 500);
       } catch (err) {
-        console.error('Error loading candidates prefs:', err);
+        console.error('❌ CandidatesBlock: Error loading candidates prefs:', err);
         // On error, default to all statuses
         savedSelectedRef.current = candidatesStatuses;
         setSelectedStatuses(candidatesStatuses);
@@ -178,17 +197,31 @@ export default function CandidatesBlock({ isFullView: parentIsFullView, setIsFul
 
   // Persist preferences to Firestore
   useEffect(() => {
-    if (!currentUser || !prefsLoaded || !persistenceReady) return;
+    if (!currentUser || !prefsLoaded || !persistenceReady) {
+      console.log('💾 CandidatesBlock: Skipping persistence:', { currentUser: !!currentUser, prefsLoaded, persistenceReady });
+      return;
+    }
+    // Check if values have changed from what we loaded
+    const statusesChanged = JSON.stringify(selectedStatuses.sort()) !== JSON.stringify((savedSelectedRef.current || []).sort());
+    if (!statusesChanged && !hasLoadedFromFirestore.current) {
+      console.log('💾 CandidatesBlock: Skipping persistence - no changes from defaults');
+      return;
+    }
+    console.log('💾 CandidatesBlock: Persisting selectedStatuses:', selectedStatuses);
     // Update the ref to keep it in sync with current selection
     savedSelectedRef.current = selectedStatuses;
+    hasLoadedFromFirestore.current = true; // Mark as loaded after first successful persist
     const userRef = doc(db, 'users', currentUser.uid);
-    updateDoc(userRef, {
+    console.log('💾 CandidatesBlock: Writing to Firestore, user ID:', currentUser.uid);
+    setDoc(userRef, {
       candidates_sortBy: sortBy,
       candidates_sortDirection: sortDirection,
       candidates_searchTerm: searchTerm,
       candidates_selectedStatuses: selectedStatuses,
       updatedAt: serverTimestamp(),
-    }).catch((err) => console.error('Error persisting candidates prefs:', err));
+    }, { merge: true })
+      .then(() => console.log('✅ CandidatesBlock: Successfully wrote to Firestore!'))
+      .catch((err) => console.error('❌ CandidatesBlock: Error persisting candidates prefs:', err));
   }, [currentUser, prefsLoaded, persistenceReady, sortBy, sortDirection, searchTerm, selectedStatuses]);
 
   // Persist full width preference to localStorage (less critical, can stay local)

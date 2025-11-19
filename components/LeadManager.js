@@ -74,6 +74,7 @@ export default function LeadManager({ isFullView, setIsFullView, blockPosition, 
   const [prefsLoaded, setPrefsLoaded] = useState(false);
   const [persistenceReady, setPersistenceReady] = useState(false);
   const savedSelectedRef = useRef(null);
+  const hasLoadedFromFirestore = useRef(false);
   const [showAnalytics, setShowAnalytics] = useState(false);
   const [analyticsTimeFilter, setAnalyticsTimeFilter] = useState("month");
   const [analyticsFilterFrom, setAnalyticsFilterFrom] = useState("");
@@ -107,13 +108,23 @@ export default function LeadManager({ isFullView, setIsFullView, blockPosition, 
 
   // Load persisted lead filters/preferences and block layout from Firestore
   useEffect(() => {
-    if (!currentUser) return;
+    if (!currentUser) {
+      console.log('📥 LeadManager: No currentUser, skipping load');
+      return;
+    }
+    console.log('📥 LeadManager: Starting to load preferences for user:', currentUser.uid);
     const loadPrefs = async () => {
       try {
         const userRef = doc(db, 'users', currentUser.uid);
-        const snap = await getDoc(userRef);
+        const snap = await getDoc(userRef, { source: 'server' });
         if (snap.exists()) {
+          hasLoadedFromFirestore.current = true;
           const d = snap.data();
+          console.log('📥 LeadManager: User document exists:', {
+            lead_selectedCategories: d.lead_selectedCategories,
+            hasField: 'lead_selectedCategories' in d,
+            isArray: Array.isArray(d.lead_selectedCategories)
+          });
           if (d.lead_sortBy) setLeadSortBy(d.lead_sortBy);
           if (d.lead_sortDirection) setLeadSortDirection(d.lead_sortDirection);
           if (d.lead_timeFilter) setLeadTimeFilter(d.lead_timeFilter);
@@ -123,10 +134,12 @@ export default function LeadManager({ isFullView, setIsFullView, blockPosition, 
           
           // Handle category selection properly - check if field exists explicitly
           if ('lead_selectedCategories' in d && Array.isArray(d.lead_selectedCategories)) {
+            console.log('✅ LeadManager: Setting categories from Firestore:', d.lead_selectedCategories);
             savedSelectedRef.current = d.lead_selectedCategories;
             setSelectedLeadCategories(d.lead_selectedCategories);
           } else {
             // Only default to all categories if never saved before
+            console.log('⚠️ LeadManager: No saved categories, defaulting to all');
             savedSelectedRef.current = allLeadCategories;
             setSelectedLeadCategories(allLeadCategories);
           }
@@ -134,13 +147,20 @@ export default function LeadManager({ isFullView, setIsFullView, blockPosition, 
           if (typeof d.leads_isFullView === 'boolean') setIsFullView(d.leads_isFullView);
         } else {
           // No user document exists, default to all categories
+          // Set flag to true so we can create document on first interaction
+          hasLoadedFromFirestore.current = true;
+          console.log('⚠️ LeadManager: No user document, defaulting to all');
           savedSelectedRef.current = allLeadCategories;
           setSelectedLeadCategories(allLeadCategories);
         }
+        console.log('✅ LeadManager: Setting prefsLoaded=true, will set persistenceReady in 500ms');
         setPrefsLoaded(true);
-        setTimeout(() => setPersistenceReady(true), 500);
+        setTimeout(() => {
+          console.log('✅ LeadManager: Setting persistenceReady=true');
+          setPersistenceReady(true);
+        }, 500);
       } catch (err) {
-        console.error('Error loading lead prefs:', err);
+        console.error('❌ LeadManager: Error loading lead prefs:', err);
         // On error, default to all categories
         savedSelectedRef.current = allLeadCategories;
         setSelectedLeadCategories(allLeadCategories);
@@ -153,11 +173,23 @@ export default function LeadManager({ isFullView, setIsFullView, blockPosition, 
 
   // Persist lead filters/preferences and block layout to Firestore
   useEffect(() => {
-    if (!currentUser || !prefsLoaded || !persistenceReady) return;
+    if (!currentUser || !prefsLoaded || !persistenceReady) {
+      console.log('💾 LeadManager: Skipping persistence:', { currentUser: !!currentUser, prefsLoaded, persistenceReady });
+      return;
+    }
+    // Check if values have changed from what we loaded
+    const categoriesChanged = JSON.stringify(selectedLeadCategories.sort()) !== JSON.stringify((savedSelectedRef.current || []).sort());
+    if (!categoriesChanged && !hasLoadedFromFirestore.current) {
+      console.log('💾 LeadManager: Skipping persistence - no changes from defaults');
+      return;
+    }
+    console.log('💾 LeadManager: Persisting selectedLeadCategories:', selectedLeadCategories);
     // Update the ref to keep it in sync with current selection
     savedSelectedRef.current = selectedLeadCategories;
+    hasLoadedFromFirestore.current = true; // Mark as loaded after first successful persist
     const userRef = doc(db, 'users', currentUser.uid);
-    updateDoc(userRef, {
+    console.log('💾 LeadManager: Writing to Firestore, user ID:', currentUser.uid);
+    setDoc(userRef, {
       lead_sortBy: leadSortBy,
       lead_sortDirection: leadSortDirection,
       lead_timeFilter: leadTimeFilter,
@@ -167,7 +199,9 @@ export default function LeadManager({ isFullView, setIsFullView, blockPosition, 
       lead_selectedCategories: selectedLeadCategories,
       leads_isFullView: isFullView,
       updatedAt: serverTimestamp(),
-    }).catch((err) => console.error('Error persisting lead prefs:', err));
+    }, { merge: true })
+      .then(() => console.log('✅ LeadManager: Successfully wrote to Firestore!'))
+      .catch((err) => console.error('❌ LeadManager: Error persisting lead prefs:', err));
   }, [currentUser, prefsLoaded, persistenceReady, leadSortBy, leadSortDirection, leadTimeFilter, leadFilterFrom, leadFilterTo, leadSearchTerm, selectedLeadCategories, isFullView]);
 
   // Bridge analytics toggle to page.js (to show the original analytics panel)

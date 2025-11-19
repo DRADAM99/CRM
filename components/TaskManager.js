@@ -193,7 +193,7 @@ export default function TaskManager({ isTMFullView, setIsTMFullView, blockPositi
     const loadPrefs = async () => {
       try {
         const userRef = doc(db, 'users', currentUser.uid);
-        const snap = await getDoc(userRef);
+        const snap = await getDoc(userRef, { source: 'server' });
         const allCategories = ["תוכניות טיפול", "לקבוע סדרה", "תשלומים וזיכויים", "דוחות", "להתקשר", "אחר"];
         
         if (snap.exists()) {
@@ -252,7 +252,8 @@ export default function TaskManager({ isTMFullView, setIsTMFullView, blockPositi
     // Update the ref to keep it in sync with current selection
     savedSelectedRef.current = selectedTaskCategories;
     const userRef = doc(db, 'users', currentUser.uid);
-    updateDoc(userRef, {
+    console.log('💾 TaskManager: Writing to Firestore, user ID:', currentUser.uid);
+    setDoc(userRef, {
       tm_taskFilter: taskFilter,
       tm_taskPriorityFilter: taskPriorityFilter,
       tm_selectedTaskCategories: selectedTaskCategories,
@@ -260,7 +261,9 @@ export default function TaskManager({ isTMFullView, setIsTMFullView, blockPositi
       tm_showDoneTasks: showDoneTasks,
       tm_showOverdueEffects: showOverdueEffects,
       updatedAt: serverTimestamp(),
-    }).catch((err) => console.error('❌ Error persisting:', err));
+    }, { merge: true })
+      .then(() => console.log('✅ TaskManager: Successfully wrote to Firestore!'))
+      .catch((err) => console.error('❌ TaskManager: Error persisting:', err));
   }, [currentUser, prefsLoaded, taskFilter, taskPriorityFilter, selectedTaskCategories, taskSearchTerm, showDoneTasks, showOverdueEffects]);
 
   // Users now come from DataContext - no need to fetch
