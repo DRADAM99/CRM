@@ -251,16 +251,17 @@ export default function TaskManager({ isTMFullView, setIsTMFullView, blockPositi
   // Persist task filters/preferences to Firestore
   useEffect(() => {
     if (!currentUser || !prefsLoaded) return;
-    // Check if values have changed from what we loaded
-    const categoriesChanged = JSON.stringify(selectedTaskCategories.sort()) !== JSON.stringify((savedSelectedRef.current || []).sort());
-    if (!categoriesChanged && !hasLoadedFromFirestore.current) {
-      console.log('💾 TaskManager: Skipping persistence - no changes from defaults');
+    
+    // Only persist if we've successfully loaded preferences from Firestore
+    // This prevents persisting defaults before we've tried to load
+    if (!hasLoadedFromFirestore.current) {
+      console.log('💾 TaskManager: Skipping persistence - waiting for Firestore load');
       return;
     }
+    
     console.log('💾 Persisting selected categories:', selectedTaskCategories);
     // Update the ref to keep it in sync with current selection
     savedSelectedRef.current = selectedTaskCategories;
-    hasLoadedFromFirestore.current = true; // Mark as loaded after first successful persist
     const userRef = doc(db, 'users', currentUser.uid);
     console.log('💾 TaskManager: Writing to Firestore, user ID:', currentUser.uid);
     setDoc(userRef, {

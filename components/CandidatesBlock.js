@@ -201,16 +201,17 @@ export default function CandidatesBlock({ isFullView: parentIsFullView, setIsFul
       console.log('💾 CandidatesBlock: Skipping persistence:', { currentUser: !!currentUser, prefsLoaded, persistenceReady });
       return;
     }
-    // Check if values have changed from what we loaded
-    const statusesChanged = JSON.stringify(selectedStatuses.sort()) !== JSON.stringify((savedSelectedRef.current || []).sort());
-    if (!statusesChanged && !hasLoadedFromFirestore.current) {
-      console.log('💾 CandidatesBlock: Skipping persistence - no changes from defaults');
+    
+    // Only persist if we've successfully loaded preferences from Firestore
+    // This prevents persisting defaults before we've tried to load
+    if (!hasLoadedFromFirestore.current) {
+      console.log('💾 CandidatesBlock: Skipping persistence - waiting for Firestore load');
       return;
     }
+    
     console.log('💾 CandidatesBlock: Persisting selectedStatuses:', selectedStatuses);
     // Update the ref to keep it in sync with current selection
     savedSelectedRef.current = selectedStatuses;
-    hasLoadedFromFirestore.current = true; // Mark as loaded after first successful persist
     const userRef = doc(db, 'users', currentUser.uid);
     console.log('💾 CandidatesBlock: Writing to Firestore, user ID:', currentUser.uid);
     setDoc(userRef, {

@@ -177,16 +177,17 @@ export default function LeadManager({ isFullView, setIsFullView, blockPosition, 
       console.log('💾 LeadManager: Skipping persistence:', { currentUser: !!currentUser, prefsLoaded, persistenceReady });
       return;
     }
-    // Check if values have changed from what we loaded
-    const categoriesChanged = JSON.stringify(selectedLeadCategories.sort()) !== JSON.stringify((savedSelectedRef.current || []).sort());
-    if (!categoriesChanged && !hasLoadedFromFirestore.current) {
-      console.log('💾 LeadManager: Skipping persistence - no changes from defaults');
+    
+    // Only persist if we've successfully loaded preferences from Firestore
+    // This prevents persisting defaults before we've tried to load
+    if (!hasLoadedFromFirestore.current) {
+      console.log('💾 LeadManager: Skipping persistence - waiting for Firestore load');
       return;
     }
+    
     console.log('💾 LeadManager: Persisting selectedLeadCategories:', selectedLeadCategories);
     // Update the ref to keep it in sync with current selection
     savedSelectedRef.current = selectedLeadCategories;
-    hasLoadedFromFirestore.current = true; // Mark as loaded after first successful persist
     const userRef = doc(db, 'users', currentUser.uid);
     console.log('💾 LeadManager: Writing to Firestore, user ID:', currentUser.uid);
     setDoc(userRef, {
