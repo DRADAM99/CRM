@@ -161,6 +161,7 @@ export default function TaskManager({ isTMFullView, setIsTMFullView, blockPositi
   const [userHasSortedTasks, setUserHasSortedTasks] = useState(false);
   const [prefsLoaded, setPrefsLoaded] = useState(false);
   const savedSelectedRef = useRef(null);
+  const hasLoadedFromFirestore = useRef(false);
 
   const [editingTaskId, setEditingTaskId] = useState(null);
   const [editingAssignTo, setEditingAssignTo] = useState("");
@@ -197,6 +198,7 @@ export default function TaskManager({ isTMFullView, setIsTMFullView, blockPositi
         const allCategories = ["תוכניות טיפול", "לקבוע סדרה", "תשלומים וזיכויים", "דוחות", "להתקשר", "אחר"];
         
         if (snap.exists()) {
+          hasLoadedFromFirestore.current = true;
           const d = snap.data();
           console.log('📥 Loading task prefs from Firestore:', d.tm_selectedTaskCategories);
           if (d.tm_taskFilter) setTaskFilter(d.tm_taskFilter);
@@ -233,6 +235,7 @@ export default function TaskManager({ isTMFullView, setIsTMFullView, blockPositi
           if (typeof d.tm_showDoneTasks === 'boolean') setShowDoneTasks(d.tm_showDoneTasks);
           if (typeof d.tm_showOverdueEffects === 'boolean') setShowOverdueEffects(d.tm_showOverdueEffects);
         } else {
+          hasLoadedFromFirestore.current = true;
           console.log('🆕 No user document, defaulting to all categories:', allCategories);
           savedSelectedRef.current = allCategories;
           setSelectedTaskCategories(allCategories);
@@ -248,9 +251,16 @@ export default function TaskManager({ isTMFullView, setIsTMFullView, blockPositi
   // Persist task filters/preferences to Firestore
   useEffect(() => {
     if (!currentUser || !prefsLoaded) return;
+    // Check if values have changed from what we loaded
+    const categoriesChanged = JSON.stringify(selectedTaskCategories.sort()) !== JSON.stringify((savedSelectedRef.current || []).sort());
+    if (!categoriesChanged && !hasLoadedFromFirestore.current) {
+      console.log('💾 TaskManager: Skipping persistence - no changes from defaults');
+      return;
+    }
     console.log('💾 Persisting selected categories:', selectedTaskCategories);
     // Update the ref to keep it in sync with current selection
     savedSelectedRef.current = selectedTaskCategories;
+    hasLoadedFromFirestore.current = true; // Mark as loaded after first successful persist
     const userRef = doc(db, 'users', currentUser.uid);
     console.log('💾 TaskManager: Writing to Firestore, user ID:', currentUser.uid);
     setDoc(userRef, {
