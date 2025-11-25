@@ -14,6 +14,7 @@ import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMe
 import { FaWhatsapp, FaCodeBranch, FaFacebook, FaInstagram, FaSpotify, FaGlobe, FaUserFriends, FaEllipsisH } from "react-icons/fa";
 import { BRANCHES, branchColor } from "@/lib/branches";
 import { leadStatusConfig, leadColorTab, leadPriorityValue } from "@/lib/leadStatus";
+import { normalizePhoneNumber } from "@/lib/phoneUtils";
 import { Search, ChevronDown } from "lucide-react";
 import { 
   collection, onSnapshot, addDoc, updateDoc, doc, serverTimestamp, arrayUnion, setDoc, getDocs, getDoc, orderBy, query, deleteDoc, Timestamp
@@ -103,6 +104,10 @@ export default function LeadManager({ isFullView, setIsFullView, blockPosition, 
   const [showDuplicateConfirm, setShowDuplicateConfirm] = useState(false);
   const [leadToDuplicate, setLeadToDuplicate] = useState(null);
   const [confirmingDeleteLeadId, setConfirmingDeleteLeadId] = useState(null);
+  const [showDuplicateWarning, setShowDuplicateWarning] = useState(false);
+  const [existingDuplicateLead, setExistingDuplicateLead] = useState(null);
+  const [pendingNewLead, setPendingNewLead] = useState(null);
+  const [processingDuplicatesManually, setProcessingDuplicatesManually] = useState(false);
   const alias = currentUserData?.alias || "";
   const role = currentUserData?.role || "";
 
@@ -340,13 +345,185 @@ export default function LeadManager({ isFullView, setIsFullView, blockPosition, 
   }, [newConversationText, currentUser, alias]);
 
   const handleAddNewLead = useCallback(async (e) => {
-    e.preventDefault(); if (!newLeadFullName.trim() || !newLeadPhone.trim()) { alert("אנא מלא שם מלא ומספר טלפון."); return; }
+    e.preventDefault(); 
+    if (!newLeadFullName.trim() || !newLeadPhone.trim()) { 
+      alert("אנא מלא שם מלא ומספר טלפון."); 
+      return; 
+    }
+    
+    // Check for duplicates
+    const normalizedPhone = normalizePhoneNumber(newLeadPhone.trim());
+    const existingLead = leads.find(lead => {
+      const leadNormalizedPhone = normalizePhoneNumber(lead.phoneNumber);
+      return leadNormalizedPhone === normalizedPhone;
+    });
+
+    if (existingLead) {
+      // Show duplicate warning
+      setExistingDuplicateLead(existingLead);
+      const finalSource = newLeadSource === "אחר" ? newLeadSourceOther.trim() : newLeadSource;
+      setPendingNewLead({
+        fullName: newLeadFullName.trim(),
+        phoneNumber: newLeadPhone.trim(),
+        message: newLeadMessage.trim(),
+        status: newLeadStatus,
+        source: finalSource,
+        isHot: newLeadIsHot
+      });
+      setShowDuplicateWarning(true);
+      return;
+    }
+
+    // No duplicate, add directly
     try {
       const finalSource = newLeadSource === "אחר" ? newLeadSourceOther.trim() : newLeadSource;
-      await addDoc(collection(db, "leads"), { createdAt: serverTimestamp(), fullName: newLeadFullName.trim(), phoneNumber: newLeadPhone.trim(), message: newLeadMessage.trim(), status: newLeadStatus, source: finalSource, conversationSummary: [], isHot: newLeadIsHot, followUpCall: { active: false, count: 0 } });
-      setNewLeadFullName(""); setNewLeadPhone(""); setNewLeadMessage(""); setNewLeadStatus("חדש"); setNewLeadSource(""); setNewLeadSourceOther(""); setNewLeadIsHot(false); setShowAddLeadModal(false);
-    } catch { alert("שגיאה בהוספת ליד חדש. נסה שוב."); }
-  }, [newLeadFullName, newLeadPhone, newLeadMessage, newLeadStatus, newLeadSource, newLeadSourceOther, newLeadIsHot]);
+      await addDoc(collection(db, "leads"), { 
+        createdAt: serverTimestamp(), 
+        fullName: newLeadFullName.trim(), 
+        phoneNumber: newLeadPhone.trim(), 
+        message: newLeadMessage.trim(), 
+        status: newLeadStatus, 
+        source: finalSource, 
+        conversationSummary: [], 
+        isHot: newLeadIsHot, 
+        followUpCall: { active: false, count: 0 } 
+      });
+      setNewLeadFullName(""); 
+      setNewLeadPhone(""); 
+      setNewLeadMessage(""); 
+      setNewLeadStatus("חדש"); 
+      setNewLeadSource(""); 
+      setNewLeadSourceOther(""); 
+      setNewLeadIsHot(false); 
+      setShowAddLeadModal(false);
+    } catch { 
+      alert("שגיאה בהוספת ליד חדש. נסה שוב."); 
+    }
+  }, [newLeadFullName, newLeadPhone, newLeadMessage, newLeadStatus, newLeadSource, newLeadSourceOther, newLeadIsHot, leads]);
+
+  const confirmAddDuplicateLead = async () => {
+    if (!pendingNewLead) return;
+    try {
+      await addDoc(collection(db, "leads"), {
+        createdAt: serverTimestamp(),
+        fullName: pendingNewLead.fullName,
+        phoneNumber: pendingNewLead.phoneNumber,
+        message: pendingNewLead.message,
+        status: pendingNewLead.status,
+        source: pendingNewLead.source,
+        conversationSummary: [],
+        isHot: pendingNewLead.isHot,
+        followUpCall: { active: false, count: 0 }
+      });
+      setNewLeadFullName("");
+      setNewLeadPhone("");
+      setNewLeadMessage("");
+      setNewLeadStatus("חדש");
+      setNewLeadSource("");
+      setNewLeadSourceOther("");
+      setNewLeadIsHot(false);
+      setShowAddLeadModal(false);
+      setShowDuplicateWarning(false);
+      setPendingNewLead(null);
+      setExistingDuplicateLead(null);
+    } catch {
+      alert("שגיאה בהוספת ליד חדש. נסה שוב.");
+    }
+  };
+
+  const handleProcessExistingDuplicates = async () => {
+    if (processingDuplicatesManually || !currentUser) return;
+    
+    setProcessingDuplicatesManually(true);
+    
+    try {
+      // Group leads by normalized phone number
+      const phoneGroups = {};
+      
+      leads.forEach(lead => {
+        if (!lead.phoneNumber) return;
+        const normalizedPhone = normalizePhoneNumber(lead.phoneNumber);
+        if (!normalizedPhone) return;
+        
+        if (!phoneGroups[normalizedPhone]) {
+          phoneGroups[normalizedPhone] = [];
+        }
+        phoneGroups[normalizedPhone].push(lead);
+      });
+
+      let duplicatesFound = 0;
+      let duplicatesProcessed = 0;
+
+      // Process groups with duplicates
+      for (const [normalizedPhone, group] of Object.entries(phoneGroups)) {
+        if (group.length > 1) {
+          duplicatesFound++;
+          
+          // Sort by createdAt descending (newest first)
+          group.sort((a, b) => b.createdAt - a.createdAt);
+          
+          const newestLead = group[0];
+          const olderLeads = group.slice(1);
+
+          try {
+            // Merge conversation histories from older leads
+            const mergedConversations = [...newestLead.conversationSummary];
+            const mergedFromIds = [];
+
+            olderLeads.forEach(oldLead => {
+              if (oldLead.conversationSummary && oldLead.conversationSummary.length > 0) {
+                mergedConversations.push(...oldLead.conversationSummary);
+              }
+              mergedFromIds.push(oldLead.id);
+            });
+
+            // Sort conversations by timestamp
+            mergedConversations.sort((a, b) => {
+              const timeA = a.timestamp ? new Date(a.timestamp).getTime() : 0;
+              const timeB = b.timestamp ? new Date(b.timestamp).getTime() : 0;
+              return timeB - timeA;
+            });
+
+            // Update the newest lead with duplicate marker and merged data
+            const newestLeadRef = doc(db, 'leads', newestLead.id);
+            await updateDoc(newestLeadRef, {
+              isDuplicate: true,
+              duplicateCount: group.length,
+              mergedFromLeadIds: mergedFromIds,
+              conversationSummary: mergedConversations,
+              updatedAt: serverTimestamp()
+            });
+
+            // Delete older duplicate leads
+            for (const oldLead of olderLeads) {
+              try {
+                await deleteDoc(doc(db, 'leads', oldLead.id));
+                console.log(`🗑️ Deleted duplicate lead: ${oldLead.id} (phone: ${oldLead.phoneNumber})`);
+              } catch (error) {
+                console.error(`Error deleting duplicate lead ${oldLead.id}:`, error);
+              }
+            }
+
+            duplicatesProcessed++;
+            console.log(`✅ Processed ${group.length} duplicate leads for phone: ${normalizedPhone}`);
+          } catch (error) {
+            console.error('Error handling duplicate group:', error);
+          }
+        }
+      }
+
+      if (duplicatesFound === 0) {
+        alert("לא נמצאו לידים כפולים במערכת! ✅");
+      } else {
+        alert(`✅ סיים לעבד ${duplicatesProcessed} קבוצות כפולות!\nנמחקו ${duplicatesProcessed > 0 ? (leads.length - (leads.length - duplicatesProcessed)) : 0} לידים ישנים.`);
+      }
+    } catch (error) {
+      console.error('Error processing existing duplicates:', error);
+      alert("שגיאה בעיבוד לידים כפולים. נסה שוב.");
+    } finally {
+      setProcessingDuplicatesManually(false);
+    }
+  };
 
   const handleDeleteLead = async (leadId) => {
     if (!(currentUser?.role === "admin" || role === "admin")) { alert("רק אדמין יכול למחוק לידים"); return; }
@@ -425,26 +602,20 @@ export default function LeadManager({ isFullView, setIsFullView, blockPosition, 
                 <CardTitle className="text-xl font-bold">{'ניהול לידים (מלא)'}</CardTitle>
                 <Button size="sm" onClick={() => setShowAddLeadModal(true)} className="bg-green-600 hover:bg-green-700 text-white">{'+ הוסיפי ליד'}</Button>
               </div>
-              <div className="flex gap-2">
-                <Button onClick={() => setIsFullView(false)} size="sm" variant="outline">{'תצוגה מקוצרת'}</Button>
-                <Button size="xs" onClick={onToggleBlockOrder} variant="outline">{'מיקום: '}{blockPosition}</Button>
+              <div className="flex gap-2 items-center">
+                <Button onClick={() => setIsFullView(false)} size="sm" variant="outline" className="h-9">{'תצוגה מקוצרת'}</Button>
+                <Button size="sm" onClick={onToggleBlockOrder} variant="outline" className="h-9">{'מיקום: '}{blockPosition}</Button>
               </div>
             </div>
-            <div className="flex flex-wrap items-center gap-x-4 gap-y-2 mt-2 border-t pt-2">
-              <div>
-                <Label className="ml-1 text-sm font-medium">{'סדר לפי:'}</Label>
-                <Select value={leadSortBy} onValueChange={setLeadSortBy}>
-                  <SelectTrigger className="h-8 text-sm w-[120px]"><SelectValue /></SelectTrigger>
-                  <SelectContent><SelectItem value="priority">{'עדיפות'}</SelectItem><SelectItem value="date">{'תאריך יצירה'}</SelectItem></SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label className="ml-1 text-sm font-medium">{'כיוון:'}</Label>
-                <Button size="sm" variant="outline" className="h-8 text-sm w-[40px] px-2" onClick={() => setLeadSortDirection(dir => dir === 'asc' ? 'desc' : 'asc')} title={leadSortDirection === 'asc' ? 'סדר עולה' : 'סדר יורד'}>{leadSortDirection === 'asc' ? '⬆️' : '⬇️'}</Button>
-              </div>
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-2 mt-2 border-t pt-2">
+              <Select value={leadSortBy} onValueChange={setLeadSortBy}>
+                <SelectTrigger className="h-9 text-sm w-[120px]"><SelectValue placeholder="סדר לפי..." /></SelectTrigger>
+                <SelectContent><SelectItem value="priority">{'עדיפות'}</SelectItem><SelectItem value="date">{'תאריך יצירה'}</SelectItem></SelectContent>
+              </Select>
+              <Button size="sm" variant="outline" className="h-9 text-sm w-[44px] px-2" onClick={() => setLeadSortDirection(dir => dir === 'asc' ? 'desc' : 'asc')} title={leadSortDirection === 'asc' ? 'סדר עולה' : 'סדר יורד'}>{leadSortDirection === 'asc' ? '⬆️' : '⬇️'}</Button>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="outline" size="sm" className="h-8 text-sm w-[160px] justify-between">
+                  <Button variant="outline" size="sm" className="h-9 text-sm w-[160px] justify-between">
                     <span>{selectedLeadCategories.length === allLeadCategories.length ? "כל הקטגוריות" : selectedLeadCategories.length === 1 ? allLeadCategories.find(cat => cat === selectedLeadCategories[0]) : `${selectedLeadCategories.length} נבחרו`}</span>
                     <ChevronDown className="h-4 w-4 opacity-50" />
                   </Button>
@@ -465,41 +636,64 @@ export default function LeadManager({ isFullView, setIsFullView, blockPosition, 
                   })}
                 </DropdownMenuContent>
               </DropdownMenu>
-              <div>
-                <Label className="ml-1 text-sm font-medium">{'סנן זמן:'}</Label>
-                <Select value={leadTimeFilter} onValueChange={setLeadTimeFilter}>
-                  <SelectTrigger className="h-8 text-sm w-[130px]"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">{'הכל'}</SelectItem>
-                    <SelectItem value="week">{'שבוע אחרון'}</SelectItem>
-                    <SelectItem value="month">{'חודש אחרון'}</SelectItem>
-                    <SelectItem value="custom">{'טווח תאריכים'}</SelectItem>
-                  </SelectContent>
-                </Select>
+              <div className="flex items-center gap-2 px-3 h-9 bg-blue-50 border border-blue-200 rounded-md">
+                <span className="text-sm font-medium text-blue-900">מציג:</span>
+                <span className="text-base font-bold text-blue-700">{leadsSorted.length}</span>
+                <span className="text-sm font-medium text-blue-900">לידים</span>
               </div>
+              <Select value={leadTimeFilter} onValueChange={setLeadTimeFilter}>
+                <SelectTrigger className="h-9 text-sm w-[140px]"><SelectValue placeholder="סינון זמן..." /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">{'הכל'}</SelectItem>
+                  <SelectItem value="week">{'שבוע אחרון'}</SelectItem>
+                  <SelectItem value="month">{'חודש אחרון'}</SelectItem>
+                  <SelectItem value="custom">{'טווח תאריכים'}</SelectItem>
+                </SelectContent>
+              </Select>
               {leadTimeFilter === "custom" && (
-                <div className="flex items-center gap-2 flex-wrap">
-                  <Label className="text-sm">{'מ:'}</Label><Input type="date" value={leadFilterFrom} onChange={(e) => setLeadFilterFrom(e.target.value)} className="h-8 text-sm w-[140px]" />
-                  <Label className="text-sm">{'עד:'}</Label><Input type="date" value={leadFilterTo} onChange={(e) => setLeadFilterTo(e.target.value)} className="h-8 text-sm w-[140px]" />
+                <div className="flex flex-wrap items-center gap-2">
+                  <Input type="date" value={leadFilterFrom} onChange={(e) => setLeadFilterFrom(e.target.value)} className="h-9 text-sm w-[140px]" placeholder="מתאריך..." />
+                  <Input type="date" value={leadFilterTo} onChange={(e) => setLeadFilterTo(e.target.value)} className="h-9 text-sm w-[140px]" placeholder="עד תאריך..." />
                 </div>
               )}
               <div className="relative">
                 <Search className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-                <Input type="search" placeholder="חפש לידים..." className="h-8 text-sm pl-8 w-[180px]" value={leadSearchTerm} onChange={(e) => setLeadSearchTerm(e.target.value)} />
+                <Input type="search" placeholder="חפש לידים..." className="h-9 text-sm pl-8 w-[200px]" value={leadSearchTerm} onChange={(e) => setLeadSearchTerm(e.target.value)} />
               </div>
             </div>
           </div>
         ) : (
-          <div className="flex justify-between items-center">
-            <CardTitle>{'ניהול לידים'}</CardTitle>
-            <div className="flex gap-2">
-              <Button onClick={() => setIsFullView(true)} size="sm">{'תצוגה מלאה'}</Button>
-              <Button size="xs" onClick={onToggleBlockOrder} variant="outline">{'מיקום: '}{blockPosition}</Button>
+          <div className="flex flex-col gap-2">
+            <div className="flex justify-between items-center">
+              <CardTitle>{'ניהול לידים'}</CardTitle>
+              <div className="flex gap-2 items-center">
+                <Button onClick={() => setIsFullView(true)} size="sm" className="h-9">{'תצוגה מלאה'}</Button>
+                <Button size="sm" onClick={onToggleBlockOrder} variant="outline" className="h-9">{'מיקום: '}{blockPosition}</Button>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 px-3 h-9 bg-blue-50 border border-blue-200 rounded-md w-fit">
+              <span className="text-sm font-medium text-blue-900">מציג:</span>
+              <span className="text-base font-bold text-blue-700">{leadsSorted.length}</span>
+              <span className="text-sm font-medium text-blue-900">לידים</span>
             </div>
           </div>
         )}
-        <div className="mt-2 pt-2 border-t">
+        <div className="mt-2 pt-2 border-t flex gap-2">
           <Button variant="secondary" size="sm" onClick={() => setShowAnalytics(!showAnalytics)}>{showAnalytics ? 'הסתר ניתוח לידים' : 'הצג ניתוח לידים'}</Button>
+          {/* 
+          MANUAL DUPLICATE PROCESSING BUTTON - Hidden but kept for future use
+          Uncomment this button if you need to manually process existing duplicate leads
+          The system now automatically handles duplicates in real-time via DataContext
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={handleProcessExistingDuplicates}
+            disabled={processingDuplicatesManually}
+            className="border-orange-300 text-orange-700 hover:bg-orange-50"
+          >
+            {processingDuplicatesManually ? '⏳ מעבד...' : '🔄 עבד לידים כפולים'}
+          </Button>
+          */}
         </div>
       </CardHeader>
       <CardContent className="flex-grow flex flex-col overflow-hidden">
@@ -529,7 +723,25 @@ export default function LeadManager({ isFullView, setIsFullView, blockPosition, 
                           <div className="text-xs leading-tight">{formatDate(lead.createdAt)}</div>
                           <div className="text-xs text-gray-500 leading-tight">{formatTime(lead.createdAt)}</div>
                         </td>
-                        <td className="px-1 py-2 align-top font-medium truncate">{lead.isHot && <span className="mr-1">🔥</span>}{lead.fullName}</td>
+                        <td className="px-1 py-2 align-top font-medium truncate">
+                          {lead.isHot && <span className="mr-1">🔥</span>}
+                          {lead.isDuplicate && (
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <span className="text-orange-500 font-bold mr-1" style={{ fontSize: '10px', cursor: 'help' }}>
+                                  ••{lead.duplicateCount > 2 ? `×${lead.duplicateCount}` : ''}
+                                </span>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <div className="text-xs">
+                                  <div>ליד משוכפל</div>
+                                  <div>מוזג מ-{lead.duplicateCount - 1} ליד{lead.duplicateCount > 2 ? 'ים' : ''} קודם{lead.duplicateCount > 2 ? 'ים' : ''}</div>
+                                </div>
+                              </TooltipContent>
+                            </Tooltip>
+                          )}
+                          {lead.fullName}
+                        </td>
                         <td className="px-1 py-2 align-top whitespace-nowrap text-xs">{lead.phoneNumber}</td>
                         <td className="px-1 py-2 align-top truncate text-xs" title={lead.message}>{lead.message}</td>
                         <td className="px-1 py-2 align-top text-center">
@@ -656,7 +868,25 @@ export default function LeadManager({ isFullView, setIsFullView, blockPosition, 
                 <li key={`compact-${lead.id}`} className="p-2 border rounded shadow-sm flex items-center gap-2 bg-white hover:bg-gray-50">
                   <div className={`w-2 h-10 ${colorTab} rounded shrink-0`} />
                   <div className="flex-grow overflow-hidden">
-                    <div className="font-bold text-sm truncate">{lead.isHot && <span className="mr-1">🔥</span>}{lead.fullName}</div>
+                    <div className="font-bold text-sm truncate">
+                      {lead.isHot && <span className="mr-1">🔥</span>}
+                      {lead.isDuplicate && (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span className="text-orange-500 font-bold mr-1" style={{ fontSize: '10px', cursor: 'help' }}>
+                              ••{lead.duplicateCount > 2 ? `×${lead.duplicateCount}` : ''}
+                            </span>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <div className="text-xs">
+                              <div>ליד משוכפל</div>
+                              <div>מוזג מ-{lead.duplicateCount - 1} ליד{lead.duplicateCount > 2 ? 'ים' : ''} קודם{lead.duplicateCount > 2 ? 'ים' : ''}</div>
+                            </div>
+                          </TooltipContent>
+                        </Tooltip>
+                      )}
+                      {lead.fullName}
+                    </div>
                     <p className="text-xs text-gray-600 truncate">{lead.message}</p>
                     <p className="text-xs text-gray-500 truncate">{lead.status} - {formatDateTime(lead.createdAt)}</p>
                     {lead.branch && (<span className={`inline-block rounded-full px-2 py-0.5 ml-1 text-xs font-medium ${branchColor(lead.branch)}`}>{lead.branch}</span>)}
@@ -805,6 +1035,54 @@ export default function LeadManager({ isFullView, setIsFullView, blockPosition, 
                 onClick={() => {
                   setShowDuplicateConfirm(false);
                   setLeadToDuplicate(null);
+                }}
+                variant="outline"
+                className="px-6"
+              >
+                ביטול
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Duplicate Phone Warning Modal */}
+      {showDuplicateWarning && existingDuplicateLead && (
+        <div className="fixed inset-0 flex items-center justify-center bg-black/60 z-50 p-4" onClick={() => {
+          setShowDuplicateWarning(false);
+          setExistingDuplicateLead(null);
+          setPendingNewLead(null);
+        }}>
+          <div className="bg-white p-6 rounded-lg shadow-xl w-full max-w-md" onClick={(e) => e.stopPropagation()}>
+            <div className="text-center mb-4">
+              <span className="text-4xl">⚠️</span>
+            </div>
+            <h2 className="text-lg font-semibold mb-4 text-right text-orange-600" dir="rtl">ליד כפול - מספר טלפון קיים</h2>
+            <div className="text-right mb-4 space-y-2" dir="rtl">
+              <p className="text-sm">מספר הטלפון <strong>{existingDuplicateLead.phoneNumber}</strong> כבר קיים במערכת:</p>
+              <div className="bg-gray-100 p-3 rounded border border-gray-300">
+                <p className="font-semibold">{existingDuplicateLead.fullName}</p>
+                <p className="text-xs text-gray-600">סטטוס: {existingDuplicateLead.status}</p>
+                <p className="text-xs text-gray-600">תאריך: {formatDateTime(existingDuplicateLead.createdAt)}</p>
+                {existingDuplicateLead.message && (
+                  <p className="text-xs text-gray-600 mt-1">הודעה: {existingDuplicateLead.message}</p>
+                )}
+              </div>
+              <p className="text-sm font-medium mt-4">האם להוסיף בכל זאת?</p>
+              <p className="text-xs text-gray-500">המערכת תמזג אוטומטית את הלידים ותשמור רק את החדש ביותר.</p>
+            </div>
+            <div className="flex gap-3 justify-center">
+              <Button 
+                onClick={confirmAddDuplicateLead}
+                className="bg-orange-600 hover:bg-orange-700 text-white px-6"
+              >
+                כן, הוסף בכל זאת
+              </Button>
+              <Button 
+                onClick={() => {
+                  setShowDuplicateWarning(false);
+                  setExistingDuplicateLead(null);
+                  setPendingNewLead(null);
                 }}
                 variant="outline"
                 className="px-6"

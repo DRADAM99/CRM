@@ -1,8 +1,9 @@
 "use client";
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { db } from '@/firebase';
-import { collection, onSnapshot, getDocs, query, orderBy, doc, getDoc } from 'firebase/firestore';
+import { collection, onSnapshot, getDocs, query, orderBy, doc, getDoc, updateDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
 import { useAuth } from './AuthContext';
+import { normalizePhoneNumber } from '@/lib/phoneUtils';
 
 const DataContext = createContext();
 
@@ -14,6 +15,7 @@ export function DataProvider({ children }) {
   const [assignableUsers, setAssignableUsers] = useState([]);
   const [currentUserData, setCurrentUserData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const processingDuplicates = useRef(new Set()); // Track which leads are being processed
 
   // Fetch current user's full data including alias
   useEffect(() => {
@@ -120,13 +122,96 @@ export function DataProvider({ children }) {
     return () => unsubscribe();
   }, [currentUser, users]);
 
-  // Single leads listener
+  // Helper function to detect and handle duplicates
+  const handleDuplicateLeads = async (allLeads) => {
+    // Group leads by normalized phone number
+    const phoneGroups = {};
+    
+    allLeads.forEach(lead => {
+      if (!lead.phoneNumber) return;
+      const normalizedPhone = normalizePhoneNumber(lead.phoneNumber);
+      if (!normalizedPhone) return;
+      
+      if (!phoneGroups[normalizedPhone]) {
+        phoneGroups[normalizedPhone] = [];
+      }
+      phoneGroups[normalizedPhone].push(lead);
+    });
+
+    // Process groups with duplicates
+    for (const [normalizedPhone, group] of Object.entries(phoneGroups)) {
+      if (group.length > 1) {
+        // Sort by createdAt descending (newest first)
+        group.sort((a, b) => b.createdAt - a.createdAt);
+        
+        const newestLead = group[0];
+        const olderLeads = group.slice(1);
+
+        // Skip if already processing this lead
+        if (processingDuplicates.current.has(newestLead.id)) continue;
+        
+        // Mark as processing
+        processingDuplicates.current.add(newestLead.id);
+
+        try {
+          // Merge conversation histories from older leads
+          const mergedConversations = [...newestLead.conversationSummary];
+          const mergedFromIds = [];
+
+          olderLeads.forEach(oldLead => {
+            if (oldLead.conversationSummary && oldLead.conversationSummary.length > 0) {
+              mergedConversations.push(...oldLead.conversationSummary);
+            }
+            mergedFromIds.push(oldLead.id);
+          });
+
+          // Sort conversations by timestamp
+          mergedConversations.sort((a, b) => {
+            const timeA = a.timestamp ? new Date(a.timestamp).getTime() : 0;
+            const timeB = b.timestamp ? new Date(b.timestamp).getTime() : 0;
+            return timeB - timeA;
+          });
+
+          // Update the newest lead with duplicate marker and merged data
+          const newestLeadRef = doc(db, 'leads', newestLead.id);
+          await updateDoc(newestLeadRef, {
+            isDuplicate: true,
+            duplicateCount: group.length,
+            mergedFromLeadIds: mergedFromIds,
+            conversationSummary: mergedConversations,
+            updatedAt: serverTimestamp()
+          });
+
+          // Delete older duplicate leads
+          for (const oldLead of olderLeads) {
+            try {
+              await deleteDoc(doc(db, 'leads', oldLead.id));
+              console.log(`🗑️ Deleted duplicate lead: ${oldLead.id} (phone: ${oldLead.phoneNumber})`);
+            } catch (error) {
+              console.error(`Error deleting duplicate lead ${oldLead.id}:`, error);
+            }
+          }
+
+          console.log(`✅ Handled ${group.length} duplicate leads for phone: ${normalizedPhone}`);
+        } catch (error) {
+          console.error('Error handling duplicate leads:', error);
+        } finally {
+          // Remove from processing set after a delay
+          setTimeout(() => {
+            processingDuplicates.current.delete(newestLead.id);
+          }, 2000);
+        }
+      }
+    }
+  };
+
+  // Single leads listener with duplicate detection
   useEffect(() => {
     if (!currentUser) return;
     
     const unsubscribe = onSnapshot(
       query(collection(db, "leads"), orderBy("createdAt", "desc")),
-      (snapshot) => {
+      async (snapshot) => {
         const allLeads = snapshot.docs.map((doc) => {
           const data = doc.data();
           const conversationSummary = (data.conversationSummary || []).map(entry => ({
@@ -141,8 +226,16 @@ export function DataProvider({ children }) {
             createdAt: data.createdAt?.toDate() || new Date(),
             conversationSummary,
             isHot: data.isHot || false,
+            isDuplicate: data.isDuplicate || false,
+            duplicateCount: data.duplicateCount || 0,
           };
         });
+
+        // Handle duplicates in the background
+        handleDuplicateLeads(allLeads).catch(err => {
+          console.error('Error in duplicate handling:', err);
+        });
+
         setLeads(allLeads);
         setLoading(false);
       }
