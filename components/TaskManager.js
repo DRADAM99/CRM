@@ -1155,7 +1155,7 @@ export default function TaskManager({ isTMFullView, setIsTMFullView, blockPositi
   }, [archivedTasks]);
 
   return (
-    <Card className="h-full flex flex-col">
+    <Card className="flex flex-col">
       <CardHeader className="space-y-3">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
           <CardTitle className="text-xl font-bold">{'מנהל המשימות'}</CardTitle>
@@ -1254,11 +1254,11 @@ export default function TaskManager({ isTMFullView, setIsTMFullView, blockPositi
           </div>
         </div>
       </CardHeader>
-      <CardContent className="flex-grow overflow-hidden">
+      <CardContent className="flex-grow">
         {isTMFullView ? (
           <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleCategoryDragEnd}>
             <SortableContext items={taskCategories} strategy={horizontalListSortingStrategy}>
-              <div className={`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-${Math.min(6, Math.max(1, taskCategories.length))} gap-3 h-[calc(100vh-340px)] overflow-x-auto`}>
+              <div className={`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-${Math.min(6, Math.max(1, taskCategories.length))} gap-3 overflow-x-auto`}>
                 {taskCategories.map((category) => (
                   <SortableCategoryColumn key={category} id={category} className="bg-gray-100 rounded-lg p-2 flex flex-col min-w-[280px] box-border w-full min-w-0">
                     <div className="flex justify-between items-center mb-2 sticky top-0 bg-gray-100 py-1 px-1 z-10">
@@ -1268,7 +1268,7 @@ export default function TaskManager({ isTMFullView, setIsTMFullView, blockPositi
                       <h3 className="font-semibold text-center flex-grow">{category} ({sortedAndFilteredTasks.filter(task => task.category === category).length})</h3>
                       <Button variant="ghost" size="icon" className="w-6 h-6 text-gray-500 hover:text-blue-600 shrink-0" title={`הוסיפי ל${category}`} onClick={() => { setNewTaskCategory(category); setShowTaskModal(true); }}><span role="img" aria-label="Add">➕</span></Button>
                     </div>
-                    <div className="flex-1 overflow-y-auto w-full min-w-0 box-border" data-category={category} data-droppable="true">
+                    <div className="flex-1 w-full min-w-0 box-border" data-category={category} data-droppable="true">
                       <div className="space-y-2 w-full min-w-0 box-border">
                         {showTaskModal && newTaskCategory === category && renderTask(null)}
                         {sortedAndFilteredTasks.filter(task => task.category === category).map((task) => (
@@ -1335,7 +1335,7 @@ export default function TaskManager({ isTMFullView, setIsTMFullView, blockPositi
             </SortableContext>
           </DndContext>
         ) : (
-          <div className="h-[calc(100vh-340px)] overflow-y-auto pr-2">
+          <div className="pr-2">
             <div className="space-y-2 w-full">
               {showTaskModal && <div className="w-full">{renderTask(null)}</div>}
               {sortedAndFilteredTasks.length === 0 && !showTaskModal && (<div className="text-center text-gray-500 py-4 w-full">{'אין משימות להצגה'}</div>)}
