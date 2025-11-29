@@ -89,7 +89,7 @@ function getPref(key, def) {
 
 export default function CandidatesBlock({ isFullView: parentIsFullView, setIsFullView: parentSetIsFullView }) {
   const { currentUser } = useAuth();
-  const { leads, assignableUsers } = useData();
+  const { leads, assignableUsers, currentUserData } = useData();
   // --- State ---
   // Multi-select status filter - now from Firestore for cross-device persistence
   const [selectedStatuses, setSelectedStatuses] = useState(candidatesStatuses);
@@ -284,11 +284,16 @@ export default function CandidatesBlock({ isFullView: parentIsFullView, setIsFul
 
   // --- Click2Call cloud PBX logic ---
   const handleClick2Call = async (phoneNumber) => {
+    const userExt = currentUserData?.EXT || "";
+    if (!userExt) { 
+      alert("לא הוגדרה שלוחה (EXT) למשתמש זה. פנה למנהל המערכת."); 
+      return; 
+    }
     const apiUrl = "https://master.ippbx.co.il/ippbx_api/v1.4/api/info/click2call";
     const payload = {
       token_id: "22K3TWfeifaCPUyA",
       phone_number: phoneNumber,
-      extension_number: "104",
+      extension_number: String(userExt),
       extension_password: "bdb307dc55bf1e679c296ee5c73215cb"
     };
     try {

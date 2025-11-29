@@ -575,14 +575,28 @@ export default function LeadManager({ isFullView, setIsFullView, blockPosition, 
   // Click2Call
   const handleClick2Call = async (phoneNumber) => {
     const userExt = currentUserData?.EXT || "";
-    if (!userExt) { alert("לא הוגדרה שלוחה (EXT) למשתמש זה. פנה למנהל המערכת."); return; }
+    if (!userExt) { 
+      alert("לא הוגדרה שלוחה (EXT) למשתמש זה. פנה למנהל המערכת."); 
+      return; 
+    }
     const apiUrl = "https://master.ippbx.co.il/ippbx_api/v1.4/api/info/click2call";
-    const payload = { token_id: "22K3TWfeifaCPUyA", phone_number: phoneNumber, extension_number: userExt, extension_password: "bdb307dc55bf1e679c296ee5c73215cb" };
+    const payload = { 
+      token_id: "22K3TWfeifaCPUyA", 
+      phone_number: phoneNumber, 
+      extension_number: String(userExt),
+      extension_password: "bdb307dc55bf1e679c296ee5c73215cb" 
+    };
     try {
       const response = await fetch(apiUrl, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
-      if (!response.ok) { const errorText = await response.text(); alert(errorText || "לא ניתן היה להפעיל שיחה דרך המרכזיה."); return; }
+      if (!response.ok) { 
+        const errorText = await response.text(); 
+        alert(errorText || "לא ניתן היה להפעיל שיחה דרך המרכזיה."); 
+        return; 
+      }
       alert(`שיחה ל-${phoneNumber} הופעלה דרך המרכזיה.`);
-    } catch (error) { alert(error.message || "לא ניתן היה להפעיל שיחה דרך המרכזיה."); }
+    } catch (error) { 
+      alert(error.message || "לא ניתן היה להפעיל שיחה דרך המרכזיה."); 
+    }
   };
 
   // Derived analytics (shortened summary for now)
