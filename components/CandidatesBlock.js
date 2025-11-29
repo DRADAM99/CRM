@@ -674,6 +674,7 @@ export default function CandidatesBlock({ isFullView: parentIsFullView, setIsFul
                     <th className="px-2 py-2 text-right font-semibold w-16">{'עדיפות'}</th>
                     <th className="px-2 py-2 text-right font-semibold w-32">{'תאריך'}</th>
                     <th className="px-2 py-2 text-right font-semibold w-32">{'שם מלא'}</th>
+                    {isFullWidth && <th className="px-2 py-2 text-right font-semibold w-28">{'טלפון'}</th>}
                     <th className="px-2 py-2 text-right font-semibold w-24">{'סטטוס'}</th>
                     <th className="px-2 py-2 text-right font-semibold max-w-xs truncate">{'הודעה'}</th>
                     <th className="px-2 py-2 text-right font-semibold w-20">{'פעולות'}</th>
@@ -691,6 +692,7 @@ export default function CandidatesBlock({ isFullView: parentIsFullView, setIsFul
                             {lead.isHot && <span className="mr-1">🔥</span>}
                             {lead.fullName}
                           </td>
+                          {isFullWidth && <td className="px-2 py-2 align-top whitespace-nowrap">{lead.phoneNumber}</td>}
                           <td className="px-2 py-2 align-top">{lead.status}</td>
                           <td className="px-2 py-2 align-top truncate" title={lead.message}>{lead.message}</td>
                           <td className="px-2 py-2 align-top text-center">
@@ -746,7 +748,7 @@ export default function CandidatesBlock({ isFullView: parentIsFullView, setIsFul
                         </tr>
                         {editingLeadId === lead.id && (
                           <tr className="border-b bg-blue-50">
-                            <td colSpan={7} className="p-4">
+                            <td colSpan={isFullWidth ? 8 : 7} className="p-4">
                               <form onSubmit={e => handleSaveLead(e, lead.id)} className="space-y-4">
                                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                                   <Label className="block"><span className="text-gray-700 text-sm font-medium">{'שם מלא:'}</span><Input type="text" className="mt-1 h-8 text-sm" value={editLeadFullName} onChange={ev => setEditLeadFullName(ev.target.value)} required /></Label>
