@@ -1,4 +1,4 @@
-// Version 7.7.3 - Added Fixed Tasks block
+// Version 7.7.4 -  Fixed Tasks block, added lead counter and duplicate lead management
 "use client";
 
 // Utility functions for layout persistence
@@ -2772,7 +2772,7 @@ const calculatedAnalytics = useMemo(() => {
   <div className="flex sm:hidden items-start justify-between px-2 py-1.5 relative">
     {/* Top Left - Version & Logout */}
     <div className="flex flex-col items-start text-[10px] text-gray-500">
-      <span className="leading-tight">v7.7.3</span>
+      <span className="leading-tight">v7.7.4</span>
       <button
         className="text-[10px] text-red-600 underline leading-tight"
         onClick={() => {
@@ -2843,7 +2843,7 @@ const calculatedAnalytics = useMemo(() => {
     </div>
 
     <div className="w-48 text-left text-sm text-gray-500 flex flex-col items-end">
-      <span>{'Version 7.7.3'}</span>
+      <span>{'Version 7.7.4'}</span>
       <button
         className="text-xs text-red-600 underline"
         onClick={() => {

@@ -636,20 +636,23 @@ export default function LeadManager({ isFullView, setIsFullView, blockPosition, 
                   })}
                 </DropdownMenuContent>
               </DropdownMenu>
-              <div className="flex items-center gap-2 px-3 h-9 bg-blue-50 border border-blue-200 rounded-md">
+              <div className="flex items-center gap-2 px-3 py-1 bg-blue-50 border border-blue-200 rounded-md">
                 <span className="text-sm font-medium text-blue-900">מציג:</span>
-                <span className="text-base font-bold text-blue-700">{leadsSorted.length}</span>
+                <span className="text-lg font-bold text-blue-700">{leadsSorted.length}</span>
                 <span className="text-sm font-medium text-blue-900">לידים</span>
               </div>
-              <Select value={leadTimeFilter} onValueChange={setLeadTimeFilter}>
-                <SelectTrigger className="h-9 text-sm w-[140px]"><SelectValue placeholder="סינון זמן..." /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">{'הכל'}</SelectItem>
-                  <SelectItem value="week">{'שבוע אחרון'}</SelectItem>
-                  <SelectItem value="month">{'חודש אחרון'}</SelectItem>
-                  <SelectItem value="custom">{'טווח תאריכים'}</SelectItem>
-                </SelectContent>
-              </Select>
+              <div>
+                <Label className="ml-1 text-sm font-medium">{'סנן זמן:'}</Label>
+                <Select value={leadTimeFilter} onValueChange={setLeadTimeFilter}>
+                  <SelectTrigger className="h-8 text-sm w-[130px]"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">{'הכל'}</SelectItem>
+                    <SelectItem value="week">{'שבוע אחרון'}</SelectItem>
+                    <SelectItem value="month">{'חודש אחרון'}</SelectItem>
+                    <SelectItem value="custom">{'טווח תאריכים'}</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
               {leadTimeFilter === "custom" && (
                 <div className="flex flex-wrap items-center gap-2">
                   <Input type="date" value={leadFilterFrom} onChange={(e) => setLeadFilterFrom(e.target.value)} className="h-9 text-sm w-[140px]" placeholder="מתאריך..." />
@@ -666,25 +669,21 @@ export default function LeadManager({ isFullView, setIsFullView, blockPosition, 
           <div className="flex flex-col gap-2">
             <div className="flex justify-between items-center">
               <CardTitle>{'ניהול לידים'}</CardTitle>
-              <div className="flex gap-2 items-center">
-                <Button onClick={() => setIsFullView(true)} size="sm" className="h-9">{'תצוגה מלאה'}</Button>
-                <Button size="sm" onClick={onToggleBlockOrder} variant="outline" className="h-9">{'מיקום: '}{blockPosition}</Button>
+              <div className="flex gap-2">
+                <Button onClick={() => setIsFullView(true)} size="sm">{'תצוגה מלאה'}</Button>
+                <Button size="xs" onClick={onToggleBlockOrder} variant="outline">{'מיקום: '}{blockPosition}</Button>
               </div>
             </div>
-            <div className="flex items-center gap-2 px-3 h-9 bg-blue-50 border border-blue-200 rounded-md w-fit">
+            <div className="flex items-center gap-2 px-3 py-1 bg-blue-50 border border-blue-200 rounded-md w-fit">
               <span className="text-sm font-medium text-blue-900">מציג:</span>
-              <span className="text-base font-bold text-blue-700">{leadsSorted.length}</span>
+              <span className="text-lg font-bold text-blue-700">{leadsSorted.length}</span>
               <span className="text-sm font-medium text-blue-900">לידים</span>
             </div>
           </div>
         )}
         <div className="mt-2 pt-2 border-t flex gap-2">
           <Button variant="secondary" size="sm" onClick={() => setShowAnalytics(!showAnalytics)}>{showAnalytics ? 'הסתר ניתוח לידים' : 'הצג ניתוח לידים'}</Button>
-          {/* 
-          MANUAL DUPLICATE PROCESSING BUTTON - Hidden but kept for future use
-          Uncomment this button if you need to manually process existing duplicate leads
-          The system now automatically handles duplicates in real-time via DataContext
-          <Button 
+          {false && <Button 
             variant="outline" 
             size="sm" 
             onClick={handleProcessExistingDuplicates}
@@ -692,9 +691,8 @@ export default function LeadManager({ isFullView, setIsFullView, blockPosition, 
             className="border-orange-300 text-orange-700 hover:bg-orange-50"
           >
             {processingDuplicatesManually ? '⏳ מעבד...' : '🔄 עבד לידים כפולים'}
-          </Button>
-          */}
-        </div>
+            </Button>}
+            </div>
       </CardHeader>
       <CardContent className="flex-grow flex flex-col overflow-hidden">
         {isFullView ? (
