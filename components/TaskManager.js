@@ -188,6 +188,16 @@ export default function TaskManager({ isTMFullView, setIsTMFullView, blockPositi
   const [showNudgesModal, setShowNudgesModal] = useState(false);
   const [selectedTaskForNudges, setSelectedTaskForNudges] = useState(null);
   const [persistenceReady, setPersistenceReady] = useState(false);
+  const [userHasExplicitlyChangedPrefs, setUserHasExplicitlyChangedPrefs] = useState(false);
+
+  // Helper to mark that user has explicitly changed preferences
+  const markPrefsChanged = useCallback(() => {
+    if (!userHasExplicitlyChangedPrefs) {
+      console.log('🔔 TaskManager: User explicitly changed preferences - enabling persistence');
+      setUserHasExplicitlyChangedPrefs(true);
+      setPersistenceReady(true); // Enable persistence now that user has made a change
+    }
+  }, [userHasExplicitlyChangedPrefs]);
 
   // Load persisted task filters/preferences from Firestore
   useEffect(() => {
@@ -199,7 +209,7 @@ export default function TaskManager({ isTMFullView, setIsTMFullView, blockPositi
     const loadPrefs = async () => {
       try {
         const userRef = doc(db, 'users', currentUser.uid);
-        const snap = await getDoc(userRef, { source: 'server' });
+        const snap = await getDoc(userRef);
         const allCategories = ["תוכניות טיפול", "לקבוע סדרה", "תשלומים וזיכויים", "דוחות", "להתקשר", "אחר"];
         
         if (snap.exists()) {
@@ -244,17 +254,22 @@ export default function TaskManager({ isTMFullView, setIsTMFullView, blockPositi
           if (typeof d.tm_showDoneTasks === 'boolean') setShowDoneTasks(d.tm_showDoneTasks);
           if (typeof d.tm_showOverdueEffects === 'boolean') setShowOverdueEffects(d.tm_showOverdueEffects);
         } else {
-          hasLoadedFromFirestore.current = true;
-          console.log('⚠️ TaskManager: No user document, defaulting to all categories:', allCategories);
+          hasLoadedFromFirestore.current = false; // NOT loaded from Firestore
+          console.log('⚠️ TaskManager: No user document exists yet, defaulting to all categories:', allCategories);
+          console.log('⚠️ TaskManager: Will NOT auto-save defaults - waiting for explicit user changes');
           savedSelectedRef.current = allCategories;
           setSelectedTaskCategories(allCategories);
+          // Don't enable persistence for defaults - only when user explicitly changes something
         }
-        console.log('✅ TaskManager: Setting prefsLoaded=true, will set persistenceReady in 500ms');
+        console.log('✅ TaskManager: Setting prefsLoaded=true');
         setPrefsLoaded(true);
-        setTimeout(() => {
-          console.log('✅ TaskManager: Setting persistenceReady=true');
-          setPersistenceReady(true);
-        }, 500);
+        // Only set persistenceReady if we successfully loaded existing preferences
+        if (snap.exists()) {
+          setTimeout(() => {
+            console.log('✅ TaskManager: Setting persistenceReady=true (loaded existing prefs)');
+            setPersistenceReady(true);
+          }, 500);
+        }
       } catch (err) {
         console.error('❌ TaskManager: Error loading prefs:', err);
         const allCategories = ["תוכניות טיפול", "לקבוע סדרה", "תשלומים וזיכויים", "דוחות", "להתקשר", "אחר"];
@@ -269,14 +284,22 @@ export default function TaskManager({ isTMFullView, setIsTMFullView, blockPositi
 
   // Persist task filters/preferences to Firestore
   useEffect(() => {
-    if (!currentUser || !prefsLoaded || !persistenceReady) {
-      console.log('💾 TaskManager: Skipping persistence:', { currentUser: !!currentUser, prefsLoaded, persistenceReady });
+    if (!currentUser || !prefsLoaded) {
+      console.log('💾 TaskManager: Skipping persistence:', { currentUser: !!currentUser, prefsLoaded, persistenceReady, userHasExplicitlyChangedPrefs });
       return;
     }
     
-    // Only persist if we've successfully loaded preferences from Firestore
+    // Only persist if:
+    // 1. We successfully loaded existing preferences (persistenceReady), OR
+    // 2. User has explicitly changed something (userHasExplicitlyChangedPrefs)
+    if (!persistenceReady && !userHasExplicitlyChangedPrefs) {
+      console.log('💾 TaskManager: Skipping persistence - no existing prefs loaded and no explicit changes yet');
+      return;
+    }
+    
+    // Only persist if we've successfully loaded preferences from Firestore OR user has explicitly changed something
     // This prevents persisting defaults before we've tried to load
-    if (!hasLoadedFromFirestore.current) {
+    if (!hasLoadedFromFirestore.current && !userHasExplicitlyChangedPrefs) {
       console.log('💾 TaskManager: Skipping persistence - waiting for Firestore load');
       return;
     }
@@ -311,12 +334,16 @@ export default function TaskManager({ isTMFullView, setIsTMFullView, blockPositi
       .then(() => {
         console.log('✅ TaskManager: Successfully wrote to Firestore!');
         console.log('✅ TaskManager: Saved data:', dataToSave);
+        // Once we've saved once, enable persistence for future changes
+        if (!persistenceReady) {
+          setPersistenceReady(true);
+        }
       })
       .catch((err) => {
         console.error('❌ TaskManager: Error persisting:', err);
         console.error('❌ TaskManager: Failed to save:', dataToSave);
       });
-  }, [currentUser, prefsLoaded, persistenceReady, taskFilter, taskPriorityFilter, selectedTaskCategories, taskSearchTerm, showDoneTasks, showOverdueEffects]);
+  }, [currentUser, prefsLoaded, persistenceReady, userHasExplicitlyChangedPrefs, taskFilter, taskPriorityFilter, selectedTaskCategories, taskSearchTerm, showDoneTasks, showOverdueEffects]);
 
   // Users now come from DataContext - no need to fetch
 
@@ -1221,17 +1248,17 @@ export default function TaskManager({ isTMFullView, setIsTMFullView, blockPositi
         <div className="flex flex-col gap-3">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
             <div className="flex flex-wrap gap-2">
-              <Button variant={taskFilter === 'הכל' ? 'default' : 'outline'} size="sm" onClick={() => setTaskFilter('הכל')}>{'הכל'}</Button>
-              <Button variant={taskFilter === 'שלי' ? 'default' : 'outline'} size="sm" onClick={() => setTaskFilter('שלי')}>{'שלי'}</Button>
-              <Button variant={taskFilter === 'אחרים' ? 'default' : 'outline'} size="sm" onClick={() => setTaskFilter('אחרים')}>{'אחרים'}</Button>
+              <Button variant={taskFilter === 'הכל' ? 'default' : 'outline'} size="sm" onClick={() => { markPrefsChanged(); setTaskFilter('הכל'); }}>{'הכל'}</Button>
+              <Button variant={taskFilter === 'שלי' ? 'default' : 'outline'} size="sm" onClick={() => { markPrefsChanged(); setTaskFilter('שלי'); }}>{'שלי'}</Button>
+              <Button variant={taskFilter === 'אחרים' ? 'default' : 'outline'} size="sm" onClick={() => { markPrefsChanged(); setTaskFilter('אחרים'); }}>{'אחרים'}</Button>
             </div>
             <div className="flex items-center gap-2">
               <div className="flex items-center gap-2">
-                <IOSSwitch checked={showDoneTasks} onChange={(e) => setShowDoneTasks(e.target.checked)} inputProps={{ 'aria-label': 'הצג בוצעו' }} />
+                <IOSSwitch checked={showDoneTasks} onChange={(e) => { markPrefsChanged(); setShowDoneTasks(e.target.checked); }} inputProps={{ 'aria-label': 'הצג בוצעו' }} />
                 <Label className="text-sm font-medium cursor-pointer select-none">{'הצג בוצעו'}</Label>
               </div>
               <div className="flex items-center gap-2 mr-4 pr-4 border-r">
-                <IOSSwitch checked={showOverdueEffects} onChange={(e) => setShowOverdueEffects(e.target.checked)} inputProps={{ 'aria-label': 'הצג חיווי איחור' }} />
+                <IOSSwitch checked={showOverdueEffects} onChange={(e) => { markPrefsChanged(); setShowOverdueEffects(e.target.checked); }} inputProps={{ 'aria-label': 'הצג חיווי איחור' }} />
                 <Label className="text-sm font-medium cursor-pointer select-none">{'הצג חיווי איחור'}</Label>
               </div>
               {!isTMFullView && userHasSortedTasks && (
@@ -1244,7 +1271,7 @@ export default function TaskManager({ isTMFullView, setIsTMFullView, blockPositi
 
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 border-t pt-3">
             <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
-              <Select value={taskPriorityFilter} onValueChange={setTaskPriorityFilter}>
+              <Select value={taskPriorityFilter} onValueChange={(val) => { markPrefsChanged(); setTaskPriorityFilter(val); }}>
                 <SelectTrigger className="h-8 text-sm w-full sm:w-[100px]"><SelectValue placeholder="סינון עדיפות..." /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">{'כל העדיפויות'}</SelectItem>
@@ -1262,13 +1289,13 @@ export default function TaskManager({ isTMFullView, setIsTMFullView, blockPositi
                   <DropdownMenuLabel>{'סינון קטגוריה'}</DropdownMenuLabel>
                   <DropdownMenuSeparator />
                   {taskCategories.map((category) => (
-                    <DropdownMenuCheckboxItem key={category} checked={selectedTaskCategories.includes(category)} onCheckedChange={() => setSelectedTaskCategories(prev => prev.includes(category) ? prev.filter(c => c !== category) : [...prev, category])} onSelect={(e) => e.preventDefault()}>{category}</DropdownMenuCheckboxItem>
+                    <DropdownMenuCheckboxItem key={category} checked={selectedTaskCategories.includes(category)} onCheckedChange={() => { markPrefsChanged(); setSelectedTaskCategories(prev => prev.includes(category) ? prev.filter(c => c !== category) : [...prev, category]); }} onSelect={(e) => e.preventDefault()}>{category}</DropdownMenuCheckboxItem>
                   ))}
                 </DropdownMenuContent>
               </DropdownMenu>
               <div className="relative w-full sm:w-auto">
                 <Search className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-                <Input type="search" placeholder="חפש משימות..." className="h-8 text-sm pl-8 w-full sm:w-[180px]" value={taskSearchTerm} onChange={(e) => setTaskSearchTerm(e.target.value)} />
+                <Input type="search" placeholder="חפש משימות..." className="h-8 text-sm pl-8 w-full sm:w-[180px]" value={taskSearchTerm} onChange={(e) => { markPrefsChanged(); setTaskSearchTerm(e.target.value); }} />
               </div>
               <Button
                 size="sm"

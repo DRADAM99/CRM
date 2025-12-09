@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from "react";
+import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { db } from "../firebase";
 import { collection, onSnapshot, addDoc, updateDoc, doc, serverTimestamp, arrayUnion, setDoc, getDocs, getDoc, Timestamp } from "firebase/firestore";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
@@ -128,6 +128,7 @@ export default function CandidatesBlock({ isFullView: parentIsFullView, setIsFul
   const [taskCategories, setTaskCategories] = useState(["להתקשר", "לקבוע סדרה", "דוחות", "תשלומים וזיכויים", "תוכניות טיפול", "אחר"]);
   // Add state for full width toggle
   const [isFullWidth, setIsFullWidth] = useState(() => getPref('candidates_isFullWidth', false));
+  const [userHasExplicitlyChangedPrefs, setUserHasExplicitlyChangedPrefs] = useState(false);
   // Add Lead Modal state
   const [showAddLeadModal, setShowAddLeadModal] = useState(false);
   const [newLeadFullName, setNewLeadFullName] = useState("");
@@ -137,6 +138,15 @@ export default function CandidatesBlock({ isFullView: parentIsFullView, setIsFul
   const [newLeadSource, setNewLeadSource] = useState("");
   const [newLeadIsHot, setNewLeadIsHot] = useState(false);
   const [newLeadSourceOther, setNewLeadSourceOther] = useState("");
+
+  // Helper to mark that user has explicitly changed preferences
+  const markPrefsChanged = useCallback(() => {
+    if (!userHasExplicitlyChangedPrefs) {
+      console.log('🔔 CandidatesBlock: User explicitly changed preferences - enabling persistence');
+      setUserHasExplicitlyChangedPrefs(true);
+      setPersistenceReady(true); // Enable persistence now that user has made a change
+    }
+  }, [userHasExplicitlyChangedPrefs]);
 
   // Load persisted preferences from Firestore
   useEffect(() => {
@@ -148,7 +158,7 @@ export default function CandidatesBlock({ isFullView: parentIsFullView, setIsFul
     const loadPrefs = async () => {
       try {
         const userRef = doc(db, 'users', currentUser.uid);
-        const snap = await getDoc(userRef, { source: 'server' });
+        const snap = await getDoc(userRef);
         if (snap.exists()) {
           hasLoadedFromFirestore.current = true;
           const d = snap.data();
@@ -175,17 +185,22 @@ export default function CandidatesBlock({ isFullView: parentIsFullView, setIsFul
           }
         } else {
           // No user document exists, default to all statuses
-          hasLoadedFromFirestore.current = true;
-          console.log('⚠️ CandidatesBlock: No user document, defaulting to all');
+          hasLoadedFromFirestore.current = false; // NOT loaded from Firestore
+          console.log('⚠️ CandidatesBlock: No user document exists yet, defaulting to all');
+          console.log('⚠️ CandidatesBlock: Will NOT auto-save defaults - waiting for explicit user changes');
           savedSelectedRef.current = candidatesStatuses;
           setSelectedStatuses(candidatesStatuses);
+          // Don't enable persistence for defaults - only when user explicitly changes something
         }
-        console.log('✅ CandidatesBlock: Setting prefsLoaded=true, will set persistenceReady in 500ms');
+        console.log('✅ CandidatesBlock: Setting prefsLoaded=true');
         setPrefsLoaded(true);
-        setTimeout(() => {
-          console.log('✅ CandidatesBlock: Setting persistenceReady=true');
-          setPersistenceReady(true);
-        }, 500);
+        // Only set persistenceReady if we successfully loaded existing preferences
+        if (snap.exists()) {
+          setTimeout(() => {
+            console.log('✅ CandidatesBlock: Setting persistenceReady=true (loaded existing prefs)');
+            setPersistenceReady(true);
+          }, 500);
+        }
       } catch (err) {
         console.error('❌ CandidatesBlock: Error loading candidates prefs:', err);
         // On error, default to all statuses
@@ -200,14 +215,22 @@ export default function CandidatesBlock({ isFullView: parentIsFullView, setIsFul
 
   // Persist preferences to Firestore
   useEffect(() => {
-    if (!currentUser || !prefsLoaded || !persistenceReady) {
-      console.log('💾 CandidatesBlock: Skipping persistence:', { currentUser: !!currentUser, prefsLoaded, persistenceReady });
+    if (!currentUser || !prefsLoaded) {
+      console.log('💾 CandidatesBlock: Skipping persistence:', { currentUser: !!currentUser, prefsLoaded, persistenceReady, userHasExplicitlyChangedPrefs });
       return;
     }
     
-    // Only persist if we've successfully loaded preferences from Firestore
+    // Only persist if:
+    // 1. We successfully loaded existing preferences (persistenceReady), OR
+    // 2. User has explicitly changed something (userHasExplicitlyChangedPrefs)
+    if (!persistenceReady && !userHasExplicitlyChangedPrefs) {
+      console.log('💾 CandidatesBlock: Skipping persistence - no existing prefs loaded and no explicit changes yet');
+      return;
+    }
+    
+    // Only persist if we've successfully loaded preferences from Firestore OR user has explicitly changed something
     // This prevents persisting defaults before we've tried to load
-    if (!hasLoadedFromFirestore.current) {
+    if (!hasLoadedFromFirestore.current && !userHasExplicitlyChangedPrefs) {
       console.log('💾 CandidatesBlock: Skipping persistence - waiting for Firestore load');
       return;
     }
@@ -240,12 +263,16 @@ export default function CandidatesBlock({ isFullView: parentIsFullView, setIsFul
       .then(() => {
         console.log('✅ CandidatesBlock: Successfully wrote to Firestore!');
         console.log('✅ CandidatesBlock: Saved data:', dataToSave);
+        // Once we've saved once, enable persistence for future changes
+        if (!persistenceReady) {
+          setPersistenceReady(true);
+        }
       })
       .catch((err) => {
         console.error('❌ CandidatesBlock: Error persisting candidates prefs:', err);
         console.error('❌ CandidatesBlock: Failed to save:', dataToSave);
       });
-  }, [currentUser, prefsLoaded, persistenceReady, sortBy, sortDirection, searchTerm, selectedStatuses, rowLimit]);
+  }, [currentUser, prefsLoaded, persistenceReady, userHasExplicitlyChangedPrefs, sortBy, sortDirection, searchTerm, selectedStatuses, rowLimit]);
 
   // Persist full width preference to localStorage (less critical, can stay local)
   useEffect(() => {
@@ -621,7 +648,7 @@ export default function CandidatesBlock({ isFullView: parentIsFullView, setIsFul
               </div>
             </div>
             <div className="flex flex-wrap items-center gap-x-2 gap-y-2 mt-2 border-t pt-2">
-              <Select value={String(rowLimit)} onValueChange={(val) => setRowLimit(Number(val))}>
+              <Select value={String(rowLimit)} onValueChange={(val) => { markPrefsChanged(); setRowLimit(Number(val)); }}>
                 <SelectTrigger className="h-8 text-sm w-[80px]"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="10">10</SelectItem>
@@ -656,7 +683,7 @@ export default function CandidatesBlock({ isFullView: parentIsFullView, setIsFul
                     <DropdownMenuCheckboxItem
                       key={status}
                       checked={selectedStatuses.includes(status)}
-                      onCheckedChange={() => setSelectedStatuses(prev => prev.includes(status) ? prev.filter(s => s !== status) : [...prev, status])}
+                      onCheckedChange={() => { markPrefsChanged(); setSelectedStatuses(prev => prev.includes(status) ? prev.filter(s => s !== status) : [...prev, status]); }}
                       onSelect={e => e.preventDefault()}
                       className="flex flex-row-reverse items-center justify-between"
                     >
@@ -670,7 +697,7 @@ export default function CandidatesBlock({ isFullView: parentIsFullView, setIsFul
                 size="sm"
                 variant="outline"
                 className="h-8 text-sm px-3"
-                onClick={() => setSelectedStatuses(candidatesStatuses)}
+                onClick={() => { markPrefsChanged(); setSelectedStatuses(candidatesStatuses); }}
               >
                 כולם
               </Button>
@@ -678,7 +705,7 @@ export default function CandidatesBlock({ isFullView: parentIsFullView, setIsFul
                 size="sm"
                 variant="outline"
                 className="h-8 text-sm px-3"
-                onClick={() => setSelectedStatuses(["הומלץ טיפול", "רשימת המתנה", "ניתן מידע", "הסדר תשלום", "ממשיכים לסדרה נוספת"])}
+                onClick={() => { markPrefsChanged(); setSelectedStatuses(["הומלץ טיפול", "רשימת המתנה", "ניתן מידע", "הסדר תשלום", "ממשיכים לסדרה נוספת"]); }}
               >
                 ראשי
               </Button>
@@ -689,10 +716,10 @@ export default function CandidatesBlock({ isFullView: parentIsFullView, setIsFul
                   placeholder="חפש מועמד..."
                   className="h-8 text-sm pl-8 w-[180px]"
                   value={searchTerm}
-                  onChange={e => setSearchTerm(e.target.value)}
+                  onChange={e => { markPrefsChanged(); setSearchTerm(e.target.value); }}
                 />
               </div>
-              <Select value={sortBy} onValueChange={setSortBy}>
+              <Select value={sortBy} onValueChange={(val) => { markPrefsChanged(); setSortBy(val); }}>
                 <SelectTrigger className="h-8 text-sm w-[120px]"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="priority">עדיפות</SelectItem>
@@ -703,7 +730,7 @@ export default function CandidatesBlock({ isFullView: parentIsFullView, setIsFul
                 size="sm"
                 variant="outline"
                 className="h-8 text-sm w-[40px] px-2"
-                onClick={() => setSortDirection(dir => dir === 'asc' ? 'desc' : 'asc')}
+                onClick={() => { markPrefsChanged(); setSortDirection(dir => dir === 'asc' ? 'desc' : 'asc'); }}
                 title={sortDirection === 'asc' ? 'סדר עולה' : 'סדר יורד'}
               >
                 {sortDirection === 'asc' ? '⬆️' : '⬇️'}

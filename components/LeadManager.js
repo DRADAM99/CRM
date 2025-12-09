@@ -109,8 +109,18 @@ export default function LeadManager({ isFullView, setIsFullView, blockPosition, 
   const [existingDuplicateLead, setExistingDuplicateLead] = useState(null);
   const [pendingNewLead, setPendingNewLead] = useState(null);
   const [processingDuplicatesManually, setProcessingDuplicatesManually] = useState(false);
+  const [userHasExplicitlyChangedPrefs, setUserHasExplicitlyChangedPrefs] = useState(false);
   const alias = currentUserData?.alias || "";
   const role = currentUserData?.role || "";
+
+  // Helper to mark that user has explicitly changed preferences
+  const markPrefsChanged = useCallback(() => {
+    if (!userHasExplicitlyChangedPrefs) {
+      console.log('🔔 LeadManager: User explicitly changed preferences - enabling persistence');
+      setUserHasExplicitlyChangedPrefs(true);
+      setPersistenceReady(true); // Enable persistence now that user has made a change
+    }
+  }, [userHasExplicitlyChangedPrefs]);
 
   // Load persisted lead filters/preferences and block layout from Firestore
   useEffect(() => {
@@ -122,7 +132,7 @@ export default function LeadManager({ isFullView, setIsFullView, blockPosition, 
     const loadPrefs = async () => {
       try {
         const userRef = doc(db, 'users', currentUser.uid);
-        const snap = await getDoc(userRef, { source: 'server' });
+        const snap = await getDoc(userRef);
         if (snap.exists()) {
           hasLoadedFromFirestore.current = true;
           const d = snap.data();
@@ -154,18 +164,23 @@ export default function LeadManager({ isFullView, setIsFullView, blockPosition, 
           if (typeof d.leads_isFullView === 'boolean') setIsFullView(d.leads_isFullView);
         } else {
           // No user document exists, default to all categories
-          // Set flag to true so we can create document on first interaction
-          hasLoadedFromFirestore.current = true;
-          console.log('⚠️ LeadManager: No user document, defaulting to all');
+          // Set flag to FALSE because we didn't actually load from Firestore
+          hasLoadedFromFirestore.current = false; // NOT loaded from Firestore
+          console.log('⚠️ LeadManager: No user document exists yet, defaulting to all');
+          console.log('⚠️ LeadManager: Will NOT auto-save defaults - waiting for explicit user changes');
           savedSelectedRef.current = allLeadCategories;
           setSelectedLeadCategories(allLeadCategories);
+          // Don't enable persistence for defaults - only when user explicitly changes something
         }
-        console.log('✅ LeadManager: Setting prefsLoaded=true, will set persistenceReady in 500ms');
+        console.log('✅ LeadManager: Setting prefsLoaded=true');
         setPrefsLoaded(true);
-        setTimeout(() => {
-          console.log('✅ LeadManager: Setting persistenceReady=true');
-          setPersistenceReady(true);
-        }, 500);
+        // Only set persistenceReady if we successfully loaded existing preferences
+        if (snap.exists()) {
+          setTimeout(() => {
+            console.log('✅ LeadManager: Setting persistenceReady=true (loaded existing prefs)');
+            setPersistenceReady(true);
+          }, 500);
+        }
       } catch (err) {
         console.error('❌ LeadManager: Error loading lead prefs:', err);
         // On error, default to all categories
@@ -180,14 +195,22 @@ export default function LeadManager({ isFullView, setIsFullView, blockPosition, 
 
   // Persist lead filters/preferences and block layout to Firestore
   useEffect(() => {
-    if (!currentUser || !prefsLoaded || !persistenceReady) {
-      console.log('💾 LeadManager: Skipping persistence:', { currentUser: !!currentUser, prefsLoaded, persistenceReady });
+    if (!currentUser || !prefsLoaded) {
+      console.log('💾 LeadManager: Skipping persistence:', { currentUser: !!currentUser, prefsLoaded, persistenceReady, userHasExplicitlyChangedPrefs });
       return;
     }
     
-    // Only persist if we've successfully loaded preferences from Firestore
+    // Only persist if:
+    // 1. We successfully loaded existing preferences (persistenceReady), OR
+    // 2. User has explicitly changed something (userHasExplicitlyChangedPrefs)
+    if (!persistenceReady && !userHasExplicitlyChangedPrefs) {
+      console.log('💾 LeadManager: Skipping persistence - no existing prefs loaded and no explicit changes yet');
+      return;
+    }
+    
+    // Only persist if we've successfully loaded preferences from Firestore OR user has explicitly changed something
     // This prevents persisting defaults before we've tried to load
-    if (!hasLoadedFromFirestore.current) {
+    if (!hasLoadedFromFirestore.current && !userHasExplicitlyChangedPrefs) {
       console.log('💾 LeadManager: Skipping persistence - waiting for Firestore load');
       return;
     }
@@ -226,12 +249,16 @@ export default function LeadManager({ isFullView, setIsFullView, blockPosition, 
       .then(() => {
         console.log('✅ LeadManager: Successfully wrote to Firestore!');
         console.log('✅ LeadManager: Saved data:', dataToSave);
+        // Once we've saved once, enable persistence for future changes
+        if (!persistenceReady) {
+          setPersistenceReady(true);
+        }
       })
       .catch((err) => {
         console.error('❌ LeadManager: Error persisting lead prefs:', err);
         console.error('❌ LeadManager: Failed to save:', dataToSave);
       });
-  }, [currentUser, prefsLoaded, persistenceReady, leadSortBy, leadSortDirection, leadTimeFilter, leadFilterFrom, leadFilterTo, leadSearchTerm, selectedLeadCategories, leadRowLimit, isFullView]);
+  }, [currentUser, prefsLoaded, persistenceReady, userHasExplicitlyChangedPrefs, leadSortBy, leadSortDirection, leadTimeFilter, leadFilterFrom, leadFilterTo, leadSearchTerm, selectedLeadCategories, leadRowLimit, isFullView]);
 
   // Bridge analytics toggle to page.js (to show the original analytics panel)
   useEffect(() => {
@@ -645,11 +672,11 @@ export default function LeadManager({ isFullView, setIsFullView, blockPosition, 
               </div>
             </div>
             <div className="flex flex-wrap items-center gap-x-3 gap-y-2 mt-2 border-t pt-2">
-              <Select value={leadSortBy} onValueChange={setLeadSortBy}>
+              <Select value={leadSortBy} onValueChange={(val) => { markPrefsChanged(); setLeadSortBy(val); }}>
                 <SelectTrigger className="h-9 text-sm w-[120px]"><SelectValue placeholder="סדר לפי..." /></SelectTrigger>
                 <SelectContent><SelectItem value="priority">{'עדיפות'}</SelectItem><SelectItem value="date">{'תאריך יצירה'}</SelectItem></SelectContent>
               </Select>
-              <Button size="sm" variant="outline" className="h-9 text-sm w-[44px] px-2" onClick={() => setLeadSortDirection(dir => dir === 'asc' ? 'desc' : 'asc')} title={leadSortDirection === 'asc' ? 'סדר עולה' : 'סדר יורד'}>{leadSortDirection === 'asc' ? '⬆️' : '⬇️'}</Button>
+              <Button size="sm" variant="outline" className="h-9 text-sm w-[44px] px-2" onClick={() => { markPrefsChanged(); setLeadSortDirection(dir => dir === 'asc' ? 'desc' : 'asc'); }} title={leadSortDirection === 'asc' ? 'סדר עולה' : 'סדר יורד'}>{leadSortDirection === 'asc' ? '⬆️' : '⬇️'}</Button>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="outline" size="sm" className="h-9 text-sm w-[160px] justify-between">
@@ -663,7 +690,7 @@ export default function LeadManager({ isFullView, setIsFullView, blockPosition, 
                   {allLeadCategories.map((category) => {
                     const selected = selectedLeadCategories.includes(category);
                     return (
-                      <div key={category} onClick={() => { setSelectedLeadCategories(prev => prev.includes(category) ? prev.filter(c => c !== category) : [...prev, category]); }} className="flex flex-row items-center justify-between cursor-pointer py-1 px-2" style={{ direction: 'rtl' }}>
+                      <div key={category} onClick={() => { markPrefsChanged(); setSelectedLeadCategories(prev => prev.includes(category) ? prev.filter(c => c !== category) : [...prev, category]); }} className="flex flex-row items-center justify-between cursor-pointer py-1 px-2" style={{ direction: 'rtl' }}>
                         <span className="flex items-center gap-2 w-full justify-between">
                           <span className={`inline-block w-4 h-4 rounded-full ${leadStatusConfig[category]?.color || 'bg-gray-300'} flex items-center justify-center`} style={{ border: selected ? '2px solid #222' : '2px solid transparent', transition: 'border 0.2s' }}>{selected && (<span className="w-2 h-2 bg-white rounded-full block"></span>)}</span>
                           <span className="flex-1 text-right">{category}</span>
@@ -677,7 +704,7 @@ export default function LeadManager({ isFullView, setIsFullView, blockPosition, 
                 size="sm"
                 variant="outline"
                 className="h-9 text-sm px-3"
-                onClick={() => setSelectedLeadCategories(allLeadCategories)}
+                onClick={() => { markPrefsChanged(); setSelectedLeadCategories(allLeadCategories); }}
               >
                 כולם
               </Button>
@@ -685,11 +712,11 @@ export default function LeadManager({ isFullView, setIsFullView, blockPosition, 
                 size="sm"
                 variant="outline"
                 className="h-9 text-sm px-3"
-                onClick={() => setSelectedLeadCategories(["חדש", "ממתין לתשובה של ד״ר וינטר"])}
+                onClick={() => { markPrefsChanged(); setSelectedLeadCategories(["חדש", "ממתין לתשובה של ד״ר וינטר"]); }}
               >
                 ראשי
               </Button>
-              <Select value={String(leadRowLimit)} onValueChange={(val) => setLeadRowLimit(Number(val))}>
+              <Select value={String(leadRowLimit)} onValueChange={(val) => { markPrefsChanged(); setLeadRowLimit(Number(val)); }}>
                 <SelectTrigger className="h-9 text-sm w-[80px]"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="10">10</SelectItem>
@@ -709,7 +736,7 @@ export default function LeadManager({ isFullView, setIsFullView, blockPosition, 
                 <span className="text-lg font-bold text-blue-700 leading-none">{leadsSorted.length}</span>
                 <span className="text-sm font-medium text-blue-900">לידים</span>
               </div>
-              <Select value={leadTimeFilter} onValueChange={setLeadTimeFilter}>
+              <Select value={leadTimeFilter} onValueChange={(val) => { markPrefsChanged(); setLeadTimeFilter(val); }}>
                 <SelectTrigger className="h-9 text-sm w-[130px]"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">{'הכל'}</SelectItem>
@@ -720,13 +747,13 @@ export default function LeadManager({ isFullView, setIsFullView, blockPosition, 
               </Select>
               {leadTimeFilter === "custom" && (
                 <div className="flex flex-wrap items-center gap-2">
-                  <Input type="date" value={leadFilterFrom} onChange={(e) => setLeadFilterFrom(e.target.value)} className="h-9 text-sm w-[140px]" placeholder="מתאריך..." />
-                  <Input type="date" value={leadFilterTo} onChange={(e) => setLeadFilterTo(e.target.value)} className="h-9 text-sm w-[140px]" placeholder="עד תאריך..." />
+                  <Input type="date" value={leadFilterFrom} onChange={(e) => { markPrefsChanged(); setLeadFilterFrom(e.target.value); }} className="h-9 text-sm w-[140px]" placeholder="מתאריך..." />
+                  <Input type="date" value={leadFilterTo} onChange={(e) => { markPrefsChanged(); setLeadFilterTo(e.target.value); }} className="h-9 text-sm w-[140px]" placeholder="עד תאריך..." />
                 </div>
               )}
               <div className="relative">
                 <Search className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-                <Input type="search" placeholder="חפש לידים..." className="h-9 text-sm pl-8 w-[200px]" value={leadSearchTerm} onChange={(e) => setLeadSearchTerm(e.target.value)} />
+                <Input type="search" placeholder="חפש לידים..." className="h-9 text-sm pl-8 w-[200px]" value={leadSearchTerm} onChange={(e) => { markPrefsChanged(); setLeadSearchTerm(e.target.value); }} />
               </div>
             </div>
           </div>
