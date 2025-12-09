@@ -212,21 +212,39 @@ export default function CandidatesBlock({ isFullView: parentIsFullView, setIsFul
       return;
     }
     
-    console.log('💾 CandidatesBlock: Persisting selectedStatuses:', selectedStatuses);
+    console.log('💾 CandidatesBlock: Persisting preferences:', {
+      selectedStatuses,
+      sortBy,
+      sortDirection,
+      searchTerm,
+      rowLimit,
+      uid: currentUser.uid
+    });
+    
     // Update the ref to keep it in sync with current selection
     savedSelectedRef.current = selectedStatuses;
     const userRef = doc(db, 'users', currentUser.uid);
-    console.log('💾 CandidatesBlock: Writing to Firestore, user ID:', currentUser.uid);
-    setDoc(userRef, {
+    
+    const dataToSave = {
       candidates_sortBy: sortBy,
       candidates_sortDirection: sortDirection,
       candidates_searchTerm: searchTerm,
       candidates_selectedStatuses: selectedStatuses,
       candidates_rowLimit: rowLimit,
       updatedAt: serverTimestamp(),
-    }, { merge: true })
-      .then(() => console.log('✅ CandidatesBlock: Successfully wrote to Firestore!'))
-      .catch((err) => console.error('❌ CandidatesBlock: Error persisting candidates prefs:', err));
+    };
+    
+    console.log('💾 CandidatesBlock: Data to save:', dataToSave);
+    
+    setDoc(userRef, dataToSave, { merge: true })
+      .then(() => {
+        console.log('✅ CandidatesBlock: Successfully wrote to Firestore!');
+        console.log('✅ CandidatesBlock: Saved data:', dataToSave);
+      })
+      .catch((err) => {
+        console.error('❌ CandidatesBlock: Error persisting candidates prefs:', err);
+        console.error('❌ CandidatesBlock: Failed to save:', dataToSave);
+      });
   }, [currentUser, prefsLoaded, persistenceReady, sortBy, sortDirection, searchTerm, selectedStatuses, rowLimit]);
 
   // Persist full width preference to localStorage (less critical, can stay local)

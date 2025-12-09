@@ -176,7 +176,7 @@ export default function LeadManager({ isFullView, setIsFullView, blockPosition, 
       }
     };
     loadPrefs();
-  }, [currentUser, setIsFullView, allLeadCategories]);
+  }, [currentUser, setIsFullView]);
 
   // Persist lead filters/preferences and block layout to Firestore
   useEffect(() => {
@@ -192,12 +192,22 @@ export default function LeadManager({ isFullView, setIsFullView, blockPosition, 
       return;
     }
     
-    console.log('💾 LeadManager: Persisting selectedLeadCategories:', selectedLeadCategories);
+    console.log('💾 LeadManager: Persisting preferences:', {
+      selectedLeadCategories,
+      leadSortBy,
+      leadSortDirection,
+      leadTimeFilter,
+      leadSearchTerm,
+      leadRowLimit,
+      isFullView,
+      uid: currentUser.uid
+    });
+    
     // Update the ref to keep it in sync with current selection
     savedSelectedRef.current = selectedLeadCategories;
     const userRef = doc(db, 'users', currentUser.uid);
-    console.log('💾 LeadManager: Writing to Firestore, user ID:', currentUser.uid);
-    setDoc(userRef, {
+    
+    const dataToSave = {
       lead_sortBy: leadSortBy,
       lead_sortDirection: leadSortDirection,
       lead_timeFilter: leadTimeFilter,
@@ -208,9 +218,19 @@ export default function LeadManager({ isFullView, setIsFullView, blockPosition, 
       lead_rowLimit: leadRowLimit,
       leads_isFullView: isFullView,
       updatedAt: serverTimestamp(),
-    }, { merge: true })
-      .then(() => console.log('✅ LeadManager: Successfully wrote to Firestore!'))
-      .catch((err) => console.error('❌ LeadManager: Error persisting lead prefs:', err));
+    };
+    
+    console.log('💾 LeadManager: Data to save:', dataToSave);
+    
+    setDoc(userRef, dataToSave, { merge: true })
+      .then(() => {
+        console.log('✅ LeadManager: Successfully wrote to Firestore!');
+        console.log('✅ LeadManager: Saved data:', dataToSave);
+      })
+      .catch((err) => {
+        console.error('❌ LeadManager: Error persisting lead prefs:', err);
+        console.error('❌ LeadManager: Failed to save:', dataToSave);
+      });
   }, [currentUser, prefsLoaded, persistenceReady, leadSortBy, leadSortDirection, leadTimeFilter, leadFilterFrom, leadFilterTo, leadSearchTerm, selectedLeadCategories, leadRowLimit, isFullView]);
 
   // Bridge analytics toggle to page.js (to show the original analytics panel)

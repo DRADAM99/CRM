@@ -187,10 +187,15 @@ export default function TaskManager({ isTMFullView, setIsTMFullView, blockPositi
   const [archivedTasks, setArchivedTasks] = useState([]);
   const [showNudgesModal, setShowNudgesModal] = useState(false);
   const [selectedTaskForNudges, setSelectedTaskForNudges] = useState(null);
+  const [persistenceReady, setPersistenceReady] = useState(false);
 
   // Load persisted task filters/preferences from Firestore
   useEffect(() => {
-    if (!currentUser) return;
+    if (!currentUser) {
+      console.log('📥 TaskManager: No currentUser, skipping load');
+      return;
+    }
+    console.log('📥 TaskManager: Starting to load preferences for user:', currentUser.uid);
     const loadPrefs = async () => {
       try {
         const userRef = doc(db, 'users', currentUser.uid);
@@ -200,7 +205,11 @@ export default function TaskManager({ isTMFullView, setIsTMFullView, blockPositi
         if (snap.exists()) {
           hasLoadedFromFirestore.current = true;
           const d = snap.data();
-          console.log('📥 Loading task prefs from Firestore:', d.tm_selectedTaskCategories);
+          console.log('📥 TaskManager: User document exists:', {
+            tm_selectedTaskCategories: d.tm_selectedTaskCategories,
+            hasField: 'tm_selectedTaskCategories' in d,
+            isArray: Array.isArray(d.tm_selectedTaskCategories)
+          });
           if (d.tm_taskFilter) setTaskFilter(d.tm_taskFilter);
           if (d.tm_taskPriorityFilter) setTaskPriorityFilter(d.tm_taskPriorityFilter);
           if ('tm_selectedTaskCategories' in d && Array.isArray(d.tm_selectedTaskCategories)) {
@@ -223,11 +232,11 @@ export default function TaskManager({ isTMFullView, setIsTMFullView, blockPositi
               console.log('🔧 Fixed categories:', finalCategories);
             }
             
-            console.log('✅ Setting loaded categories:', finalCategories);
+            console.log('✅ TaskManager: Setting loaded categories:', finalCategories);
             savedSelectedRef.current = finalCategories;
             setSelectedTaskCategories(finalCategories);
           } else {
-            console.log('🔄 No saved categories, defaulting to all:', allCategories);
+            console.log('⚠️ TaskManager: No saved categories, defaulting to all:', allCategories);
             savedSelectedRef.current = allCategories;
             setSelectedTaskCategories(allCategories);
           }
@@ -236,13 +245,23 @@ export default function TaskManager({ isTMFullView, setIsTMFullView, blockPositi
           if (typeof d.tm_showOverdueEffects === 'boolean') setShowOverdueEffects(d.tm_showOverdueEffects);
         } else {
           hasLoadedFromFirestore.current = true;
-          console.log('🆕 No user document, defaulting to all categories:', allCategories);
+          console.log('⚠️ TaskManager: No user document, defaulting to all categories:', allCategories);
           savedSelectedRef.current = allCategories;
           setSelectedTaskCategories(allCategories);
         }
+        console.log('✅ TaskManager: Setting prefsLoaded=true, will set persistenceReady in 500ms');
         setPrefsLoaded(true);
+        setTimeout(() => {
+          console.log('✅ TaskManager: Setting persistenceReady=true');
+          setPersistenceReady(true);
+        }, 500);
       } catch (err) {
-        console.error('❌ Error loading prefs:', err);
+        console.error('❌ TaskManager: Error loading prefs:', err);
+        const allCategories = ["תוכניות טיפול", "לקבוע סדרה", "תשלומים וזיכויים", "דוחות", "להתקשר", "אחר"];
+        savedSelectedRef.current = allCategories;
+        setSelectedTaskCategories(allCategories);
+        setPrefsLoaded(true);
+        setTimeout(() => setPersistenceReady(true), 500);
       }
     };
     loadPrefs();
@@ -250,7 +269,10 @@ export default function TaskManager({ isTMFullView, setIsTMFullView, blockPositi
 
   // Persist task filters/preferences to Firestore
   useEffect(() => {
-    if (!currentUser || !prefsLoaded) return;
+    if (!currentUser || !prefsLoaded || !persistenceReady) {
+      console.log('💾 TaskManager: Skipping persistence:', { currentUser: !!currentUser, prefsLoaded, persistenceReady });
+      return;
+    }
     
     // Only persist if we've successfully loaded preferences from Firestore
     // This prevents persisting defaults before we've tried to load
@@ -259,12 +281,21 @@ export default function TaskManager({ isTMFullView, setIsTMFullView, blockPositi
       return;
     }
     
-    console.log('💾 Persisting selected categories:', selectedTaskCategories);
+    console.log('💾 TaskManager: Persisting preferences:', {
+      selectedTaskCategories,
+      taskFilter,
+      taskPriorityFilter,
+      taskSearchTerm,
+      showDoneTasks,
+      showOverdueEffects,
+      uid: currentUser.uid
+    });
+    
     // Update the ref to keep it in sync with current selection
     savedSelectedRef.current = selectedTaskCategories;
     const userRef = doc(db, 'users', currentUser.uid);
-    console.log('💾 TaskManager: Writing to Firestore, user ID:', currentUser.uid);
-    setDoc(userRef, {
+    
+    const dataToSave = {
       tm_taskFilter: taskFilter,
       tm_taskPriorityFilter: taskPriorityFilter,
       tm_selectedTaskCategories: selectedTaskCategories,
@@ -272,10 +303,20 @@ export default function TaskManager({ isTMFullView, setIsTMFullView, blockPositi
       tm_showDoneTasks: showDoneTasks,
       tm_showOverdueEffects: showOverdueEffects,
       updatedAt: serverTimestamp(),
-    }, { merge: true })
-      .then(() => console.log('✅ TaskManager: Successfully wrote to Firestore!'))
-      .catch((err) => console.error('❌ TaskManager: Error persisting:', err));
-  }, [currentUser, prefsLoaded, taskFilter, taskPriorityFilter, selectedTaskCategories, taskSearchTerm, showDoneTasks, showOverdueEffects]);
+    };
+    
+    console.log('💾 TaskManager: Data to save:', dataToSave);
+    
+    setDoc(userRef, dataToSave, { merge: true })
+      .then(() => {
+        console.log('✅ TaskManager: Successfully wrote to Firestore!');
+        console.log('✅ TaskManager: Saved data:', dataToSave);
+      })
+      .catch((err) => {
+        console.error('❌ TaskManager: Error persisting:', err);
+        console.error('❌ TaskManager: Failed to save:', dataToSave);
+      });
+  }, [currentUser, prefsLoaded, persistenceReady, taskFilter, taskPriorityFilter, selectedTaskCategories, taskSearchTerm, showDoneTasks, showOverdueEffects]);
 
   // Users now come from DataContext - no need to fetch
 
