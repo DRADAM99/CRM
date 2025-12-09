@@ -98,6 +98,7 @@ export default function CandidatesBlock({ isFullView: parentIsFullView, setIsFul
   const [blockOrder, setBlockOrder] = useState(() => getPref('candidates_blockOrder', 4));
   const [sortBy, setSortBy] = useState("priority");
   const [sortDirection, setSortDirection] = useState("desc");
+  const [rowLimit, setRowLimit] = useState(50);
   const [prefsLoaded, setPrefsLoaded] = useState(false);
   const [persistenceReady, setPersistenceReady] = useState(false);
   const savedSelectedRef = useRef(null);
@@ -159,6 +160,7 @@ export default function CandidatesBlock({ isFullView: parentIsFullView, setIsFul
           if (d.candidates_sortBy) setSortBy(d.candidates_sortBy);
           if (d.candidates_sortDirection) setSortDirection(d.candidates_sortDirection);
           if (typeof d.candidates_searchTerm === 'string') setSearchTerm(d.candidates_searchTerm);
+          if (typeof d.candidates_rowLimit === 'number') setRowLimit(d.candidates_rowLimit);
           
           // Handle status selection properly - check if field exists explicitly
           if ('candidates_selectedStatuses' in d && Array.isArray(d.candidates_selectedStatuses)) {
@@ -220,11 +222,12 @@ export default function CandidatesBlock({ isFullView: parentIsFullView, setIsFul
       candidates_sortDirection: sortDirection,
       candidates_searchTerm: searchTerm,
       candidates_selectedStatuses: selectedStatuses,
+      candidates_rowLimit: rowLimit,
       updatedAt: serverTimestamp(),
     }, { merge: true })
       .then(() => console.log('✅ CandidatesBlock: Successfully wrote to Firestore!'))
       .catch((err) => console.error('❌ CandidatesBlock: Error persisting candidates prefs:', err));
-  }, [currentUser, prefsLoaded, persistenceReady, sortBy, sortDirection, searchTerm, selectedStatuses]);
+  }, [currentUser, prefsLoaded, persistenceReady, sortBy, sortDirection, searchTerm, selectedStatuses, rowLimit]);
 
   // Persist full width preference to localStorage (less critical, can stay local)
   useEffect(() => {
@@ -600,73 +603,93 @@ export default function CandidatesBlock({ isFullView: parentIsFullView, setIsFul
               </div>
             </div>
             <div className="flex flex-wrap items-center gap-x-2 gap-y-2 mt-2 border-t pt-2">
-              <div className="w-full sm:w-auto">
-                <Label className="ml-1 text-sm font-medium">{'סטטוס:'}</Label>
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="outline" size="sm" className="h-8 text-sm w-full sm:w-[180px] justify-between">
-                      <span className="truncate">
-                        {selectedStatuses.length === candidatesStatuses.length
-                          ? "כל הסטטוסים"
-                          : selectedStatuses.length === 1
-                            ? candidatesStatuses.find(cat => cat === selectedStatuses[0])
-                            : `${selectedStatuses.length} נבחרו`}
-                      </span>
-                      <ChevronDown className="h-4 w-4 opacity-50 flex-shrink-0" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent className="w-[180px]" dir="rtl">
-                    <DropdownMenuLabel>{'סינון סטטוס'}</DropdownMenuLabel>
-                    <DropdownMenuSeparator />
-                    {candidatesStatuses.map((status) => (
-                      <DropdownMenuCheckboxItem
-                        key={status}
-                        checked={selectedStatuses.includes(status)}
-                        onCheckedChange={() => setSelectedStatuses(prev => prev.includes(status) ? prev.filter(s => s !== status) : [...prev, status])}
-                        onSelect={e => e.preventDefault()}
-                        className="flex flex-row-reverse items-center justify-between"
-                      >
-                        <span className={`inline-block w-4 h-4 rounded mr-2 ${leadStatusConfig[status].color}`}></span>
-                        {status}
-                      </DropdownMenuCheckboxItem>
-                    ))}
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </div>
-              <div className="relative w-full sm:w-auto flex-grow sm:flex-grow-0">
+              <Select value={String(rowLimit)} onValueChange={(val) => setRowLimit(Number(val))}>
+                <SelectTrigger className="h-8 text-sm w-[80px]"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="10">10</SelectItem>
+                  <SelectItem value="20">20</SelectItem>
+                  <SelectItem value="30">30</SelectItem>
+                  <SelectItem value="40">40</SelectItem>
+                  <SelectItem value="50">50</SelectItem>
+                  <SelectItem value="60">60</SelectItem>
+                  <SelectItem value="70">70</SelectItem>
+                  <SelectItem value="80">80</SelectItem>
+                  <SelectItem value="90">90</SelectItem>
+                  <SelectItem value="100">100</SelectItem>
+                </SelectContent>
+              </Select>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm" className="h-8 text-sm w-[180px] justify-between">
+                    <span className="truncate">
+                      {selectedStatuses.length === candidatesStatuses.length
+                        ? "כל הסטטוסים"
+                        : selectedStatuses.length === 1
+                          ? candidatesStatuses.find(cat => cat === selectedStatuses[0])
+                          : `${selectedStatuses.length} נבחרו`}
+                    </span>
+                    <ChevronDown className="h-4 w-4 opacity-50 flex-shrink-0" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent className="w-[180px]" dir="rtl">
+                  <DropdownMenuLabel>{'סינון סטטוס'}</DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  {candidatesStatuses.map((status) => (
+                    <DropdownMenuCheckboxItem
+                      key={status}
+                      checked={selectedStatuses.includes(status)}
+                      onCheckedChange={() => setSelectedStatuses(prev => prev.includes(status) ? prev.filter(s => s !== status) : [...prev, status])}
+                      onSelect={e => e.preventDefault()}
+                      className="flex flex-row-reverse items-center justify-between"
+                    >
+                      <span className={`inline-block w-4 h-4 rounded mr-2 ${leadStatusConfig[status].color}`}></span>
+                      {status}
+                    </DropdownMenuCheckboxItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-8 text-sm px-3"
+                onClick={() => setSelectedStatuses(candidatesStatuses)}
+              >
+                כולם
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-8 text-sm px-3"
+                onClick={() => setSelectedStatuses(["הומלץ טיפול", "רשימת המתנה", "ניתן מידע", "הסדר תשלום", "ממשיכים לסדרה נוספת"])}
+              >
+                ראשי
+              </Button>
+              <div className="relative">
                 <Search className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
                 <Input
                   type="search"
                   placeholder="חפש מועמד..."
-                  className="h-8 text-sm pl-8 w-full sm:w-[180px]"
+                  className="h-8 text-sm pl-8 w-[180px]"
                   value={searchTerm}
                   onChange={e => setSearchTerm(e.target.value)}
                 />
               </div>
-              <div className="flex items-center gap-2 w-full sm:w-auto">
-                <div className="flex-1 sm:flex-initial">
-                  <Label className="ml-1 text-sm font-medium">{'סדר לפי:'}</Label>
-                  <Select value={sortBy} onValueChange={setSortBy}>
-                    <SelectTrigger className="h-8 text-sm w-full sm:w-[120px]"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="priority">עדיפות</SelectItem>
-                      <SelectItem value="date">תאריך יצירה</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label className="ml-1 text-sm font-medium">{'כיוון:'}</Label>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="h-8 text-sm w-[40px] px-2"
-                    onClick={() => setSortDirection(dir => dir === 'asc' ? 'desc' : 'asc')}
-                    title={sortDirection === 'asc' ? 'סדר עולה' : 'סדר יורד'}
-                  >
-                    {sortDirection === 'asc' ? '⬆️' : '⬇️'}
-                  </Button>
-                </div>
-              </div>
+              <Select value={sortBy} onValueChange={setSortBy}>
+                <SelectTrigger className="h-8 text-sm w-[120px]"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="priority">עדיפות</SelectItem>
+                  <SelectItem value="date">תאריך יצירה</SelectItem>
+                </SelectContent>
+              </Select>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-8 text-sm w-[40px] px-2"
+                onClick={() => setSortDirection(dir => dir === 'asc' ? 'desc' : 'asc')}
+                title={sortDirection === 'asc' ? 'סדר עולה' : 'סדר יורד'}
+              >
+                {sortDirection === 'asc' ? '⬆️' : '⬇️'}
+              </Button>
             </div>
           </div>
         </CardHeader>
@@ -687,7 +710,7 @@ export default function CandidatesBlock({ isFullView: parentIsFullView, setIsFul
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredCandidates.map(lead => {
+                  {filteredCandidates.slice(0, rowLimit).map(lead => {
                     const colorTab = leadColorTab(lead.status);
                     return (
                       <React.Fragment key={lead.id}>
@@ -857,7 +880,7 @@ export default function CandidatesBlock({ isFullView: parentIsFullView, setIsFul
             // --- Compact List View ---
             <ul className="space-y-2 h-[calc(100vh-280px)] min-h-[400px] overflow-y-auto pr-1">
               {filteredCandidates.length === 0 && (<li className="text-center text-gray-500 py-6">{'אין לידים להצגה'}</li>)}
-              {filteredCandidates.map(lead => {
+              {filteredCandidates.slice(0, rowLimit).map(lead => {
                 const colorTab = leadColorTab(lead.status);
                 return (
                   <li key={lead.id} className="p-2 border rounded shadow-sm flex items-center gap-2 bg-white hover:bg-gray-50">

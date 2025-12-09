@@ -70,6 +70,7 @@ export default function LeadManager({ isFullView, setIsFullView, blockPosition, 
   const [leadFilterTo, setLeadFilterTo] = useState("");
   const [leadSearchTerm, setLeadSearchTerm] = useState("");
   const [leadSortDirection, setLeadSortDirection] = useState('desc');
+  const [leadRowLimit, setLeadRowLimit] = useState(50);
   const allLeadCategories = useMemo(() => Object.keys(leadStatusConfig).filter(k => k !== 'Default'), []);
   const [selectedLeadCategories, setSelectedLeadCategories] = useState([]);
   const [prefsLoaded, setPrefsLoaded] = useState(false);
@@ -136,6 +137,7 @@ export default function LeadManager({ isFullView, setIsFullView, blockPosition, 
           if (typeof d.lead_filterFrom === 'string') setLeadFilterFrom(d.lead_filterFrom);
           if (typeof d.lead_filterTo === 'string') setLeadFilterTo(d.lead_filterTo);
           if (typeof d.lead_searchTerm === 'string') setLeadSearchTerm(d.lead_searchTerm);
+          if (typeof d.lead_rowLimit === 'number') setLeadRowLimit(d.lead_rowLimit);
           
           // Handle category selection properly - check if field exists explicitly
           if ('lead_selectedCategories' in d && Array.isArray(d.lead_selectedCategories)) {
@@ -203,12 +205,13 @@ export default function LeadManager({ isFullView, setIsFullView, blockPosition, 
       lead_filterTo: leadFilterTo,
       lead_searchTerm: leadSearchTerm,
       lead_selectedCategories: selectedLeadCategories,
+      lead_rowLimit: leadRowLimit,
       leads_isFullView: isFullView,
       updatedAt: serverTimestamp(),
     }, { merge: true })
       .then(() => console.log('✅ LeadManager: Successfully wrote to Firestore!'))
       .catch((err) => console.error('❌ LeadManager: Error persisting lead prefs:', err));
-  }, [currentUser, prefsLoaded, persistenceReady, leadSortBy, leadSortDirection, leadTimeFilter, leadFilterFrom, leadFilterTo, leadSearchTerm, selectedLeadCategories, isFullView]);
+  }, [currentUser, prefsLoaded, persistenceReady, leadSortBy, leadSortDirection, leadTimeFilter, leadFilterFrom, leadFilterTo, leadSearchTerm, selectedLeadCategories, leadRowLimit, isFullView]);
 
   // Bridge analytics toggle to page.js (to show the original analytics panel)
   useEffect(() => {
@@ -650,23 +653,51 @@ export default function LeadManager({ isFullView, setIsFullView, blockPosition, 
                   })}
                 </DropdownMenuContent>
               </DropdownMenu>
-              <div className="flex items-center gap-2 px-3 py-1 bg-blue-50 border border-blue-200 rounded-md">
-                <span className="text-sm font-medium text-blue-900">מציג:</span>
-                <span className="text-lg font-bold text-blue-700">{leadsSorted.length}</span>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-9 text-sm px-3"
+                onClick={() => setSelectedLeadCategories(allLeadCategories)}
+              >
+                כולם
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-9 text-sm px-3"
+                onClick={() => setSelectedLeadCategories(["חדש", "ממתין לתשובה של ד״ר וינטר"])}
+              >
+                ראשי
+              </Button>
+              <Select value={String(leadRowLimit)} onValueChange={(val) => setLeadRowLimit(Number(val))}>
+                <SelectTrigger className="h-9 text-sm w-[80px]"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="10">10</SelectItem>
+                  <SelectItem value="20">20</SelectItem>
+                  <SelectItem value="30">30</SelectItem>
+                  <SelectItem value="40">40</SelectItem>
+                  <SelectItem value="50">50</SelectItem>
+                  <SelectItem value="60">60</SelectItem>
+                  <SelectItem value="70">70</SelectItem>
+                  <SelectItem value="80">80</SelectItem>
+                  <SelectItem value="90">90</SelectItem>
+                  <SelectItem value="100">100</SelectItem>
+                </SelectContent>
+              </Select>
+              <div className="flex items-center gap-2 px-3 h-9 bg-blue-50 border border-blue-200 rounded-md">
+                <span className="text-sm font-medium text-blue-900">מתוך:</span>
+                <span className="text-lg font-bold text-blue-700 leading-none">{leadsSorted.length}</span>
                 <span className="text-sm font-medium text-blue-900">לידים</span>
               </div>
-              <div>
-                <Label className="ml-1 text-sm font-medium">{'סנן זמן:'}</Label>
-                <Select value={leadTimeFilter} onValueChange={setLeadTimeFilter}>
-                  <SelectTrigger className="h-8 text-sm w-[130px]"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">{'הכל'}</SelectItem>
-                    <SelectItem value="week">{'שבוע אחרון'}</SelectItem>
-                    <SelectItem value="month">{'חודש אחרון'}</SelectItem>
-                    <SelectItem value="custom">{'טווח תאריכים'}</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+              <Select value={leadTimeFilter} onValueChange={setLeadTimeFilter}>
+                <SelectTrigger className="h-9 text-sm w-[130px]"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">{'הכל'}</SelectItem>
+                  <SelectItem value="week">{'שבוע אחרון'}</SelectItem>
+                  <SelectItem value="month">{'חודש אחרון'}</SelectItem>
+                  <SelectItem value="custom">{'טווח תאריכים'}</SelectItem>
+                </SelectContent>
+              </Select>
               {leadTimeFilter === "custom" && (
                 <div className="flex flex-wrap items-center gap-2">
                   <Input type="date" value={leadFilterFrom} onChange={(e) => setLeadFilterFrom(e.target.value)} className="h-9 text-sm w-[140px]" placeholder="מתאריך..." />
@@ -725,7 +756,7 @@ export default function LeadManager({ isFullView, setIsFullView, blockPosition, 
               </thead>
               <tbody>
                 {leadsSorted.length === 0 && (<tr><td colSpan={7} className="text-center text-gray-500 py-6">{'אין לידים להצגה'}</td></tr>)}
-                {leadsSorted.map((lead) => {
+                {leadsSorted.slice(0, leadRowLimit).map((lead) => {
                   const colorTab = leadColorTab(lead.status);
                   return (
                     <React.Fragment key={`lead-rows-${lead.id}`}>
@@ -874,7 +905,7 @@ export default function LeadManager({ isFullView, setIsFullView, blockPosition, 
         ) : (
           <ul className="space-y-2 h-[calc(100vh-280px)] min-h-[400px] overflow-y-auto pr-1">
             {leadsSorted.length === 0 && (<li className="text-center text-gray-500 py-6">{'אין לידים להצגה'}</li>)}
-            {leadsSorted.map((lead) => {
+            {leadsSorted.slice(0, leadRowLimit).map((lead) => {
               const colorTab = leadColorTab(lead.status);
               return (
                 <li key={`compact-${lead.id}`} className="p-2 border rounded shadow-sm flex items-center gap-2 bg-white hover:bg-gray-50">
