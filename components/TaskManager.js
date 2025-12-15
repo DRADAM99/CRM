@@ -206,8 +206,14 @@ export default function TaskManager({ isTMFullView, setIsTMFullView, blockPositi
     console.log('📥 TaskManager: Starting to load preferences for user:', currentUser.uid);
     const loadPrefs = async () => {
       try {
+        // Small delay to ensure Firebase is fully initialized
+        await new Promise(resolve => setTimeout(resolve, 100));
+        
         const userRef = doc(db, 'users', currentUser.uid);
+        console.log('🔍 TaskManager: Fetching user document for UID:', currentUser.uid);
         const snap = await getDoc(userRef);
+        console.log('🔍 TaskManager: Got snapshot, exists:', snap.exists(), 'fromCache:', snap.metadata.fromCache);
+        
         const allCategories = ["תוכניות טיפול", "לקבוע סדרה", "תשלומים וזיכויים", "דוחות", "להתקשר", "אחר"];
         
         if (snap.exists()) {
@@ -282,22 +288,25 @@ export default function TaskManager({ isTMFullView, setIsTMFullView, blockPositi
         }
         console.log('✅ TaskManager: Setting prefsLoaded=true');
         setPrefsLoaded(true);
-        // Only set persistenceReady if we successfully loaded existing preferences
-        if (snap.exists()) {
-          console.log('✅ TaskManager: Setting persistenceReady=true (loaded existing prefs)');
-          setPersistenceReady(true);
-        }
       } catch (err) {
         console.error('❌ TaskManager: Error loading prefs:', err);
         const allCategories = ["תוכניות טיפול", "לקבוע סדרה", "תשלומים וזיכויים", "דוחות", "להתקשר", "אחר"];
         savedSelectedRef.current = allCategories;
         setSelectedTaskCategories(allCategories);
         setPrefsLoaded(true);
-        setPersistenceReady(true);
       }
     };
     loadPrefs();
   }, [currentUser]);
+
+  // Set persistenceReady in a separate effect after prefsLoaded is true
+  // This ensures proper timing and prevents race conditions
+  useEffect(() => {
+    if (prefsLoaded && hasLoadedFromFirestore.current) {
+      console.log('✅ TaskManager: Setting persistenceReady=true (after prefs loaded)');
+      setPersistenceReady(true);
+    }
+  }, [prefsLoaded]);
 
   // Persist task filters/preferences to Firestore
   useEffect(() => {

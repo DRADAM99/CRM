@@ -129,8 +129,14 @@ export default function LeadManager({ isFullView, setIsFullView, blockPosition, 
     console.log('📥 LeadManager: Starting to load preferences for user:', currentUser.uid);
     const loadPrefs = async () => {
       try {
+        // Small delay to ensure Firebase is fully initialized
+        await new Promise(resolve => setTimeout(resolve, 100));
+        
         const userRef = doc(db, 'users', currentUser.uid);
+        console.log('🔍 LeadManager: Fetching user document for UID:', currentUser.uid);
         const snap = await getDoc(userRef);
+        console.log('🔍 LeadManager: Got snapshot, exists:', snap.exists(), 'fromCache:', snap.metadata.fromCache);
+        
         if (snap.exists()) {
           hasLoadedFromFirestore.current = true;
           const d = snap.data();
@@ -172,22 +178,25 @@ export default function LeadManager({ isFullView, setIsFullView, blockPosition, 
         }
         console.log('✅ LeadManager: Setting prefsLoaded=true');
         setPrefsLoaded(true);
-        // Only set persistenceReady if we successfully loaded existing preferences
-        if (snap.exists()) {
-          console.log('✅ LeadManager: Setting persistenceReady=true (loaded existing prefs)');
-          setPersistenceReady(true);
-        }
       } catch (err) {
         console.error('❌ LeadManager: Error loading lead prefs:', err);
         // On error, default to all categories
         savedSelectedRef.current = allLeadCategories;
         setSelectedLeadCategories(allLeadCategories);
         setPrefsLoaded(true);
-        setPersistenceReady(true);
       }
     };
     loadPrefs();
   }, [currentUser, setIsFullView]);
+
+  // Set persistenceReady in a separate effect after prefsLoaded is true
+  // This ensures proper timing and prevents race conditions
+  useEffect(() => {
+    if (prefsLoaded && hasLoadedFromFirestore.current) {
+      console.log('✅ LeadManager: Setting persistenceReady=true (after prefs loaded)');
+      setPersistenceReady(true);
+    }
+  }, [prefsLoaded]);
 
   // Persist lead filters/preferences and block layout to Firestore
   useEffect(() => {

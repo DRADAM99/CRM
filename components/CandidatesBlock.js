@@ -155,8 +155,14 @@ export default function CandidatesBlock({ isFullView: parentIsFullView, setIsFul
     console.log('📥 CandidatesBlock: Starting to load preferences for user:', currentUser.uid);
     const loadPrefs = async () => {
       try {
+        // Small delay to ensure Firebase is fully initialized
+        await new Promise(resolve => setTimeout(resolve, 100));
+        
         const userRef = doc(db, 'users', currentUser.uid);
+        console.log('🔍 CandidatesBlock: Fetching user document for UID:', currentUser.uid);
         const snap = await getDoc(userRef);
+        console.log('🔍 CandidatesBlock: Got snapshot, exists:', snap.exists(), 'fromCache:', snap.metadata.fromCache);
+        
         if (snap.exists()) {
           hasLoadedFromFirestore.current = true;
           const d = snap.data();
@@ -192,22 +198,25 @@ export default function CandidatesBlock({ isFullView: parentIsFullView, setIsFul
         }
         console.log('✅ CandidatesBlock: Setting prefsLoaded=true');
         setPrefsLoaded(true);
-        // Only set persistenceReady if we successfully loaded existing preferences
-        if (snap.exists()) {
-          console.log('✅ CandidatesBlock: Setting persistenceReady=true (loaded existing prefs)');
-          setPersistenceReady(true);
-        }
       } catch (err) {
         console.error('❌ CandidatesBlock: Error loading candidates prefs:', err);
         // On error, default to all statuses
         savedSelectedRef.current = candidatesStatuses;
         setSelectedStatuses(candidatesStatuses);
         setPrefsLoaded(true);
-        setPersistenceReady(true);
       }
     };
     loadPrefs();
   }, [currentUser]);
+
+  // Set persistenceReady in a separate effect after prefsLoaded is true
+  // This ensures proper timing and prevents race conditions
+  useEffect(() => {
+    if (prefsLoaded && hasLoadedFromFirestore.current) {
+      console.log('✅ CandidatesBlock: Setting persistenceReady=true (after prefs loaded)');
+      setPersistenceReady(true);
+    }
+  }, [prefsLoaded]);
 
   // Persist preferences to Firestore
   useEffect(() => {
