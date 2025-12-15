@@ -141,12 +141,10 @@ export default function CandidatesBlock({ isFullView: parentIsFullView, setIsFul
 
   // Helper to mark that user has explicitly changed preferences
   const markPrefsChanged = useCallback(() => {
-    if (!userHasExplicitlyChangedPrefs) {
-      console.log('🔔 CandidatesBlock: User explicitly changed preferences - enabling persistence');
-      setUserHasExplicitlyChangedPrefs(true);
-      setPersistenceReady(true); // Enable persistence now that user has made a change
-    }
-  }, [userHasExplicitlyChangedPrefs]);
+    console.log('🔔 CandidatesBlock: User explicitly changed preferences - enabling persistence');
+    setUserHasExplicitlyChangedPrefs(true);
+    setPersistenceReady(true); // Enable persistence now that user has made a change
+  }, []);
 
   // Load persisted preferences from Firestore
   useEffect(() => {
@@ -196,10 +194,8 @@ export default function CandidatesBlock({ isFullView: parentIsFullView, setIsFul
         setPrefsLoaded(true);
         // Only set persistenceReady if we successfully loaded existing preferences
         if (snap.exists()) {
-          setTimeout(() => {
-            console.log('✅ CandidatesBlock: Setting persistenceReady=true (loaded existing prefs)');
-            setPersistenceReady(true);
-          }, 500);
+          console.log('✅ CandidatesBlock: Setting persistenceReady=true (loaded existing prefs)');
+          setPersistenceReady(true);
         }
       } catch (err) {
         console.error('❌ CandidatesBlock: Error loading candidates prefs:', err);
@@ -207,7 +203,7 @@ export default function CandidatesBlock({ isFullView: parentIsFullView, setIsFul
         savedSelectedRef.current = candidatesStatuses;
         setSelectedStatuses(candidatesStatuses);
         setPrefsLoaded(true);
-        setTimeout(() => setPersistenceReady(true), 500);
+        setPersistenceReady(true);
       }
     };
     loadPrefs();

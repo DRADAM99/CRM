@@ -192,12 +192,10 @@ export default function TaskManager({ isTMFullView, setIsTMFullView, blockPositi
 
   // Helper to mark that user has explicitly changed preferences
   const markPrefsChanged = useCallback(() => {
-    if (!userHasExplicitlyChangedPrefs) {
-      console.log('🔔 TaskManager: User explicitly changed preferences - enabling persistence');
-      setUserHasExplicitlyChangedPrefs(true);
-      setPersistenceReady(true); // Enable persistence now that user has made a change
-    }
-  }, [userHasExplicitlyChangedPrefs]);
+    console.log('🔔 TaskManager: User explicitly changed preferences - enabling persistence');
+    setUserHasExplicitlyChangedPrefs(true);
+    setPersistenceReady(true); // Enable persistence now that user has made a change
+  }, []);
 
   // Load persisted task filters/preferences from Firestore
   useEffect(() => {
@@ -286,10 +284,8 @@ export default function TaskManager({ isTMFullView, setIsTMFullView, blockPositi
         setPrefsLoaded(true);
         // Only set persistenceReady if we successfully loaded existing preferences
         if (snap.exists()) {
-          setTimeout(() => {
-            console.log('✅ TaskManager: Setting persistenceReady=true (loaded existing prefs)');
-            setPersistenceReady(true);
-          }, 500);
+          console.log('✅ TaskManager: Setting persistenceReady=true (loaded existing prefs)');
+          setPersistenceReady(true);
         }
       } catch (err) {
         console.error('❌ TaskManager: Error loading prefs:', err);
@@ -297,7 +293,7 @@ export default function TaskManager({ isTMFullView, setIsTMFullView, blockPositi
         savedSelectedRef.current = allCategories;
         setSelectedTaskCategories(allCategories);
         setPrefsLoaded(true);
-        setTimeout(() => setPersistenceReady(true), 500);
+        setPersistenceReady(true);
       }
     };
     loadPrefs();
@@ -469,6 +465,10 @@ export default function TaskManager({ isTMFullView, setIsTMFullView, blockPositi
     setKanbanCollapsed((prev) => {
       const updated = { ...prev, [category]: !prev[category] };
       console.log('🔄 TaskManager: Toggling kanban collapse:', { category, newState: updated });
+      if (currentUser) {
+        const userRef = doc(db, 'users', currentUser.uid);
+        updateDoc(userRef, { kanbanCollapsed: updated }).catch(err => console.error('Error saving kanbanCollapsed:', err));
+      }
       return updated;
     });
   };
@@ -478,6 +478,10 @@ export default function TaskManager({ isTMFullView, setIsTMFullView, blockPositi
     setKanbanTaskCollapsed((prev) => {
       const updated = { ...prev, [taskId]: !prev[taskId] };
       console.log('🔄 TaskManager: Toggling task collapse:', { taskId, newState: updated });
+      if (currentUser) {
+        const userRef = doc(db, 'users', currentUser.uid);
+        updateDoc(userRef, { kanbanTaskCollapsed: updated }).catch(err => console.error('Error saving kanbanTaskCollapsed:', err));
+      }
       return updated;
     });
   };

@@ -115,12 +115,10 @@ export default function LeadManager({ isFullView, setIsFullView, blockPosition, 
 
   // Helper to mark that user has explicitly changed preferences
   const markPrefsChanged = useCallback(() => {
-    if (!userHasExplicitlyChangedPrefs) {
-      console.log('🔔 LeadManager: User explicitly changed preferences - enabling persistence');
-      setUserHasExplicitlyChangedPrefs(true);
-      setPersistenceReady(true); // Enable persistence now that user has made a change
-    }
-  }, [userHasExplicitlyChangedPrefs]);
+    console.log('🔔 LeadManager: User explicitly changed preferences - enabling persistence');
+    setUserHasExplicitlyChangedPrefs(true);
+    setPersistenceReady(true); // Enable persistence now that user has made a change
+  }, []);
 
   // Load persisted lead filters/preferences and block layout from Firestore
   useEffect(() => {
@@ -176,10 +174,8 @@ export default function LeadManager({ isFullView, setIsFullView, blockPosition, 
         setPrefsLoaded(true);
         // Only set persistenceReady if we successfully loaded existing preferences
         if (snap.exists()) {
-          setTimeout(() => {
-            console.log('✅ LeadManager: Setting persistenceReady=true (loaded existing prefs)');
-            setPersistenceReady(true);
-          }, 500);
+          console.log('✅ LeadManager: Setting persistenceReady=true (loaded existing prefs)');
+          setPersistenceReady(true);
         }
       } catch (err) {
         console.error('❌ LeadManager: Error loading lead prefs:', err);
@@ -187,7 +183,7 @@ export default function LeadManager({ isFullView, setIsFullView, blockPosition, 
         savedSelectedRef.current = allLeadCategories;
         setSelectedLeadCategories(allLeadCategories);
         setPrefsLoaded(true);
-        setTimeout(() => setPersistenceReady(true), 500);
+        setPersistenceReady(true);
       }
     };
     loadPrefs();
