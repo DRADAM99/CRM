@@ -253,6 +253,27 @@ export default function TaskManager({ isTMFullView, setIsTMFullView, blockPositi
           if (typeof d.tm_taskSearchTerm === 'string') setTaskSearchTerm(d.tm_taskSearchTerm);
           if (typeof d.tm_showDoneTasks === 'boolean') setShowDoneTasks(d.tm_showDoneTasks);
           if (typeof d.tm_showOverdueEffects === 'boolean') setShowOverdueEffects(d.tm_showOverdueEffects);
+          // Load collapse states
+          console.log('🔍 TaskManager: Checking collapse states in Firebase:', {
+            hasKanbanCollapsed: 'kanbanCollapsed' in d,
+            kanbanCollapsedType: typeof d.kanbanCollapsed,
+            kanbanCollapsedValue: d.kanbanCollapsed,
+            hasKanbanTaskCollapsed: 'kanbanTaskCollapsed' in d,
+            kanbanTaskCollapsedType: typeof d.kanbanTaskCollapsed,
+            kanbanTaskCollapsedValue: d.kanbanTaskCollapsed
+          });
+          if (d.kanbanCollapsed && typeof d.kanbanCollapsed === 'object') {
+            console.log('✅ TaskManager: Loading kanbanCollapsed from Firebase:', d.kanbanCollapsed);
+            setKanbanCollapsed(d.kanbanCollapsed);
+          } else {
+            console.log('⚠️ TaskManager: No kanbanCollapsed found in Firebase, keeping default {}');
+          }
+          if (d.kanbanTaskCollapsed && typeof d.kanbanTaskCollapsed === 'object') {
+            console.log('✅ TaskManager: Loading kanbanTaskCollapsed from Firebase:', d.kanbanTaskCollapsed);
+            setKanbanTaskCollapsed(d.kanbanTaskCollapsed);
+          } else {
+            console.log('⚠️ TaskManager: No kanbanTaskCollapsed found in Firebase, keeping default {}');
+          }
         } else {
           hasLoadedFromFirestore.current = false; // NOT loaded from Firestore
           console.log('⚠️ TaskManager: No user document exists yet, defaulting to all categories:', allCategories);
@@ -311,6 +332,8 @@ export default function TaskManager({ isTMFullView, setIsTMFullView, blockPositi
       taskSearchTerm,
       showDoneTasks,
       showOverdueEffects,
+      kanbanCollapsed,
+      kanbanTaskCollapsed,
       uid: currentUser.uid
     });
     
@@ -325,6 +348,8 @@ export default function TaskManager({ isTMFullView, setIsTMFullView, blockPositi
       tm_taskSearchTerm: taskSearchTerm,
       tm_showDoneTasks: showDoneTasks,
       tm_showOverdueEffects: showOverdueEffects,
+      kanbanCollapsed: kanbanCollapsed,
+      kanbanTaskCollapsed: kanbanTaskCollapsed,
       updatedAt: serverTimestamp(),
     };
     
@@ -343,7 +368,7 @@ export default function TaskManager({ isTMFullView, setIsTMFullView, blockPositi
         console.error('❌ TaskManager: Error persisting:', err);
         console.error('❌ TaskManager: Failed to save:', dataToSave);
       });
-  }, [currentUser, prefsLoaded, persistenceReady, userHasExplicitlyChangedPrefs, taskFilter, taskPriorityFilter, selectedTaskCategories, taskSearchTerm, showDoneTasks, showOverdueEffects]);
+  }, [currentUser, prefsLoaded, persistenceReady, userHasExplicitlyChangedPrefs, taskFilter, taskPriorityFilter, selectedTaskCategories, taskSearchTerm, showDoneTasks, showOverdueEffects, kanbanCollapsed, kanbanTaskCollapsed]);
 
   // Users now come from DataContext - no need to fetch
 
@@ -439,42 +464,20 @@ export default function TaskManager({ isTMFullView, setIsTMFullView, blockPositi
     updateKanbanCategoryOrder(newOrder);
   };
 
-  // Fetch per-task collapsed state from Firestore
-  useEffect(() => {
-    if (!currentUser) return;
-    const fetchTaskCollapsed = async () => {
-      try {
-        const userRef = doc(db, 'users', currentUser.uid);
-        const userSnap = await getDoc(userRef);
-        if (userSnap.exists()) {
-          const data = userSnap.data();
-          setKanbanTaskCollapsed(data.kanbanTaskCollapsed || {});
-        }
-      } catch {
-        setKanbanTaskCollapsed({});
-      }
-    };
-    fetchTaskCollapsed();
-  }, [currentUser]);
-
   const handleToggleKanbanCollapse = async (category) => {
+    markPrefsChanged();
     setKanbanCollapsed((prev) => {
       const updated = { ...prev, [category]: !prev[category] };
-      if (currentUser) {
-        const userRef = doc(db, 'users', currentUser.uid);
-        updateDoc(userRef, { kanbanCollapsed: updated });
-      }
+      console.log('🔄 TaskManager: Toggling kanban collapse:', { category, newState: updated });
       return updated;
     });
   };
 
   const handleToggleTaskCollapse = async (taskId) => {
+    markPrefsChanged();
     setKanbanTaskCollapsed((prev) => {
       const updated = { ...prev, [taskId]: !prev[taskId] };
-      if (currentUser) {
-        const userRef = doc(db, 'users', currentUser.uid);
-        updateDoc(userRef, { kanbanTaskCollapsed: updated });
-      }
+      console.log('🔄 TaskManager: Toggling task collapse:', { taskId, newState: updated });
       return updated;
     });
   };

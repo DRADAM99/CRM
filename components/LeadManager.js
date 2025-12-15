@@ -729,6 +729,7 @@ export default function LeadManager({ isFullView, setIsFullView, blockPosition, 
                   <SelectItem value="80">80</SelectItem>
                   <SelectItem value="90">90</SelectItem>
                   <SelectItem value="100">100</SelectItem>
+                  <SelectItem value="150">150</SelectItem>
                 </SelectContent>
               </Select>
               <div className="flex items-center gap-2 px-3 h-9 bg-blue-50 border border-blue-200 rounded-md">

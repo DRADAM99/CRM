@@ -661,6 +661,7 @@ export default function CandidatesBlock({ isFullView: parentIsFullView, setIsFul
                   <SelectItem value="80">80</SelectItem>
                   <SelectItem value="90">90</SelectItem>
                   <SelectItem value="100">100</SelectItem>
+                  <SelectItem value="150">150</SelectItem>
                 </SelectContent>
               </Select>
               <DropdownMenu>
