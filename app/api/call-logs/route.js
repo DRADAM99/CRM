@@ -57,6 +57,8 @@ export async function POST(req) {
     // Add extension number filter if provided
     if (extensionNumber) {
       payload.number = String(extensionNumber);
+      // Add extension password (same as used in click2call)
+      payload.extension_password = "bdb307dc55bf1e679c296ee5c73215cb";
     }
 
     console.log("Fetching call logs from MasterPBX:", {
