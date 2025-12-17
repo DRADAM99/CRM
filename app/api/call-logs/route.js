@@ -65,91 +65,127 @@ export async function POST(req) {
       dateRange: `${startDate} to ${endDate}`
     });
 
-    // Make the request to MasterPBX
-    const pbxResponse = await fetch(pbxUrl, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(payload)
-    });
+    // Create an AbortController for timeout
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 8000); // 8 second timeout
 
-    const pbxData = await pbxResponse.json();
+    try {
+      // Make the request to MasterPBX with timeout
+      const pbxResponse = await fetch(pbxUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+        signal: controller.signal
+      });
 
-    console.log("MasterPBX response status:", pbxData.status, "message:", pbxData.message);
-    console.log("MasterPBX sample data:", pbxData.data?.[0] ? JSON.stringify(pbxData.data[0], null, 2) : "no data");
+      clearTimeout(timeoutId);
 
-    // Handle "no data found" as valid empty response (not an error)
-    if (pbxData.status === "ERROR" && pbxData.message?.includes("Not Found")) {
-      console.log("No call logs found for this date/extension - returning empty array");
+      if (!pbxResponse.ok) {
+        throw new Error(`PBX API returned ${pbxResponse.status}: ${pbxResponse.statusText}`);
+      }
+
+      const pbxData = await pbxResponse.json();
+
+      console.log("MasterPBX response status:", pbxData.status, "message:", pbxData.message);
+      console.log("MasterPBX sample data:", pbxData.data?.[0] ? JSON.stringify(pbxData.data[0], null, 2) : "no data");
+
+      // Handle "no data found" as valid empty response (not an error)
+      if (pbxData.status === "ERROR" && pbxData.message?.includes("Not Found")) {
+        console.log("No call logs found for this date/extension - returning empty array");
+        return createResponse({
+          success: true,
+          data: [],
+          count: 0,
+          dateRange: { startDate, endDate },
+          extensionNumber: extensionNumber || null,
+          message: "אין שיחות בתאריך זה"
+        });
+      }
+
+      // Check for actual API errors
+      if (pbxData.status !== "SUCCESS") {
+        console.error("MasterPBX API error:", pbxData);
+        return createResponse({
+          success: false,
+          error: "MasterPBX API error",
+          details: pbxData.message || "Unknown error",
+          status: pbxData.status
+        }, 200); // Return 200 so frontend can handle gracefully
+      }
+
+      // Process and format the call log data
+      const callLogs = (pbxData.data || []).map(call => {
+        // Calculate duration in seconds from answer_sec field (more accurate)
+        const answerSeconds = parseInt(call.answer_sec) || 0;
+        // Fallback to calculating from start/end times
+        const startTime = new Date(call.start_date);
+        const endTime = new Date(call.end_date);
+        const calculatedSeconds = Math.max(0, Math.floor((endTime - startTime) / 1000));
+        const durationSeconds = answerSeconds > 0 ? answerSeconds : calculatedSeconds;
+
+        return {
+          id: `${call.start_date}-${call.caller}-${call.callee}`,
+          callId: call.callid,
+          startDate: call.start_date,
+          endDate: call.end_date,
+          answerTime: call.answer_time,
+          caller: call.caller,
+          callerName: call.caller_name,
+          callee: call.callee,
+          calleeName: call.callee_name,
+          forward: call.forward,
+          durationSeconds,
+          durationFormatted: formatDuration(durationSeconds),
+          callStatus: call.call_status,
+          // Determine call direction based on extension number
+          direction: extensionNumber ? 
+            (call.caller === String(extensionNumber) ? 'outgoing' : 'incoming') : 
+            'unknown',
+          incomingCharges: call.incoming_call_charges,
+          outgoingCharges: call.outgoing_call_charges,
+          // Recording info - unique_token is used to fetch recording
+          // Only show recording for answered calls with duration > 5 seconds
+          uniqueToken: call.unique_token,
+          hasRecording: call.call_status === 'Answered' && answerSeconds >= 5 && call.unique_token,
+        };
+      });
+
+      // Sort by start date descending (newest first)
+      callLogs.sort((a, b) => new Date(b.startDate) - new Date(a.startDate));
+
       return createResponse({
         success: true,
-        data: [],
-        count: 0,
+        data: callLogs,
+        count: callLogs.length,
         dateRange: { startDate, endDate },
-        extensionNumber: extensionNumber || null,
-        message: "אין שיחות בתאריך זה"
+        extensionNumber: extensionNumber || null
       });
-    }
 
-    // Check for actual API errors
-    if (pbxData.status !== "SUCCESS") {
-      console.error("MasterPBX API error:", pbxData);
+    } catch (fetchError) {
+      clearTimeout(timeoutId);
+      
+      // Handle timeout specifically
+      if (fetchError.name === 'AbortError') {
+        console.error("PBX API request timeout");
+        return createResponse({
+          success: false,
+          error: "Request timeout",
+          details: "המרכזיה לא הגיבה בזמן. נסה שוב.",
+          data: []
+        }, 200); // Return 200 so frontend doesn't show generic error
+      }
+      
+      // Handle other fetch errors
+      console.error("Error calling PBX API:", fetchError);
       return createResponse({
         success: false,
-        error: "MasterPBX API error",
-        details: pbxData.message || "Unknown error",
-        status: pbxData.status
-      }, 200); // Return 200 so frontend can handle gracefully
+        error: "Failed to connect to PBX",
+        details: fetchError.message,
+        data: []
+      }, 200);
     }
-
-    // Process and format the call log data
-    const callLogs = (pbxData.data || []).map(call => {
-      // Calculate duration in seconds from answer_sec field (more accurate)
-      const answerSeconds = parseInt(call.answer_sec) || 0;
-      // Fallback to calculating from start/end times
-      const startTime = new Date(call.start_date);
-      const endTime = new Date(call.end_date);
-      const calculatedSeconds = Math.max(0, Math.floor((endTime - startTime) / 1000));
-      const durationSeconds = answerSeconds > 0 ? answerSeconds : calculatedSeconds;
-
-      return {
-        id: `${call.start_date}-${call.caller}-${call.callee}`,
-        callId: call.callid,
-        startDate: call.start_date,
-        endDate: call.end_date,
-        answerTime: call.answer_time,
-        caller: call.caller,
-        callerName: call.caller_name,
-        callee: call.callee,
-        calleeName: call.callee_name,
-        forward: call.forward,
-        durationSeconds,
-        durationFormatted: formatDuration(durationSeconds),
-        callStatus: call.call_status,
-        // Determine call direction based on extension number
-        direction: extensionNumber ? 
-          (call.caller === String(extensionNumber) ? 'outgoing' : 'incoming') : 
-          'unknown',
-        incomingCharges: call.incoming_call_charges,
-        outgoingCharges: call.outgoing_call_charges,
-        // Recording info - unique_token is used to fetch recording
-        // Only show recording for answered calls with duration > 5 seconds
-        uniqueToken: call.unique_token,
-        hasRecording: call.call_status === 'Answered' && answerSeconds >= 5 && call.unique_token,
-      };
-    });
-
-    // Sort by start date descending (newest first)
-    callLogs.sort((a, b) => new Date(b.startDate) - new Date(a.startDate));
-
-    return createResponse({
-      success: true,
-      data: callLogs,
-      count: callLogs.length,
-      dateRange: { startDate, endDate },
-      extensionNumber: extensionNumber || null
-    });
 
   } catch (error) {
     console.error("Error fetching call logs:", {
