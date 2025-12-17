@@ -62,15 +62,18 @@ export async function POST(req) {
     console.log("Fetching call logs from MasterPBX:", {
       url: pbxUrl,
       extensionNumber: extensionNumber || "all",
-      dateRange: `${startDate} to ${endDate}`
+      dateRange: `${startDate} to ${endDate}`,
+      isVercel: !!process.env.VERCEL,
+      timestamp: new Date().toISOString()
     });
 
     // Create an AbortController for timeout
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 8000); // 8 second timeout
+    const timeoutId = setTimeout(() => controller.abort(), 20000); // 20 second timeout
 
     try {
       // Make the request to MasterPBX with timeout
+      const startTime = Date.now();
       const pbxResponse = await fetch(pbxUrl, {
         method: "POST",
         headers: {
@@ -81,6 +84,8 @@ export async function POST(req) {
       });
 
       clearTimeout(timeoutId);
+      const duration = Date.now() - startTime;
+      console.log(`✓ MasterPBX API responded in ${duration}ms`);
 
       if (!pbxResponse.ok) {
         throw new Error(`PBX API returned ${pbxResponse.status}: ${pbxResponse.statusText}`);
@@ -168,11 +173,18 @@ export async function POST(req) {
       
       // Handle timeout specifically
       if (fetchError.name === 'AbortError') {
-        console.error("PBX API request timeout");
+        console.error("⏱️ PBX API request timeout (20s) - This suggests a firewall/network issue");
+        console.error("Possible causes:");
+        console.error("1. MasterPBX is blocking Vercel's IP addresses");
+        console.error("2. Network routing issue between Vercel and MasterPBX");
+        console.error("3. PBX API is down or very slow");
+        console.error("→ Contact MasterPBX support to whitelist Vercel IPs");
+        
         return createResponse({
           success: false,
           error: "Request timeout",
-          details: "המרכזיה לא הגיבה בזמן. נסה שוב.",
+          details: "המרכזיה לא הגיבה בזמן. ייתכן שיש בעיית חסימה בין השרת שלנו למרכזיה. יש ליצור קשר עם התמיכה של MasterPBX.",
+          technicalDetails: "API timeout after 20s - possible firewall/network issue",
           data: []
         }, 200); // Return 200 so frontend doesn't show generic error
       }
