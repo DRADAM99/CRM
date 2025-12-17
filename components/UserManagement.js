@@ -6,7 +6,7 @@ import { doc, setDoc } from "firebase/firestore";
 import { auth, db } from "../firebase"; // Assuming firebase config is in root
 import { useToast } from "@/components/ui/use-toast";
 
-export default function UserManagement({ role }) {
+export default function UserManagement({ role, currentUserData }) {
   const [isAddUserDialogOpen, setIsAddUserDialogOpen] = useState(false);
   const { toast } = useToast();
 
@@ -37,7 +37,10 @@ export default function UserManagement({ role }) {
     }
   };
 
-  if (role !== 'admin') {
+  // Check both role prop and currentUserData for admin status
+  const isAdmin = role === 'admin' || currentUserData?.role === 'admin';
+  
+  if (!isAdmin) {
     return null;
   }
 

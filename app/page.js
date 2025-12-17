@@ -2910,7 +2910,7 @@ const calculatedAnalytics = useMemo(() => {
       >
         התנתק
       </button>
-      <UserManagement role={role} />
+      <UserManagement role={role} currentUserData={currentUserData} />
       {(currentUserData?.role === 'admin' || role === 'admin') && (
         <Button
           size="sm"
