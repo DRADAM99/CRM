@@ -1,4 +1,4 @@
-// Version 7.7.7 - Fixed collapse state persistence in TaskManager and added 150 row limit option
+// Version 7.7.8 - Added call log dashboard with recording support and weekly analytics
 "use client";
 
 // Utility functions for layout persistence
@@ -116,6 +116,7 @@ import { createUserWithEmailAndPassword } from "firebase/auth";
 import AddUserDialog from "@/components/AddUserDialog";
 import { restrictToVerticalAxis, restrictToWindowEdges } from '@dnd-kit/modifiers';
 import UserManagement from "@/components/UserManagement";
+import CallLogDashboard from "@/components/CallLogDashboard";
 
 // Add this styled component definition before the Dashboard component
 const IOSSwitch = styled((props) => (
@@ -1624,6 +1625,10 @@ const [selectedDate, setSelectedDate] = useState(new Date());
   const [analyticsTimeFilter, setAnalyticsTimeFilter] = useState("month");
   const [analyticsFilterFrom, setAnalyticsFilterFrom] = useState("");
   const [analyticsFilterTo, setAnalyticsFilterTo] = useState("");
+  
+  // Call Log Dashboard visibility state (admin only, persisted to Firebase)
+  const [showCallLogDashboard, setShowCallLogDashboard] = useState(false);
+  const callLogPrefsLoaded = useRef(false);
 
   // Sync analytics toggle from LeadManager (bridge)
   useEffect(() => {
@@ -1637,6 +1642,49 @@ const [selectedDate, setSelectedDate] = useState(new Date());
     window.addEventListener('toggle-lead-analytics', handleToggleLeadAnalytics);
     return () => window.removeEventListener('toggle-lead-analytics', handleToggleLeadAnalytics);
   }, []);
+
+  // Load Call Log Dashboard visibility from Firebase
+  useEffect(() => {
+    const isAdmin = currentUserData?.role === 'admin' || role === 'admin';
+    if (!currentUser || !isAdmin) return;
+    
+    const loadCallLogPrefs = async () => {
+      try {
+        const userRef = doc(db, 'users', currentUser.uid);
+        const snap = await getDoc(userRef);
+        if (snap.exists()) {
+          const d = snap.data();
+          if (typeof d.calllog_dashboardVisible === 'boolean') {
+            setShowCallLogDashboard(d.calllog_dashboardVisible);
+          }
+        }
+        callLogPrefsLoaded.current = true;
+      } catch (err) {
+        console.error("Error loading call log dashboard prefs:", err);
+        callLogPrefsLoaded.current = true;
+      }
+    };
+    loadCallLogPrefs();
+  }, [currentUser, role]);
+
+  // Save Call Log Dashboard visibility to Firebase
+  useEffect(() => {
+    const isAdmin = currentUserData?.role === 'admin' || role === 'admin';
+    if (!currentUser || !isAdmin || !callLogPrefsLoaded.current) return;
+    
+    const saveCallLogPrefs = async () => {
+      try {
+        const userRef = doc(db, 'users', currentUser.uid);
+        await setDoc(userRef, {
+          calllog_dashboardVisible: showCallLogDashboard,
+          updatedAt: serverTimestamp(),
+        }, { merge: true });
+      } catch (err) {
+        console.error("Error saving call log dashboard prefs:", err);
+      }
+    };
+    saveCallLogPrefs();
+  }, [currentUser, role, showCallLogDashboard]);
 
 
 
@@ -2772,7 +2820,7 @@ const calculatedAnalytics = useMemo(() => {
   <div className="flex sm:hidden items-start justify-between px-2 py-1.5 relative">
     {/* Top Left - Version & Logout */}
     <div className="flex flex-col items-start text-[10px] text-gray-500">
-      <span className="leading-tight">v7.7.7</span>
+      <span className="leading-tight">v7.7.8</span>
       <button
         className="text-[10px] text-red-600 underline leading-tight"
         onClick={() => {
@@ -2783,6 +2831,14 @@ const calculatedAnalytics = useMemo(() => {
       >
         התנתק
       </button>
+      {(currentUserData?.role === 'admin' || role === 'admin') && (
+        <button
+          className="text-[10px] text-blue-600 underline leading-tight mt-0.5"
+          onClick={() => router.push('/call-logs')}
+        >
+          📞 לוח שיחות
+        </button>
+      )}
     </div>
 
     {/* Top Center - Logo */}
@@ -2843,7 +2899,7 @@ const calculatedAnalytics = useMemo(() => {
     </div>
 
     <div className="w-48 text-left text-sm text-gray-500 flex flex-col items-end">
-      <span>{'Version 7.7.7'}</span>
+      <span>{'Version 7.7.8'}</span>
       <button
         className="text-xs text-red-600 underline"
         onClick={() => {
@@ -2855,6 +2911,16 @@ const calculatedAnalytics = useMemo(() => {
         התנתק
       </button>
       <UserManagement role={role} />
+      {(currentUserData?.role === 'admin' || role === 'admin') && (
+        <Button
+          size="sm"
+          variant={showCallLogDashboard ? "default" : "outline"}
+          onClick={() => setShowCallLogDashboard(v => !v)}
+          className="mt-1"
+        >
+          {showCallLogDashboard ? 'הסתר לוח שיחות' : 'לוח שיחות'}
+        </Button>
+      )}
     </div>
   </div>
 </header>
@@ -3242,6 +3308,12 @@ const calculatedAnalytics = useMemo(() => {
              </div>
           )} 
 
+          {/* Call Log Dashboard (Admin Only) */}
+          {showCallLogDashboard && (currentUserData?.role === 'admin' || role === 'admin') && (
+            <div className="col-span-12 mt-4">
+              <CallLogDashboard />
+            </div>
+          )}
 
         </div> 
 
