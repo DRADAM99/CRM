@@ -231,54 +231,23 @@ export default function CallLogDashboard() {
     
     try {
       // Fetch for each extension
-      // Call MasterPBX directly (not through our API proxy) because MasterPBX blocks server-to-server
       await Promise.all(MONITORED_EXTENSIONS.map(async (ext) => {
-        const pbxUrl = `https://master.ippbx.co.il/ippbx_api/v1.4/api/info/${dateStr}/${dateStr}/TENANT/callLog`;
-        const response = await fetch(pbxUrl, {
+        const response = await fetch("/api/call-logs", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            token_id: "22K3TWfeifaCPUyA",
-            number: String(ext)
+            startDate: dateStr,
+            endDate: dateStr,
+            extensionNumber: ext
           })
         });
         
         const data = await response.json();
         
-        // MasterPBX returns { status: "SUCCESS", data: [...] } or { status: "ERROR", message: "..." }
-        if (data.status === "SUCCESS") {
-          // Process raw MasterPBX data
-          const processedLogs = (data.data || []).map(call => {
-            const answerSeconds = parseInt(call.answer_sec) || 0;
-            const startTime = new Date(call.start_date);
-            const endTime = new Date(call.end_date);
-            const calculatedSeconds = Math.max(0, Math.floor((endTime - startTime) / 1000));
-            const durationSeconds = answerSeconds > 0 ? answerSeconds : calculatedSeconds;
-            
-            return {
-              id: `${call.start_date}-${call.caller}-${call.callee}`,
-              callId: call.callid,
-              startDate: call.start_date,
-              endDate: call.end_date,
-              answerTime: call.answer_time,
-              caller: call.caller,
-              callerName: call.caller_name,
-              callee: call.callee,
-              calleeName: call.callee_name,
-              forward: call.forward,
-              durationSeconds,
-              callStatus: call.call_status,
-              direction: call.caller === String(ext) ? 'outgoing' : 'incoming',
-              uniqueToken: call.unique_token,
-              hasRecording: call.call_status === 'Answered' && answerSeconds >= 5 && call.unique_token,
-            };
-          });
-          newLogs[ext] = processedLogs;
-        } else if (data.status === "ERROR" && data.message?.includes("Not Found")) {
-          // No calls found - empty array
-          newLogs[ext] = [];
+        if (data.success) {
+          newLogs[ext] = data.data || [];
         } else {
-          console.error(`Error fetching logs for ext ${ext}:`, data.message);
+          console.error(`Error fetching logs for ext ${ext}:`, data.error);
           newLogs[ext] = [];
         }
       }));
@@ -307,61 +276,34 @@ export default function CallLogDashboard() {
     
     try {
       await Promise.all(MONITORED_EXTENSIONS.map(async (ext) => {
-        const pbxUrl = `https://master.ippbx.co.il/ippbx_api/v1.4/api/info/${startDateStr}/${endDateStr}/TENANT/callLog`;
-        const response = await fetch(pbxUrl, {
+        const response = await fetch("/api/call-logs", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            token_id: "22K3TWfeifaCPUyA",
-            number: String(ext)
+            startDate: startDateStr,
+            endDate: endDateStr,
+            extensionNumber: ext
           })
         });
         
         const data = await response.json();
         
-        if (data.status === "SUCCESS") {
-          // Process raw MasterPBX data and group by date
+        if (data.success) {
+          // Group by date
           const logsByDate = {};
           weekDates.forEach(d => {
             logsByDate[formatDateForApi(d)] = [];
           });
           
           (data.data || []).forEach(call => {
-            const answerSeconds = parseInt(call.answer_sec) || 0;
-            const startTime = new Date(call.start_date);
-            const endTime = new Date(call.end_date);
-            const calculatedSeconds = Math.max(0, Math.floor((endTime - startTime) / 1000));
-            const durationSeconds = answerSeconds > 0 ? answerSeconds : calculatedSeconds;
-            
-            const processedCall = {
-              id: `${call.start_date}-${call.caller}-${call.callee}`,
-              callId: call.callid,
-              startDate: call.start_date,
-              endDate: call.end_date,
-              answerTime: call.answer_time,
-              caller: call.caller,
-              callerName: call.caller_name,
-              callee: call.callee,
-              calleeName: call.callee_name,
-              forward: call.forward,
-              durationSeconds,
-              callStatus: call.call_status,
-              direction: call.caller === String(ext) ? 'outgoing' : 'incoming',
-              uniqueToken: call.unique_token,
-              hasRecording: call.call_status === 'Answered' && answerSeconds >= 5 && call.unique_token,
-            };
-            
-            const callDate = call.start_date.split(' ')[0];
+            const callDate = call.startDate.split(' ')[0];
             if (logsByDate[callDate]) {
-              logsByDate[callDate].push(processedCall);
+              logsByDate[callDate].push(call);
             }
           });
           
           newWeeklyLogs[ext] = logsByDate;
-        } else if (data.status === "ERROR" && data.message?.includes("Not Found")) {
-          newWeeklyLogs[ext] = {};
         } else {
-          console.error(`Error fetching weekly logs for ext ${ext}:`, data.message);
           newWeeklyLogs[ext] = {};
         }
       }));
