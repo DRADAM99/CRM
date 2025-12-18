@@ -14,9 +14,9 @@ import { Phone, Clock, PhoneIncoming, PhoneOutgoing, AlertTriangle, RefreshCw, P
 // Extensions to monitor
 const MONITORED_EXTENSIONS = ["104", "105"];
 
-// Working hours for break detection (8:00 - 18:00)
+// Working hours for break detection (8:00 - 20:00)
 const WORK_START_HOUR = 8;
-const WORK_END_HOUR = 18;
+const WORK_END_HOUR = 20;
 
 // Hebrew day names
 const HEBREW_DAYS = ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת'];
@@ -55,6 +55,21 @@ function formatTotalDuration(totalSeconds) {
   const minutes = Math.floor((totalSeconds % 3600) / 60);
   const seconds = totalSeconds % 60;
   return `${hours}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+}
+
+// Helper to format break time in hours and minutes
+function formatBreakTime(minutes) {
+  if (!minutes || minutes < 0) return '-';
+  if (minutes < 60) return `${minutes} דק׳`;
+  
+  const hours = Math.floor(minutes / 60);
+  const remainingMinutes = minutes % 60;
+  
+  if (hours === 1) {
+    return remainingMinutes > 0 ? `שעה ${remainingMinutes} דק׳` : 'שעה';
+  }
+  
+  return remainingMinutes > 0 ? `${hours} שעות ${remainingMinutes} דק׳` : `${hours} שעות`;
 }
 
 // Get color class for heatmap based on minutes of activity
@@ -111,6 +126,7 @@ export default function CallLogDashboard() {
   const [weekStartDate, setWeekStartDate] = useState(() => getWeekStart(new Date()));
   const [callLogs, setCallLogs] = useState({}); // { "104": [...], "105": [...] }
   const [weeklyLogs, setWeeklyLogs] = useState({}); // { "104": { "2024-01-01": [...], ... }, ... }
+  const [crmActivity, setCrmActivity] = useState({}); // { "userId": { "2024-01-01": { 8: 5, 9: 12, ... } } }
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [prefsLoaded, setPrefsLoaded] = useState(false);
@@ -134,6 +150,7 @@ export default function CallLogDashboard() {
 
   // Fetch users with EXT field from Firestore directly
   const [extensionUserMap, setExtensionUserMap] = useState({});
+  const [extensionUserIds, setExtensionUserIds] = useState({}); // { "104": "userId", ... }
   
   useEffect(() => {
     const fetchExtensionUsers = async () => {
@@ -141,13 +158,17 @@ export default function CallLogDashboard() {
         const usersRef = collection(db, "users");
         const usersSnap = await getDocs(usersRef);
         const mapping = {};
+        const idMapping = {};
         usersSnap.docs.forEach(doc => {
           const data = doc.data();
           if (data.EXT) {
-            mapping[String(data.EXT)] = data.alias || data.email || `שלוחה ${data.EXT}`;
+            const extStr = String(data.EXT);
+            mapping[extStr] = data.alias || data.email || `שלוחה ${data.EXT}`;
+            idMapping[extStr] = doc.id; // Store userId
           }
         });
         setExtensionUserMap(mapping);
+        setExtensionUserIds(idMapping);
       } catch (err) {
         console.error("Error fetching extension users:", err);
       }
@@ -219,6 +240,60 @@ export default function CallLogDashboard() {
     return today;
   }, [dateFilter, customDate, weekStartDate]);
 
+  // Fetch CRM activity for monitored users
+  const fetchCrmActivity = useCallback(async (startDate, endDate) => {
+    if (!extensionUserIds || Object.keys(extensionUserIds).length === 0) {
+      return;
+    }
+    
+    const newCrmActivity = {};
+    
+    try {
+      // Fetch activity for each extension's user
+      await Promise.all(MONITORED_EXTENSIONS.map(async (ext) => {
+        const userId = extensionUserIds[ext];
+        if (!userId) {
+          console.log(`No userId found for extension ${ext}`);
+          return;
+        }
+        
+        try {
+          const response = await fetch("/api/user-activity", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              userId,
+              startDate,
+              endDate
+            })
+          });
+          
+          if (!response.ok) {
+            console.error(`Failed to fetch CRM activity for userId ${userId}:`, response.status);
+            newCrmActivity[userId] = {};
+            return;
+          }
+          
+          const data = await response.json();
+          
+          if (data.success && data.hourlyActivity) {
+            newCrmActivity[userId] = data.hourlyActivity;
+          } else {
+            newCrmActivity[userId] = {};
+          }
+        } catch (fetchErr) {
+          console.error(`Error fetching CRM activity for userId ${userId}:`, fetchErr);
+          newCrmActivity[userId] = {};
+        }
+      }));
+      
+      setCrmActivity(newCrmActivity);
+    } catch (err) {
+      console.error("Error fetching CRM activity:", err);
+      // Don't show error - CRM activity is supplementary
+    }
+  }, [extensionUserIds]);
+
   // Fetch call logs from API for single day
   const fetchCallLogs = useCallback(async () => {
     if (!targetDate || dateFilter === "week") return;
@@ -269,6 +344,9 @@ export default function CallLogDashboard() {
       }));
       
       setCallLogs(newLogs);
+      
+      // Also fetch CRM activity for the same date
+      await fetchCrmActivity(dateStr, dateStr);
     } catch (err) {
       console.error("Error fetching call logs:", err);
       // Check if this is a 504 timeout error
@@ -280,7 +358,7 @@ export default function CallLogDashboard() {
     } finally {
       setLoading(false);
     }
-  }, [targetDate, dateFilter]);
+  }, [targetDate, dateFilter, fetchCrmActivity]);
 
   // Fetch weekly call logs
   const fetchWeeklyLogs = useCallback(async () => {
@@ -352,6 +430,9 @@ export default function CallLogDashboard() {
       }));
       
       setWeeklyLogs(newWeeklyLogs);
+      
+      // Also fetch CRM activity for the week
+      await fetchCrmActivity(startDateStr, endDateStr);
     } catch (err) {
       console.error("Error fetching weekly logs:", err);
       // Check if this is a 504 timeout error
@@ -363,7 +444,7 @@ export default function CallLogDashboard() {
     } finally {
       setLoading(false);
     }
-  }, [weekStartDate, dateFilter]);
+  }, [weekStartDate, dateFilter, fetchCrmActivity]);
 
   // Fetch on mount and when date changes
   useEffect(() => {
@@ -403,7 +484,7 @@ export default function CallLogDashboard() {
   }, []);
 
   // Calculate stats for an extension
-  const calculateStats = useCallback((logs) => {
+  const calculateStats = useCallback((logs, dayCrmActivity = {}) => {
     if (!logs || logs.length === 0) {
       return {
         totalCalls: 0,
@@ -432,24 +513,29 @@ export default function CallLogDashboard() {
     });
 
     // Calculate longest break during work hours
+    // A break is when there's NO phone activity AND NO CRM activity in that hour
     let longestBreak = 0;
-    const sortedLogs = [...logs].sort((a, b) => new Date(a.startDate) - new Date(b.startDate));
+    let currentBreak = 0;
     
-    // Filter logs within work hours
-    const workHourLogs = sortedLogs.filter(call => {
-      const hour = new Date(call.startDate).getHours();
-      return hour >= WORK_START_HOUR && hour < WORK_END_HOUR;
-    });
-
-    if (workHourLogs.length > 1) {
-      for (let i = 1; i < workHourLogs.length; i++) {
-        const prevEnd = new Date(workHourLogs[i - 1].endDate);
-        const currStart = new Date(workHourLogs[i].startDate);
-        const breakMinutes = Math.floor((currStart - prevEnd) / 60000);
-        if (breakMinutes > longestBreak) {
-          longestBreak = breakMinutes;
+    for (let h = WORK_START_HOUR; h <= WORK_END_HOUR; h++) {
+      const hasPhoneActivity = hourlyActivity[h] > 0;
+      const hasCrmActivity = (dayCrmActivity[h] || 0) > 0;
+      
+      if (!hasPhoneActivity && !hasCrmActivity) {
+        // No activity - increment break
+        currentBreak += 60; // 60 minutes per hour
+      } else {
+        // Activity detected - reset break counter
+        if (currentBreak > longestBreak) {
+          longestBreak = currentBreak;
         }
+        currentBreak = 0;
       }
+    }
+    
+    // Check final break at end of day
+    if (currentBreak > longestBreak) {
+      longestBreak = currentBreak;
     }
 
     return {
@@ -464,16 +550,17 @@ export default function CallLogDashboard() {
   }, []);
 
   // Calculate weekly stats
-  const calculateWeeklyStats = useCallback((weeklyData) => {
+  const calculateWeeklyStats = useCallback((weeklyData, userCrmActivity = {}) => {
     let totalCalls = 0;
     let totalDuration = 0;
     let totalBreakTime = 0;
     let daysWithCalls = 0;
 
-    Object.values(weeklyData || {}).forEach(dayLogs => {
+    Object.entries(weeklyData || {}).forEach(([dateStr, dayLogs]) => {
       if (dayLogs.length > 0) {
         daysWithCalls++;
-        const dayStats = calculateStats(dayLogs);
+        const dayCrmActivity = userCrmActivity[dateStr] || {};
+        const dayStats = calculateStats(dayLogs, dayCrmActivity);
         totalCalls += dayStats.totalCalls;
         totalDuration += dayStats.totalDuration;
         totalBreakTime += dayStats.longestBreak;
@@ -507,43 +594,78 @@ export default function CallLogDashboard() {
   };
 
   // Render heatmap for an extension
-  const renderHeatmap = (hourlyActivity) => {
-    // Only show work hours (8-18)
+  const renderHeatmap = (hourlyActivity, crmHourlyActivity = {}) => {
+    // Only show work hours (8-20)
     const workHours = [];
     for (let h = WORK_START_HOUR; h <= WORK_END_HOUR; h++) {
-      workHours.push({ hour: h, minutes: hourlyActivity[h] || 0 });
+      workHours.push({ 
+        hour: h, 
+        phoneMinutes: hourlyActivity[h] || 0,
+        crmActivity: crmHourlyActivity[h] || 0
+      });
     }
 
     return (
       <div className="flex flex-col gap-1">
         <div className="flex gap-1 justify-center">
-          {workHours.map(({ hour, minutes }) => (
-            <Tooltip key={hour}>
-              <TooltipTrigger asChild>
-                <div
-                  className={`w-10 h-10 rounded flex items-center justify-center text-xs font-medium cursor-default ${getHeatmapColor(minutes)} ${getHeatmapTextColor(minutes)}`}
-                >
-                  {hour}
-                </div>
-              </TooltipTrigger>
-              <TooltipContent>
-                <p className="text-sm" dir="rtl">{minutes} דקות פעילות בשעה {hour}:00</p>
-              </TooltipContent>
-            </Tooltip>
-          ))}
+          {workHours.map(({ hour, phoneMinutes, crmActivity }) => {
+            // Combine phone and CRM for total activity
+            const hasActivity = phoneMinutes > 0 || crmActivity > 0;
+            const hasBothActivities = phoneMinutes > 0 && crmActivity > 0;
+            
+            return (
+              <Tooltip key={hour}>
+                <TooltipTrigger asChild>
+                  <div
+                    className={`w-10 h-10 rounded flex items-center justify-center text-xs font-medium cursor-default relative overflow-hidden ${
+                      !hasActivity ? 'bg-gray-200 text-gray-700' : ''
+                    }`}
+                  >
+                    {/* Phone activity layer (green) */}
+                    {phoneMinutes > 0 && (
+                      <div className={`absolute inset-0 ${getHeatmapColor(phoneMinutes)}`}></div>
+                    )}
+                    
+                    {/* CRM activity layer (blue/purple overlay) */}
+                    {crmActivity > 0 && (
+                      <div 
+                        className="absolute inset-0 bg-gradient-to-br from-blue-500/60 to-purple-500/60"
+                        style={{ mixBlendMode: hasBothActivities ? 'multiply' : 'normal' }}
+                      ></div>
+                    )}
+                    
+                    {/* Hour label */}
+                    <span className={`relative z-10 ${hasActivity ? 'text-white font-semibold' : ''}`}>
+                      {hour}
+                    </span>
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <div className="text-sm" dir="rtl">
+                    <div className="font-semibold mb-1">שעה {hour}:00</div>
+                    <div className="text-green-600">📞 שיחות: {phoneMinutes} דק׳</div>
+                    <div className="text-blue-600">💻 CRM: {crmActivity} פעולות</div>
+                    <div className="text-gray-600 mt-1 text-xs">
+                      {(phoneMinutes > 0 || crmActivity > 0) ? 'פעיל' : 'לא פעיל'}
+                    </div>
+                  </div>
+                </TooltipContent>
+              </Tooltip>
+            );
+          })}
         </div>
-        <div className="flex justify-center gap-2 mt-2 text-xs text-gray-500">
+        <div className="flex justify-center gap-3 mt-2 text-xs text-gray-500">
           <span className="flex items-center gap-1">
-            <div className="w-3 h-3 rounded bg-gray-200"></div> 0 דק׳
+            <div className="w-3 h-3 rounded bg-green-500"></div> שיחות
           </span>
           <span className="flex items-center gap-1">
-            <div className="w-3 h-3 rounded bg-green-300"></div> 1-15 דק׳
+            <div className="w-3 h-3 rounded bg-gradient-to-br from-blue-500 to-purple-500"></div> CRM
           </span>
           <span className="flex items-center gap-1">
-            <div className="w-3 h-3 rounded bg-green-500"></div> 16-30 דק׳
+            <div className="w-3 h-3 rounded bg-green-700"></div> שניהם
           </span>
           <span className="flex items-center gap-1">
-            <div className="w-3 h-3 rounded bg-green-700"></div> 30+ דק׳
+            <div className="w-3 h-3 rounded bg-gray-200"></div> לא פעיל
           </span>
         </div>
       </div>
@@ -554,7 +676,9 @@ export default function CallLogDashboard() {
   const renderWeeklyHeatmap = (weeklyData, ext) => {
     const weekDates = getWeekDates(weekStartDate).filter((_, idx) => idx !== 6); // Exclude Saturday (index 6)
     const userName = extensionUserMap[ext] || extensionUsers[ext] || `שלוחה ${ext}`;
-    const weekStats = calculateWeeklyStats(weeklyData);
+    const userId = extensionUserIds[ext];
+    const userCrmActivity = userId ? (crmActivity[userId] || {}) : {};
+    const weekStats = calculateWeeklyStats(weeklyData, userCrmActivity);
 
     return (
       <Card key={ext} className="mb-4">
@@ -577,8 +701,8 @@ export default function CallLogDashboard() {
               <div className="text-xs text-purple-600">סה״כ שיחות</div>
             </div>
             <div>
-              <div className={`text-2xl font-bold ${weekStats.avgBreakTime > 30 ? 'text-red-700' : 'text-green-700'}`}>
-                {weekStats.avgBreakTime} דק׳
+              <div className={`text-2xl font-bold ${weekStats.avgBreakTime > 90 ? 'text-red-700' : 'text-green-700'}`}>
+                {formatBreakTime(weekStats.avgBreakTime)}
               </div>
               <div className="text-xs text-gray-600">ממוצע זמן הפסקה</div>
             </div>
@@ -591,13 +715,18 @@ export default function CallLogDashboard() {
               {weekDates.map((date, dayIdx) => {
                 const dateStr = formatDateForApi(date);
                 const dayLogs = weeklyData[dateStr] || [];
-                const dayStats = calculateStats(dayLogs);
+                const dayCrmActivity = userCrmActivity[dateStr] || {};
+                const dayStats = calculateStats(dayLogs, dayCrmActivity);
                 const isToday = formatDateForApi(new Date()) === dateStr;
 
-                // Create array of work hours (8-18)
+                // Create array of work hours (8-20)
                 const workHours = [];
                 for (let h = WORK_START_HOUR; h <= WORK_END_HOUR; h++) {
-                  workHours.push({ hour: h, minutes: dayStats.hourlyActivity[h] || 0 });
+                  workHours.push({ 
+                    hour: h, 
+                    phoneMinutes: dayStats.hourlyActivity[h] || 0,
+                    crmActivity: dayCrmActivity[h] || 0
+                  });
                 }
 
                 return (
@@ -610,23 +739,48 @@ export default function CallLogDashboard() {
                     
                     {/* Vertical hourly bars */}
                     <div className="flex flex-col-reverse gap-0.5">
-                      {workHours.map(({ hour, minutes }) => (
-                        <Tooltip key={hour}>
-                          <TooltipTrigger asChild>
-                            <div
-                              className={`w-12 h-6 rounded flex items-center justify-center text-[10px] font-medium cursor-default ${getHeatmapColor(minutes)} ${getHeatmapTextColor(minutes)}`}
-                            >
-                              {hour}
-                            </div>
-                          </TooltipTrigger>
-                          <TooltipContent side="left">
-                            <p className="text-sm" dir="rtl">
-                              {HEBREW_DAYS[dayIdx]} {date.getDate()}/{date.getMonth() + 1}<br/>
-                              שעה {hour}:00 - {minutes} דקות
-                            </p>
-                          </TooltipContent>
-                        </Tooltip>
-                      ))}
+                      {workHours.map(({ hour, phoneMinutes, crmActivity }) => {
+                        const hasActivity = phoneMinutes > 0 || crmActivity > 0;
+                        const hasBothActivities = phoneMinutes > 0 && crmActivity > 0;
+                        
+                        return (
+                          <Tooltip key={hour}>
+                            <TooltipTrigger asChild>
+                              <div
+                                className={`w-12 h-6 rounded flex items-center justify-center text-[10px] font-medium cursor-default relative overflow-hidden ${
+                                  !hasActivity ? 'bg-gray-200 text-gray-700' : ''
+                                }`}
+                              >
+                                {/* Phone activity layer (green) */}
+                                {phoneMinutes > 0 && (
+                                  <div className={`absolute inset-0 ${getHeatmapColor(phoneMinutes)}`}></div>
+                                )}
+                                
+                                {/* CRM activity layer (blue/purple overlay) */}
+                                {crmActivity > 0 && (
+                                  <div 
+                                    className="absolute inset-0 bg-gradient-to-br from-blue-500/60 to-purple-500/60"
+                                    style={{ mixBlendMode: hasBothActivities ? 'multiply' : 'normal' }}
+                                  ></div>
+                                )}
+                                
+                                {/* Hour label */}
+                                <span className={`relative z-10 ${hasActivity ? 'text-white font-semibold' : ''}`}>
+                                  {hour}
+                                </span>
+                              </div>
+                            </TooltipTrigger>
+                            <TooltipContent side="left">
+                              <div className="text-sm" dir="rtl">
+                                <div className="font-semibold">{HEBREW_DAYS[dayIdx]} {date.getDate()}/{date.getMonth() + 1}</div>
+                                <div className="text-gray-600">שעה {hour}:00</div>
+                                <div className="text-green-600">📞 שיחות: {phoneMinutes} דק׳</div>
+                                <div className="text-blue-600">💻 CRM: {crmActivity} פעולות</div>
+                              </div>
+                            </TooltipContent>
+                          </Tooltip>
+                        );
+                      })}
                     </div>
 
                     {/* Day summary tooltip trigger */}
@@ -643,8 +797,8 @@ export default function CallLogDashboard() {
                           <div>זמן כולל: {formatTotalDuration(dayStats.totalDuration)}</div>
                           <div>ממוצע שיחה: {formatDuration(dayStats.avgDuration)}</div>
                           <div>נכנסות: {dayStats.incomingCalls} | יוצאות: {dayStats.outgoingCalls}</div>
-                          <div className={dayStats.longestBreak > 30 ? 'text-red-500' : ''}>
-                            זמן הפסקה: {dayStats.longestBreak > 0 ? `${dayStats.longestBreak} דק׳` : '-'}
+                          <div className={dayStats.longestBreak > 90 ? 'text-red-500' : ''}>
+                            זמן הפסקה: {formatBreakTime(dayStats.longestBreak)}
                           </div>
                         </div>
                       </TooltipContent>
@@ -700,12 +854,12 @@ export default function CallLogDashboard() {
           </div>
           <div className="text-xs text-gray-600">נכנסות / יוצאות</div>
         </div>
-        <div className={`rounded-lg p-3 ${stats.longestBreak > 30 ? 'bg-red-50' : 'bg-gray-50'}`}>
-          <div className={`text-2xl font-bold ${stats.longestBreak > 30 ? 'text-red-700' : 'text-gray-700'}`}>
-            {stats.longestBreak > 0 ? `${stats.longestBreak} דק׳` : '-'}
+        <div className={`rounded-lg p-3 ${stats.longestBreak > 90 ? 'bg-red-50' : 'bg-gray-50'}`}>
+          <div className={`text-2xl font-bold ${stats.longestBreak > 90 ? 'text-red-700' : 'text-gray-700'}`}>
+            {formatBreakTime(stats.longestBreak)}
           </div>
-          <div className={`text-xs ${stats.longestBreak > 30 ? 'text-red-600' : 'text-gray-600'} flex items-center justify-center gap-1`}>
-            {stats.longestBreak > 30 && <AlertTriangle className="w-3 h-3" />}
+          <div className={`text-xs ${stats.longestBreak > 90 ? 'text-red-600' : 'text-gray-600'} flex items-center justify-center gap-1`}>
+            {stats.longestBreak > 90 && <AlertTriangle className="w-3 h-3" />}
             הפסקה ארוכה
           </div>
         </div>
@@ -793,7 +947,10 @@ export default function CallLogDashboard() {
   // Render extension section
   const renderExtensionSection = (ext) => {
     const logs = callLogs[ext] || [];
-    const stats = calculateStats(logs);
+    const userId = extensionUserIds[ext];
+    const dateStr = formatDateForApi(targetDate);
+    const dayCrmActivity = userId && crmActivity[userId] ? (crmActivity[userId][dateStr] || {}) : {};
+    const stats = calculateStats(logs, dayCrmActivity);
     const userName = extensionUserMap[ext] || extensionUsers[ext] || `שלוחה ${ext}`;
 
     return (
@@ -808,8 +965,8 @@ export default function CallLogDashboard() {
         <CardContent className="space-y-4">
           {/* Heatmap */}
           <div className="bg-gray-50 rounded-lg p-4">
-            <h4 className="text-sm font-medium text-gray-700 mb-3 text-center">פעילות לפי שעות (דקות)</h4>
-            {renderHeatmap(stats.hourlyActivity)}
+            <h4 className="text-sm font-medium text-gray-700 mb-3 text-center">פעילות לפי שעות</h4>
+            {renderHeatmap(stats.hourlyActivity, dayCrmActivity)}
           </div>
           
           {/* Stats */}

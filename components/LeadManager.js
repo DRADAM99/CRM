@@ -19,6 +19,7 @@ import { Search, ChevronDown } from "lucide-react";
 import { 
   collection, onSnapshot, addDoc, updateDoc, doc, serverTimestamp, arrayUnion, setDoc, getDocs, getDoc, orderBy, query, deleteDoc, Timestamp
 } from "firebase/firestore";
+import { logActivity } from "@/lib/activityLogger";
 
 // Shared configs imported from lib
 
@@ -375,6 +376,18 @@ export default function LeadManager({ isFullView, setIsFullView, blockPosition, 
       const updateData = { fullName: editLeadFullName, phoneNumber: editLeadPhone, message: editLeadMessage, status: editLeadStatus, source: editLeadSource, branch: editLeadBranch, isHot: editLeadIsHot, appointmentDateTime: editLeadStatus === 'תור נקבע' ? (appointmentDate || null) : null, updatedAt: serverTimestamp(), updatedBy: currentUser.uid };
       if (originalLead.status !== editLeadStatus) { updateData.followUpCall = { active: false, count: 0 }; }
       await updateDoc(leadRef, updateData);
+      
+      // Log activity
+      if (currentUser) {
+        await logActivity(
+          currentUser.uid,
+          alias || currentUser.email,
+          "update",
+          "lead",
+          leadId,
+          { fullName: editLeadFullName, status: editLeadStatus, statusChanged: originalLead.status !== editLeadStatus }
+        );
+      }
       if (originalLead.status !== 'תור נקבע' && editLeadStatus === 'תור נקבע' && appointmentDate) {
         const taskRef = doc(collection(db, "tasks"));
         const newTask = { id: taskRef.id, userId: currentUser.uid, creatorId: currentUser.uid, creatorAlias: alias || currentUser.email || "", assignTo: currentUser.email, title: `פגישת ייעוץ - ${editLeadFullName}`, subtitle: `נקבעה פגישה מליד ${leadId}`, priority: "רגיל", category: "לקבוע סדרה", status: "פתוח", createdAt: serverTimestamp(), updatedAt: serverTimestamp(), dueDate: appointmentDate, replies: [], isRead: false, isArchived: false, done: false, completedBy: null, completedAt: null, branch: editLeadBranch };
@@ -395,6 +408,19 @@ export default function LeadManager({ isFullView, setIsFullView, blockPosition, 
       const leadRef = doc(db, 'leads', leadId);
       const newEntry = { text: newConversationText, timestamp: Timestamp.fromDate(new Date()), userId: currentUser.uid, userAlias: alias || currentUser.email };
       await updateDoc(leadRef, { conversationSummary: arrayUnion(newEntry), updatedAt: serverTimestamp() });
+      
+      // Log activity
+      if (currentUser) {
+        await logActivity(
+          currentUser.uid,
+          alias || currentUser.email,
+          "update",
+          "lead",
+          leadId,
+          { action: "conversation_update" }
+        );
+      }
+      
       setNewConversationText(""); setShowConvUpdate(leadId);
     } catch { alert("שגיאה בהוספת עדכון שיחה"); }
   }, [newConversationText, currentUser, alias]);
@@ -432,7 +458,7 @@ export default function LeadManager({ isFullView, setIsFullView, blockPosition, 
     // No duplicate, add directly
     try {
       const finalSource = newLeadSource === "אחר" ? newLeadSourceOther.trim() : newLeadSource;
-      await addDoc(collection(db, "leads"), { 
+      const leadRef = await addDoc(collection(db, "leads"), { 
         createdAt: serverTimestamp(), 
         fullName: newLeadFullName.trim(), 
         phoneNumber: newLeadPhone.trim(), 
@@ -443,6 +469,19 @@ export default function LeadManager({ isFullView, setIsFullView, blockPosition, 
         isHot: newLeadIsHot, 
         followUpCall: { active: false, count: 0 } 
       });
+      
+      // Log activity
+      if (currentUser) {
+        await logActivity(
+          currentUser.uid,
+          alias || currentUser.email,
+          "create",
+          "lead",
+          leadRef.id,
+          { fullName: newLeadFullName.trim(), status: newLeadStatus }
+        );
+      }
+      
       setNewLeadFullName(""); 
       setNewLeadPhone(""); 
       setNewLeadMessage(""); 
@@ -459,7 +498,7 @@ export default function LeadManager({ isFullView, setIsFullView, blockPosition, 
   const confirmAddDuplicateLead = async () => {
     if (!pendingNewLead) return;
     try {
-      await addDoc(collection(db, "leads"), {
+      const leadRef = await addDoc(collection(db, "leads"), {
         createdAt: serverTimestamp(),
         fullName: pendingNewLead.fullName,
         phoneNumber: pendingNewLead.phoneNumber,
@@ -470,6 +509,19 @@ export default function LeadManager({ isFullView, setIsFullView, blockPosition, 
         isHot: pendingNewLead.isHot,
         followUpCall: { active: false, count: 0 }
       });
+      
+      // Log activity
+      if (currentUser) {
+        await logActivity(
+          currentUser.uid,
+          alias || currentUser.email,
+          "create",
+          "lead",
+          leadRef.id,
+          { fullName: pendingNewLead.fullName, status: pendingNewLead.status, isDuplicate: true }
+        );
+      }
+      
       setNewLeadFullName("");
       setNewLeadPhone("");
       setNewLeadMessage("");
@@ -601,7 +653,20 @@ export default function LeadManager({ isFullView, setIsFullView, blockPosition, 
         isHot: true 
       }; 
       delete duplicatedLead.id; 
-      await addDoc(collection(db, "leads"), duplicatedLead); 
+      const leadRef = await addDoc(collection(db, "leads"), duplicatedLead);
+      
+      // Log activity
+      if (currentUser) {
+        await logActivity(
+          currentUser.uid,
+          alias || currentUser.email,
+          "create",
+          "lead",
+          leadRef.id,
+          { fullName: duplicatedLead.fullName, isDuplication: true }
+        );
+      }
+      
       alert("הליד שוכפל"); 
     } catch { 
       alert("שגיאה בשכפול ליד"); 

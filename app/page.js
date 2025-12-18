@@ -46,6 +46,7 @@ import TaskManager from "@/components/TaskManager";
 import LeadManager from "@/components/LeadManager";
 import FixedTasks from "@/components/FixedTasks";
 import FixedTasksAnalytics from "@/components/FixedTasksAnalytics";
+import { logActivity } from "@/lib/activityLogger";
 import {
   collection,
   getDocs,
@@ -2323,6 +2324,22 @@ useEffect(() => {
 
       await updateDoc(leadRef, updateData);
 
+      // Log activity for lead update
+      if (currentUser) {
+        await logActivity(
+          currentUser.uid,
+          alias || currentUser.email,
+          "update",
+          "lead",
+          leadId,
+          { 
+            fullName: editLeadFullName, 
+            status: editLeadStatus,
+            statusChanged: originalLead.status !== editLeadStatus
+          }
+        );
+      }
+
       // Create appointment task if status changed to 'תור נקבע'
       if (originalLead.status !== 'תור נקבע' && editLeadStatus === 'תור נקבע' && appointmentDate) {
         const taskRef = doc(collection(db, "tasks"));
@@ -2417,7 +2434,7 @@ useEffect(() => {
     }
 
     try {
-        await addDoc(collection(db, "leads"), {
+        const leadRef = await addDoc(collection(db, "leads"), {
             createdAt: serverTimestamp(),
             fullName: newLeadFullName.trim(),
             phoneNumber: newLeadPhone.trim(),
@@ -2428,6 +2445,18 @@ useEffect(() => {
             isHot: newLeadIsHot,
             followUpCall: { active: false, count: 0 },
         });
+
+        // Log activity for lead creation
+        if (currentUser) {
+          await logActivity(
+            currentUser.uid,
+            alias || currentUser.email,
+            "create",
+            "lead",
+            leadRef.id,
+            { fullName: newLeadFullName.trim(), status: newLeadStatus }
+          );
+        }
 
         setNewLeadFullName("");
         setNewLeadPhone("");

@@ -23,6 +23,7 @@ import { useToast } from "@/components/ui/use-toast";
 import { styled } from '@mui/material/styles';
 import { Switch as MuiSwitch } from '@mui/material';
 import { FaWhatsapp } from "react-icons/fa";
+import { logActivity } from "@/lib/activityLogger";
 import { BRANCHES, branchColor } from "@/lib/branches";
 import { 
   collection, getDocs, getDoc, addDoc, updateDoc, onSnapshot, setDoc, doc, deleteDoc, serverTimestamp, arrayUnion, orderBy, query, Timestamp
@@ -585,6 +586,19 @@ export default function TaskManager({ isTMFullView, setIsTMFullView, blockPositi
     const now = new Date();
     const aliasToUse = alias || currentUser?.alias || currentUser?.email || taskData.assignTo || taskData.creatorAlias || taskData.creatorEmail || '';
     await updateDoc(taskRef, { done: checked, completedBy: checked ? (currentUser?.email || currentUser?.uid) : null, completedByAlias: checked ? aliasToUse : null, completedAt: checked ? now : null, updatedAt: serverTimestamp() });
+    
+    // Log activity
+    if (currentUser && checked) {
+      await logActivity(
+        currentUser.uid,
+        alias || currentUser.email,
+        "update",
+        "task",
+        taskId,
+        { action: "completed", title: taskData.title }
+      );
+    }
+    
     setTasks(prev => prev.map(t => t.id === taskId ? { ...t, done: checked, completedBy: checked ? (currentUser?.email || currentUser?.uid) : null, completedByAlias: checked ? aliasToUse : null, completedAt: checked ? now : null } : t));
   };
 
@@ -697,6 +711,18 @@ export default function TaskManager({ isTMFullView, setIsTMFullView, blockPositi
         completedAt: null,
         updatedAt: serverTimestamp(),
       });
+      
+      // Log activity
+      if (currentUser) {
+        await logActivity(
+          currentUser.uid,
+          alias || currentUser.email,
+          "update",
+          "task",
+          editingTaskId,
+          { title: editingTitle, category: editingCategory }
+        );
+      }
     } catch {}
     setTasks(prev => prev.map(t => t.id === editingTaskId ? {
       ...t,

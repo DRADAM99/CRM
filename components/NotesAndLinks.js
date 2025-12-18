@@ -13,6 +13,7 @@ import {
   onSnapshot,
   getDoc,
 } from "firebase/firestore";
+import { logActivity } from "@/lib/activityLogger";
 
 export default function NotesAndLinks({ section }) {
   const [notes, setNotes] = useState([]);
@@ -161,12 +162,26 @@ export default function NotesAndLinks({ section }) {
   const addNote = async () => {
     if (!newNote.trim() || !userEmail) return;
     try {
-      await addDoc(collection(db, "notes"), {
+      const noteRef = await addDoc(collection(db, "notes"), {
         to: targetUser,
         text: newNote,
         createdAt: serverTimestamp(),
         author: userEmail,
       });
+      
+      // Log activity
+      const currentUser = auth.currentUser;
+      if (currentUser) {
+        await logActivity(
+          currentUser.uid,
+          userEmail,
+          "create",
+          "note",
+          noteRef.id,
+          { targetUser }
+        );
+      }
+      
       setNewNote("");
       setModalOpen(false);
     } catch (error) {
