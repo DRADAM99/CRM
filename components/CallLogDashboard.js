@@ -232,22 +232,38 @@ export default function CallLogDashboard() {
     try {
       // Fetch for each extension
       await Promise.all(MONITORED_EXTENSIONS.map(async (ext) => {
-        const response = await fetch("/api/call-logs", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            startDate: dateStr,
-            endDate: dateStr,
-            extensionNumber: ext
-          })
-        });
-        
-        const data = await response.json();
-        
-        if (data.success) {
-          newLogs[ext] = data.data || [];
-        } else {
-          console.error(`Error fetching logs for ext ${ext}:`, data.error);
+        try {
+          const response = await fetch("/api/call-logs", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              startDate: dateStr,
+              endDate: dateStr,
+              extensionNumber: ext
+            })
+          });
+          
+          // Check if response is JSON before parsing
+          const contentType = response.headers.get("content-type");
+          if (!contentType || !contentType.includes("application/json")) {
+            console.error(`Non-JSON response for ext ${ext}:`, response.status, response.statusText);
+            if (response.status === 504) {
+              throw new Error("504 Gateway Timeout - המרכזיה לא הגיבה");
+            }
+            newLogs[ext] = [];
+            return;
+          }
+          
+          const data = await response.json();
+          
+          if (data.success) {
+            newLogs[ext] = data.data || [];
+          } else {
+            console.error(`Error fetching logs for ext ${ext}:`, data.error);
+            newLogs[ext] = [];
+          }
+        } catch (fetchErr) {
+          console.error(`Failed to fetch logs for ext ${ext}:`, fetchErr);
           newLogs[ext] = [];
         }
       }));
@@ -255,7 +271,12 @@ export default function CallLogDashboard() {
       setCallLogs(newLogs);
     } catch (err) {
       console.error("Error fetching call logs:", err);
-      setError("שגיאה בטעינת נתוני שיחות");
+      // Check if this is a 504 timeout error
+      if (err.message?.includes("504") || err.message?.includes("timeout")) {
+        setError("⏱️ המרכזיה לא הגיבה בזמן - קיימת בעיית חסימת IP בין Vercel למרכזיה. נדרש פנייה לתמיכה של MasterPBX להסרת החסימה.");
+      } else {
+        setError("שגיאה בטעינת נתוני שיחות - " + (err.message || "נסה שוב מאוחר יותר"));
+      }
     } finally {
       setLoading(false);
     }
@@ -276,28 +297,43 @@ export default function CallLogDashboard() {
     
     try {
       await Promise.all(MONITORED_EXTENSIONS.map(async (ext) => {
-        const response = await fetch("/api/call-logs", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            startDate: startDateStr,
-            endDate: endDateStr,
-            extensionNumber: ext
-          })
-        });
-        
-        const data = await response.json();
-        
-        if (data.success) {
-          // Group by date
-          const logsByDate = {};
-          weekDates.forEach(d => {
-            logsByDate[formatDateForApi(d)] = [];
+        try {
+          const response = await fetch("/api/call-logs", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              startDate: startDateStr,
+              endDate: endDateStr,
+              extensionNumber: ext
+            })
           });
           
-          (data.data || []).forEach(call => {
-            const callDate = call.startDate.split(' ')[0];
-            if (logsByDate[callDate]) {
+          // Check if response is JSON before parsing
+          const contentType = response.headers.get("content-type");
+          if (!contentType || !contentType.includes("application/json")) {
+            console.error(`Non-JSON response for ext ${ext} (weekly):`, response.status, response.statusText);
+            if (response.status === 504) {
+              throw new Error("504 Gateway Timeout - המרכזיה לא הגיבה");
+            }
+            newWeeklyLogs[ext] = {};
+            weekDates.forEach(d => {
+              newWeeklyLogs[ext][formatDateForApi(d)] = [];
+            });
+            return;
+          }
+          
+          const data = await response.json();
+          
+          if (data.success) {
+            // Group by date
+            const logsByDate = {};
+            weekDates.forEach(d => {
+              logsByDate[formatDateForApi(d)] = [];
+            });
+            
+            (data.data || []).forEach(call => {
+              const callDate = call.startDate.split(' ')[0];
+              if (logsByDate[callDate]) {
               logsByDate[callDate].push(call);
             }
           });
@@ -306,12 +342,24 @@ export default function CallLogDashboard() {
         } else {
           newWeeklyLogs[ext] = {};
         }
+        } catch (fetchErr) {
+          console.error(`Failed to fetch weekly logs for ext ${ext}:`, fetchErr);
+          newWeeklyLogs[ext] = {};
+          weekDates.forEach(d => {
+            newWeeklyLogs[ext][formatDateForApi(d)] = [];
+          });
+        }
       }));
       
       setWeeklyLogs(newWeeklyLogs);
     } catch (err) {
       console.error("Error fetching weekly logs:", err);
-      setError("שגיאה בטעינת נתוני שבוע");
+      // Check if this is a 504 timeout error
+      if (err.message?.includes("504") || err.message?.includes("timeout")) {
+        setError("⏱️ המרכזיה לא הגיבה בזמן - קיימת בעיית חסימת IP בין Vercel למרכזיה. נדרש פנייה לתמיכה של MasterPBX להסרת החסימה.");
+      } else {
+        setError("שגיאה בטעינת נתוני שבוע - " + (err.message || "נסה שוב מאוחר יותר"));
+      }
     } finally {
       setLoading(false);
     }
