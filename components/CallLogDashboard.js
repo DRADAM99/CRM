@@ -14,9 +14,9 @@ import { Phone, Clock, PhoneIncoming, PhoneOutgoing, AlertTriangle, RefreshCw, P
 // Extensions to monitor
 const MONITORED_EXTENSIONS = ["104", "105"];
 
-// Working hours for break detection (8:00 - 18:00)
+// Working hours for break detection (8:00 - 20:00)
 const WORK_START_HOUR = 8;
-const WORK_END_HOUR = 18;
+const WORK_END_HOUR = 20;
 
 // Hebrew day names
 const HEBREW_DAYS = ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת'];
@@ -55,6 +55,21 @@ function formatTotalDuration(totalSeconds) {
   const minutes = Math.floor((totalSeconds % 3600) / 60);
   const seconds = totalSeconds % 60;
   return `${hours}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+}
+
+// Helper to format break time in hours and minutes
+function formatBreakTime(minutes) {
+  if (!minutes || minutes < 0) return '-';
+  if (minutes < 60) return `${minutes} דק׳`;
+  
+  const hours = Math.floor(minutes / 60);
+  const remainingMinutes = minutes % 60;
+  
+  if (hours === 1) {
+    return remainingMinutes > 0 ? `שעה ${remainingMinutes} דק׳` : 'שעה';
+  }
+  
+  return remainingMinutes > 0 ? `${hours} שעות ${remainingMinutes} דק׳` : `${hours} שעות`;
 }
 
 // Get color class for heatmap based on minutes of activity
@@ -111,6 +126,8 @@ export default function CallLogDashboard() {
   const [weekStartDate, setWeekStartDate] = useState(() => getWeekStart(new Date()));
   const [callLogs, setCallLogs] = useState({}); // { "104": [...], "105": [...] }
   const [weeklyLogs, setWeeklyLogs] = useState({}); // { "104": { "2024-01-01": [...], ... }, ... }
+  const [crmActivity, setCrmActivity] = useState({}); // { "104": { hourlyActivity: {...} }, "105": { hourlyActivity: {...} } }
+  const [weeklyCrmActivity, setWeeklyCrmActivity] = useState({}); // { "104": { "2024-01-01": {8: 5, 9: 12...}, ... }, ... }
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [prefsLoaded, setPrefsLoaded] = useState(false);
@@ -134,6 +151,7 @@ export default function CallLogDashboard() {
 
   // Fetch users with EXT field from Firestore directly
   const [extensionUserMap, setExtensionUserMap] = useState({});
+  const [extensionToUserId, setExtensionToUserId] = useState({}); // Map extension to userId for activity tracking
   
   useEffect(() => {
     const fetchExtensionUsers = async () => {
@@ -141,13 +159,17 @@ export default function CallLogDashboard() {
         const usersRef = collection(db, "users");
         const usersSnap = await getDocs(usersRef);
         const mapping = {};
+        const extToUserId = {};
         usersSnap.docs.forEach(doc => {
           const data = doc.data();
           if (data.EXT) {
-            mapping[String(data.EXT)] = data.alias || data.email || `שלוחה ${data.EXT}`;
+            const ext = String(data.EXT);
+            mapping[ext] = data.alias || data.email || `שלוחה ${ext}`;
+            extToUserId[ext] = doc.id; // Map extension to userId
           }
         });
         setExtensionUserMap(mapping);
+        setExtensionToUserId(extToUserId);
       } catch (err) {
         console.error("Error fetching extension users:", err);
       }
@@ -230,18 +252,38 @@ export default function CallLogDashboard() {
     const newLogs = {};
     
     try {
+      // Use API route (direct browser calls fail due to CORS)
+      const USE_DIRECT_CALL = false;
+      
       // Fetch for each extension
       await Promise.all(MONITORED_EXTENSIONS.map(async (ext) => {
         try {
-          const response = await fetch("/api/call-logs", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              startDate: dateStr,
-              endDate: dateStr,
-              extensionNumber: ext
-            })
-          });
+          let response;
+          
+          if (USE_DIRECT_CALL) {
+            // Direct call to MasterPBX (same as click2call pattern)
+            const pbxUrl = `https://master.ippbx.co.il/ippbx_api/v1.4/api/info/${dateStr}/${dateStr}/TENANT/callLog`;
+            response = await fetch(pbxUrl, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                token_id: "22K3TWfeifaCPUyA",
+                number: String(ext),
+                extension_password: "bdb307dc55bf1e679c296ee5c73215cb"
+              })
+            });
+          } else {
+            // Use API route (original method)
+            response = await fetch("/api/call-logs", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                startDate: dateStr,
+                endDate: dateStr,
+                extensionNumber: ext
+              })
+            });
+          }
           
           // Check if response is JSON before parsing
           const contentType = response.headers.get("content-type");
@@ -256,11 +298,43 @@ export default function CallLogDashboard() {
           
           const data = await response.json();
           
-          if (data.success) {
-            newLogs[ext] = data.data || [];
+          // Handle both API route format and direct MasterPBX format
+          if (USE_DIRECT_CALL) {
+            // Direct MasterPBX response format
+            if (data.status === "SUCCESS") {
+              // Process raw MasterPBX data
+              const callLogs = (data.data || []).map(call => {
+                const answerSeconds = parseInt(call.answer_sec) || 0;
+                return {
+                  id: `${call.start_date}-${call.caller}-${call.callee}`,
+                  callId: call.callid,
+                  startDate: call.start_date,
+                  endDate: call.end_date,
+                  caller: call.caller,
+                  callee: call.callee,
+                  durationSeconds: answerSeconds,
+                  direction: call.caller === String(ext) ? 'outgoing' : 'incoming',
+                  callStatus: call.call_status,
+                  uniqueToken: call.unique_token,
+                  hasRecording: call.call_status === 'Answered' && answerSeconds >= 5 && call.unique_token,
+                };
+              });
+              newLogs[ext] = callLogs;
+            } else if (data.status === "ERROR" && data.message?.includes("Not Found")) {
+              // No calls found - empty result
+              newLogs[ext] = [];
+            } else {
+              console.error(`Error fetching logs for ext ${ext}:`, data.message);
+              newLogs[ext] = [];
+            }
           } else {
-            console.error(`Error fetching logs for ext ${ext}:`, data.error);
-            newLogs[ext] = [];
+            // API route response format
+            if (data.success) {
+              newLogs[ext] = data.data || [];
+            } else {
+              console.error(`Error fetching logs for ext ${ext}:`, data.error);
+              newLogs[ext] = [];
+            }
           }
         } catch (fetchErr) {
           console.error(`Failed to fetch logs for ext ${ext}:`, fetchErr);
@@ -296,17 +370,37 @@ export default function CallLogDashboard() {
     const newWeeklyLogs = {};
     
     try {
+      // Use API route (direct browser calls fail due to CORS)
+      const USE_DIRECT_CALL = false;
+      
       await Promise.all(MONITORED_EXTENSIONS.map(async (ext) => {
         try {
-          const response = await fetch("/api/call-logs", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              startDate: startDateStr,
-              endDate: endDateStr,
-              extensionNumber: ext
-            })
-          });
+          let response;
+          
+          if (USE_DIRECT_CALL) {
+            // Direct call to MasterPBX (same as click2call pattern)
+            const pbxUrl = `https://master.ippbx.co.il/ippbx_api/v1.4/api/info/${startDateStr}/${endDateStr}/TENANT/callLog`;
+            response = await fetch(pbxUrl, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                token_id: "22K3TWfeifaCPUyA",
+                number: String(ext),
+                extension_password: "bdb307dc55bf1e679c296ee5c73215cb"
+              })
+            });
+          } else {
+            // Use API route (original method)
+            response = await fetch("/api/call-logs", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                startDate: startDateStr,
+                endDate: endDateStr,
+                extensionNumber: ext
+              })
+            });
+          }
           
           // Check if response is JSON before parsing
           const contentType = response.headers.get("content-type");
@@ -324,24 +418,55 @@ export default function CallLogDashboard() {
           
           const data = await response.json();
           
-          if (data.success) {
-            // Group by date
-            const logsByDate = {};
-            weekDates.forEach(d => {
-              logsByDate[formatDateForApi(d)] = [];
-            });
-            
-            (data.data || []).forEach(call => {
-              const callDate = call.startDate.split(' ')[0];
-              if (logsByDate[callDate]) {
-              logsByDate[callDate].push(call);
-            }
+          // Initialize date structure
+          const logsByDate = {};
+          weekDates.forEach(d => {
+            logsByDate[formatDateForApi(d)] = [];
           });
           
+          // Handle both API route format and direct MasterPBX format
+          if (USE_DIRECT_CALL) {
+            // Direct MasterPBX response format
+            if (data.status === "SUCCESS") {
+              // Process raw MasterPBX data
+              (data.data || []).forEach(call => {
+                const answerSeconds = parseInt(call.answer_sec) || 0;
+                const processedCall = {
+                  id: `${call.start_date}-${call.caller}-${call.callee}`,
+                  callId: call.callid,
+                  startDate: call.start_date,
+                  endDate: call.end_date,
+                  caller: call.caller,
+                  callee: call.callee,
+                  durationSeconds: answerSeconds,
+                  direction: call.caller === String(ext) ? 'outgoing' : 'incoming',
+                  callStatus: call.call_status,
+                  uniqueToken: call.unique_token,
+                  hasRecording: call.call_status === 'Answered' && answerSeconds >= 5 && call.unique_token,
+                };
+                const callDate = call.start_date.split(' ')[0];
+                if (logsByDate[callDate]) {
+                  logsByDate[callDate].push(processedCall);
+                }
+              });
+            } else if (data.status === "ERROR" && !data.message?.includes("Not Found")) {
+              console.error(`Error fetching weekly logs for ext ${ext}:`, data.message);
+            }
+          } else {
+            // API route response format
+            if (data.success) {
+              (data.data || []).forEach(call => {
+                const callDate = call.startDate.split(' ')[0];
+                if (logsByDate[callDate]) {
+                  logsByDate[callDate].push(call);
+                }
+              });
+            } else {
+              console.error(`Error fetching weekly logs for ext ${ext}:`, data.error);
+            }
+          }
+          
           newWeeklyLogs[ext] = logsByDate;
-        } else {
-          newWeeklyLogs[ext] = {};
-        }
         } catch (fetchErr) {
           console.error(`Failed to fetch weekly logs for ext ${ext}:`, fetchErr);
           newWeeklyLogs[ext] = {};
@@ -365,16 +490,153 @@ export default function CallLogDashboard() {
     }
   }, [weekStartDate, dateFilter]);
 
+  // Fetch CRM activity for single day
+  const fetchUserActivityDaily = useCallback(async () => {
+    if (!targetDate || dateFilter === "week") return;
+    
+    const dateStr = formatDateForApi(targetDate);
+    const newActivity = {};
+    
+    console.log("📊 Fetching CRM activity for date:", dateStr);
+    console.log("🔑 Extension to UserId mapping:", extensionToUserId);
+    
+    try {
+      // Fetch activity for each extension (by userId)
+      await Promise.all(MONITORED_EXTENSIONS.map(async (ext) => {
+        const userId = extensionToUserId[ext];
+        if (!userId) {
+          console.log(`⚠️ No userId found for extension ${ext} - CRM activity will be empty`);
+          newActivity[ext] = { hourlyActivity: {} };
+          return;
+        }
+
+        console.log(`✓ Found userId ${userId} for extension ${ext}`);
+
+        try {
+          const response = await fetch("/api/user-activity", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              userId,
+              startDate: dateStr,
+              endDate: dateStr
+            })
+          });
+
+          if (!response.ok) {
+            console.error(`Failed to fetch activity for ext ${ext}:`, response.status);
+            newActivity[ext] = { hourlyActivity: {} };
+            return;
+          }
+
+          const data = await response.json();
+          
+          if (data.success && data.hourlyActivity) {
+            // Get hourly activity for today
+            const todayActivity = data.hourlyActivity[dateStr] || {};
+            newActivity[ext] = { hourlyActivity: todayActivity };
+          } else {
+            newActivity[ext] = { hourlyActivity: {} };
+          }
+        } catch (fetchErr) {
+          console.error(`Failed to fetch activity for ext ${ext}:`, fetchErr);
+          newActivity[ext] = { hourlyActivity: {} };
+        }
+      }));
+      
+      setCrmActivity(newActivity);
+    } catch (err) {
+      console.error("Error fetching user activity:", err);
+    }
+  }, [targetDate, dateFilter, extensionToUserId]);
+
+  // Fetch CRM activity for weekly view
+  const fetchUserActivityWeekly = useCallback(async () => {
+    if (dateFilter !== "week") return;
+    
+    const weekDates = getWeekDates(weekStartDate);
+    const startDateStr = formatDateForApi(weekDates[0]);
+    const endDateStr = formatDateForApi(weekDates[6]);
+    
+    const newWeeklyActivity = {};
+    
+    console.log("📊 Fetching weekly CRM activity:", startDateStr, "to", endDateStr);
+    
+    try {
+      await Promise.all(MONITORED_EXTENSIONS.map(async (ext) => {
+        const userId = extensionToUserId[ext];
+        if (!userId) {
+          console.log(`⚠️ No userId found for extension ${ext} - CRM activity will be empty`);
+          // Initialize empty activity for all days
+          newWeeklyActivity[ext] = {};
+          weekDates.forEach(d => {
+            newWeeklyActivity[ext][formatDateForApi(d)] = {};
+          });
+          return;
+        }
+
+        try {
+          const response = await fetch("/api/user-activity", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              userId,
+              startDate: startDateStr,
+              endDate: endDateStr
+            })
+          });
+
+          if (!response.ok) {
+            newWeeklyActivity[ext] = {};
+            weekDates.forEach(d => {
+              newWeeklyActivity[ext][formatDateForApi(d)] = {};
+            });
+            return;
+          }
+
+          const data = await response.json();
+          
+          if (data.success && data.hourlyActivity) {
+            // Ensure all days exist in the data
+            const activityByDate = {};
+            weekDates.forEach(d => {
+              const dateKey = formatDateForApi(d);
+              activityByDate[dateKey] = data.hourlyActivity[dateKey] || {};
+            });
+            newWeeklyActivity[ext] = activityByDate;
+          } else {
+            newWeeklyActivity[ext] = {};
+            weekDates.forEach(d => {
+              newWeeklyActivity[ext][formatDateForApi(d)] = {};
+            });
+          }
+        } catch (fetchErr) {
+          console.error(`Failed to fetch weekly activity for ext ${ext}:`, fetchErr);
+          newWeeklyActivity[ext] = {};
+          weekDates.forEach(d => {
+            newWeeklyActivity[ext][formatDateForApi(d)] = {};
+          });
+        }
+      }));
+      
+      setWeeklyCrmActivity(newWeeklyActivity);
+    } catch (err) {
+      console.error("Error fetching weekly activity:", err);
+    }
+  }, [weekStartDate, dateFilter, extensionToUserId]);
+
   // Fetch on mount and when date changes
   useEffect(() => {
     if (prefsLoaded) {
       if (dateFilter === "week") {
         fetchWeeklyLogs();
+        fetchUserActivityWeekly();
       } else {
         fetchCallLogs();
+        fetchUserActivityDaily();
       }
     }
-  }, [fetchCallLogs, fetchWeeklyLogs, prefsLoaded, dateFilter]);
+  }, [fetchCallLogs, fetchWeeklyLogs, fetchUserActivityDaily, fetchUserActivityWeekly, prefsLoaded, dateFilter]);
 
   // Open recording in PBX portal (fallback since API doesn't work)
   const openRecordingPortal = (call) => {
@@ -489,6 +751,88 @@ export default function CallLogDashboard() {
     };
   }, [calculateStats]);
 
+  // Calculate combined stats (phone + CRM activity)
+  const calculateCombinedStats = useCallback((logs, crmActivityData) => {
+    // First get basic call stats
+    const callStats = calculateStats(logs);
+    
+    // Get CRM hourly activity
+    const crmHourly = crmActivityData?.hourlyActivity || {};
+    
+    // Create combined timeline of all activities (calls + CRM actions)
+    const activities = [];
+    
+    // Add call activities
+    if (logs && logs.length > 0) {
+      logs.forEach(call => {
+        activities.push({
+          type: 'call',
+          start: new Date(call.startDate),
+          end: new Date(call.endDate),
+          duration: call.durationSeconds || 0
+        });
+      });
+    }
+    
+    // Add CRM activities (approximate as 1-minute activities at the hour)
+    Object.keys(crmHourly).forEach(hour => {
+      const count = crmHourly[hour];
+      if (count > 0) {
+        // Create approximate activity entries for this hour
+        for (let i = 0; i < count; i++) {
+          const activityTime = new Date();
+          activityTime.setHours(parseInt(hour), i * Math.floor(60 / count), 0, 0);
+          activities.push({
+            type: 'crm',
+            start: activityTime,
+            end: new Date(activityTime.getTime() + 60000), // 1 minute
+            duration: 60
+          });
+        }
+      }
+    });
+    
+    // Sort all activities by start time
+    activities.sort((a, b) => a.start - b.start);
+    
+    // Calculate longest break (gap with NO activity - neither calls nor CRM)
+    let longestBreak = 0;
+    const workHourActivities = activities.filter(act => {
+      const hour = act.start.getHours();
+      return hour >= WORK_START_HOUR && hour < WORK_END_HOUR;
+    });
+    
+    if (workHourActivities.length > 1) {
+      for (let i = 1; i < workHourActivities.length; i++) {
+        const prevEnd = workHourActivities[i - 1].end;
+        const currStart = workHourActivities[i].start;
+        const breakMinutes = Math.floor((currStart - prevEnd) / 60000);
+        if (breakMinutes > longestBreak) {
+          longestBreak = breakMinutes;
+        }
+      }
+    }
+    
+    // Create combined hourly activity (calls + CRM)
+    const combinedHourly = [...callStats.hourlyActivity];
+    Object.keys(crmHourly).forEach(hour => {
+      const h = parseInt(hour);
+      if (h >= 0 && h < 24) {
+        // CRM activity is measured in action count, convert to "minutes of activity"
+        // Assume each CRM action represents ~2 minutes of work
+        combinedHourly[h] = (combinedHourly[h] || 0) + (crmHourly[h] * 2);
+      }
+    });
+    
+    return {
+      ...callStats,
+      longestBreak, // Real break (no phone AND no CRM)
+      hourlyActivity: combinedHourly,
+      phoneHourlyActivity: callStats.hourlyActivity,
+      crmHourlyActivity: crmHourly
+    };
+  }, [calculateStats]);
+
   // Navigate weeks
   const goToPreviousWeek = () => {
     const prev = new Date(weekStartDate);
@@ -507,43 +851,105 @@ export default function CallLogDashboard() {
   };
 
   // Render heatmap for an extension
-  const renderHeatmap = (hourlyActivity) => {
-    // Only show work hours (8-18)
+  const renderHeatmap = (phoneActivity, crmActivity) => {
+    // Only show work hours (8:00-20:00)
     const workHours = [];
     for (let h = WORK_START_HOUR; h <= WORK_END_HOUR; h++) {
-      workHours.push({ hour: h, minutes: hourlyActivity[h] || 0 });
+      workHours.push({ 
+        hour: h, 
+        phoneMinutes: phoneActivity[h] || 0,
+        crmActions: crmActivity[h] || 0
+      });
     }
+
+    // Helper to calculate opacity for phone activity (0-1 based on minutes)
+    const getPhoneOpacity = (minutes) => {
+      if (minutes === 0) return 0;
+      if (minutes <= 5) return 0.2;
+      if (minutes <= 15) return 0.4;
+      if (minutes <= 30) return 0.6;
+      if (minutes <= 45) return 0.8;
+      return 1;
+    };
+
+    // Helper to calculate opacity for CRM activity (0-0.7 based on action count)
+    const getCrmOpacity = (actions) => {
+      if (actions === 0) return 0;
+      if (actions <= 2) return 0.15;
+      if (actions <= 5) return 0.3;
+      if (actions <= 10) return 0.5;
+      return 0.7;
+    };
 
     return (
       <div className="flex flex-col gap-1">
         <div className="flex gap-1 justify-center">
-          {workHours.map(({ hour, minutes }) => (
-            <Tooltip key={hour}>
-              <TooltipTrigger asChild>
-                <div
-                  className={`w-10 h-10 rounded flex items-center justify-center text-xs font-medium cursor-default ${getHeatmapColor(minutes)} ${getHeatmapTextColor(minutes)}`}
-                >
-                  {hour}
-                </div>
-              </TooltipTrigger>
-              <TooltipContent>
-                <p className="text-sm" dir="rtl">{minutes} דקות פעילות בשעה {hour}:00</p>
-              </TooltipContent>
-            </Tooltip>
-          ))}
+          {workHours.map(({ hour, phoneMinutes, crmActions }) => {
+            const phoneOpacity = getPhoneOpacity(phoneMinutes);
+            const crmOpacity = getCrmOpacity(crmActions);
+            const hasActivity = phoneMinutes > 0 || crmActions > 0;
+            
+            return (
+              <Tooltip key={hour}>
+                <TooltipTrigger asChild>
+                  <div
+                    className="w-10 h-10 rounded flex items-center justify-center text-xs font-medium cursor-default relative overflow-hidden"
+                    style={{
+                      backgroundColor: hasActivity ? 'transparent' : '#e5e7eb' // gray-200
+                    }}
+                  >
+                    {/* Phone activity layer (blue) */}
+                    {phoneOpacity > 0 && (
+                      <div
+                        className="absolute inset-0"
+                        style={{
+                          backgroundColor: '#3b82f6', // blue-500
+                          opacity: phoneOpacity
+                        }}
+                      />
+                    )}
+                    {/* CRM activity layer (green, semi-transparent overlay) */}
+                    {crmOpacity > 0 && (
+                      <div
+                        className="absolute inset-0"
+                        style={{
+                          backgroundColor: '#22c55e', // green-500
+                          opacity: crmOpacity
+                        }}
+                      />
+                    )}
+                    {/* Hour label */}
+                    <span className={`relative z-10 ${hasActivity ? 'text-white' : 'text-gray-700'}`}>
+                      {hour}
+                    </span>
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <div className="text-sm" dir="rtl">
+                    <div className="font-bold">שעה {hour}:00</div>
+                    <div className="text-blue-300">📞 טלפון: {phoneMinutes} דק׳</div>
+                    <div className="text-green-300">💻 CRM: {crmActions} פעולות</div>
+                  </div>
+                </TooltipContent>
+              </Tooltip>
+            );
+          })}
         </div>
-        <div className="flex justify-center gap-2 mt-2 text-xs text-gray-500">
+        {/* Legend */}
+        <div className="flex justify-center gap-3 mt-2 text-xs">
           <span className="flex items-center gap-1">
-            <div className="w-3 h-3 rounded bg-gray-200"></div> 0 דק׳
+            <div className="w-3 h-3 rounded" style={{ backgroundColor: '#3b82f6' }}></div> טלפון
           </span>
           <span className="flex items-center gap-1">
-            <div className="w-3 h-3 rounded bg-green-300"></div> 1-15 דק׳
+            <div className="w-3 h-3 rounded" style={{ backgroundColor: '#22c55e' }}></div> CRM
           </span>
           <span className="flex items-center gap-1">
-            <div className="w-3 h-3 rounded bg-green-500"></div> 16-30 דק׳
+            <div className="w-3 h-3 rounded" style={{ 
+              background: 'linear-gradient(135deg, #3b82f6 50%, #22c55e 50%)' 
+            }}></div> שניהם
           </span>
           <span className="flex items-center gap-1">
-            <div className="w-3 h-3 rounded bg-green-700"></div> 30+ דק׳
+            <div className="w-3 h-3 rounded bg-gray-200"></div> הפסקה
           </span>
         </div>
       </div>
@@ -577,8 +983,8 @@ export default function CallLogDashboard() {
               <div className="text-xs text-purple-600">סה״כ שיחות</div>
             </div>
             <div>
-              <div className={`text-2xl font-bold ${weekStats.avgBreakTime > 30 ? 'text-red-700' : 'text-green-700'}`}>
-                {weekStats.avgBreakTime} דק׳
+              <div className={`text-2xl font-bold ${weekStats.avgBreakTime > 90 ? 'text-red-700' : 'text-green-700'}`}>
+                {formatBreakTime(weekStats.avgBreakTime)}
               </div>
               <div className="text-xs text-gray-600">ממוצע זמן הפסקה</div>
             </div>
@@ -591,13 +997,18 @@ export default function CallLogDashboard() {
               {weekDates.map((date, dayIdx) => {
                 const dateStr = formatDateForApi(date);
                 const dayLogs = weeklyData[dateStr] || [];
-                const dayStats = calculateStats(dayLogs);
+                const dayCrmActivity = weeklyCrmActivity[ext]?.[dateStr] || {};
+                const dayStats = calculateCombinedStats(dayLogs, { hourlyActivity: dayCrmActivity });
                 const isToday = formatDateForApi(new Date()) === dateStr;
 
-                // Create array of work hours (8-18)
+                // Create array of work hours (8:00-20:00)
                 const workHours = [];
                 for (let h = WORK_START_HOUR; h <= WORK_END_HOUR; h++) {
-                  workHours.push({ hour: h, minutes: dayStats.hourlyActivity[h] || 0 });
+                  workHours.push({ 
+                    hour: h, 
+                    phoneMinutes: (dayStats.phoneHourlyActivity || [])[h] || 0,
+                    crmActions: (dayStats.crmHourlyActivity || {})[h] || 0
+                  });
                 }
 
                 return (
@@ -610,23 +1021,65 @@ export default function CallLogDashboard() {
                     
                     {/* Vertical hourly bars */}
                     <div className="flex flex-col-reverse gap-0.5">
-                      {workHours.map(({ hour, minutes }) => (
-                        <Tooltip key={hour}>
-                          <TooltipTrigger asChild>
-                            <div
-                              className={`w-12 h-6 rounded flex items-center justify-center text-[10px] font-medium cursor-default ${getHeatmapColor(minutes)} ${getHeatmapTextColor(minutes)}`}
-                            >
-                              {hour}
-                            </div>
-                          </TooltipTrigger>
-                          <TooltipContent side="left">
-                            <p className="text-sm" dir="rtl">
-                              {HEBREW_DAYS[dayIdx]} {date.getDate()}/{date.getMonth() + 1}<br/>
-                              שעה {hour}:00 - {minutes} דקות
-                            </p>
-                          </TooltipContent>
-                        </Tooltip>
-                      ))}
+                      {workHours.map(({ hour, phoneMinutes, crmActions }) => {
+                        const phoneOpacity = phoneMinutes === 0 ? 0 : 
+                          phoneMinutes <= 5 ? 0.2 : 
+                          phoneMinutes <= 15 ? 0.4 :
+                          phoneMinutes <= 30 ? 0.6 :
+                          phoneMinutes <= 45 ? 0.8 : 1;
+                        
+                        const crmOpacity = crmActions === 0 ? 0 :
+                          crmActions <= 2 ? 0.15 :
+                          crmActions <= 5 ? 0.3 :
+                          crmActions <= 10 ? 0.5 : 0.7;
+                        
+                        const hasActivity = phoneMinutes > 0 || crmActions > 0;
+                        
+                        return (
+                          <Tooltip key={hour}>
+                            <TooltipTrigger asChild>
+                              <div
+                                className="w-12 h-6 rounded flex items-center justify-center text-[10px] font-medium cursor-default relative overflow-hidden"
+                                style={{
+                                  backgroundColor: hasActivity ? 'transparent' : '#e5e7eb'
+                                }}
+                              >
+                                {/* Phone activity layer (blue) */}
+                                {phoneOpacity > 0 && (
+                                  <div
+                                    className="absolute inset-0"
+                                    style={{
+                                      backgroundColor: '#3b82f6',
+                                      opacity: phoneOpacity
+                                    }}
+                                  />
+                                )}
+                                {/* CRM activity layer (green overlay) */}
+                                {crmOpacity > 0 && (
+                                  <div
+                                    className="absolute inset-0"
+                                    style={{
+                                      backgroundColor: '#22c55e',
+                                      opacity: crmOpacity
+                                    }}
+                                  />
+                                )}
+                                <span className={`relative z-10 ${hasActivity ? 'text-white' : 'text-gray-700'}`}>
+                                  {hour}
+                                </span>
+                              </div>
+                            </TooltipTrigger>
+                            <TooltipContent side="left">
+                              <div className="text-sm" dir="rtl">
+                                <div>{HEBREW_DAYS[dayIdx]} {date.getDate()}/{date.getMonth() + 1}</div>
+                                <div>שעה {hour}:00</div>
+                                <div className="text-blue-300">📞 {phoneMinutes} דק׳</div>
+                                <div className="text-green-300">💻 {crmActions} פעולות</div>
+                              </div>
+                            </TooltipContent>
+                          </Tooltip>
+                        );
+                      })}
                     </div>
 
                     {/* Day summary tooltip trigger */}
@@ -643,8 +1096,8 @@ export default function CallLogDashboard() {
                           <div>זמן כולל: {formatTotalDuration(dayStats.totalDuration)}</div>
                           <div>ממוצע שיחה: {formatDuration(dayStats.avgDuration)}</div>
                           <div>נכנסות: {dayStats.incomingCalls} | יוצאות: {dayStats.outgoingCalls}</div>
-                          <div className={dayStats.longestBreak > 30 ? 'text-red-500' : ''}>
-                            זמן הפסקה: {dayStats.longestBreak > 0 ? `${dayStats.longestBreak} דק׳` : '-'}
+                          <div className={dayStats.longestBreak > 90 ? 'text-red-500' : ''}>
+                            זמן הפסקה: {formatBreakTime(dayStats.longestBreak)}
                           </div>
                         </div>
                       </TooltipContent>
@@ -700,12 +1153,12 @@ export default function CallLogDashboard() {
           </div>
           <div className="text-xs text-gray-600">נכנסות / יוצאות</div>
         </div>
-        <div className={`rounded-lg p-3 ${stats.longestBreak > 30 ? 'bg-red-50' : 'bg-gray-50'}`}>
-          <div className={`text-2xl font-bold ${stats.longestBreak > 30 ? 'text-red-700' : 'text-gray-700'}`}>
-            {stats.longestBreak > 0 ? `${stats.longestBreak} דק׳` : '-'}
+        <div className={`rounded-lg p-3 ${stats.longestBreak > 90 ? 'bg-red-50' : 'bg-gray-50'}`}>
+          <div className={`text-2xl font-bold ${stats.longestBreak > 90 ? 'text-red-700' : 'text-gray-700'}`}>
+            {formatBreakTime(stats.longestBreak)}
           </div>
-          <div className={`text-xs ${stats.longestBreak > 30 ? 'text-red-600' : 'text-gray-600'} flex items-center justify-center gap-1`}>
-            {stats.longestBreak > 30 && <AlertTriangle className="w-3 h-3" />}
+          <div className={`text-xs ${stats.longestBreak > 90 ? 'text-red-600' : 'text-gray-600'} flex items-center justify-center gap-1`}>
+            {stats.longestBreak > 90 && <AlertTriangle className="w-3 h-3" />}
             הפסקה ארוכה
           </div>
         </div>
@@ -793,7 +1246,8 @@ export default function CallLogDashboard() {
   // Render extension section
   const renderExtensionSection = (ext) => {
     const logs = callLogs[ext] || [];
-    const stats = calculateStats(logs);
+    const crmActivityData = crmActivity[ext] || { hourlyActivity: {} };
+    const stats = calculateCombinedStats(logs, crmActivityData);
     const userName = extensionUserMap[ext] || extensionUsers[ext] || `שלוחה ${ext}`;
 
     return (
@@ -808,8 +1262,8 @@ export default function CallLogDashboard() {
         <CardContent className="space-y-4">
           {/* Heatmap */}
           <div className="bg-gray-50 rounded-lg p-4">
-            <h4 className="text-sm font-medium text-gray-700 mb-3 text-center">פעילות לפי שעות (דקות)</h4>
-            {renderHeatmap(stats.hourlyActivity)}
+            <h4 className="text-sm font-medium text-gray-700 mb-3 text-center">פעילות לפי שעות</h4>
+            {renderHeatmap(stats.phoneHourlyActivity || stats.hourlyActivity, stats.crmHourlyActivity || {})}
           </div>
           
           {/* Stats */}

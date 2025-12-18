@@ -46,6 +46,7 @@ import TaskManager from "@/components/TaskManager";
 import LeadManager from "@/components/LeadManager";
 import FixedTasks from "@/components/FixedTasks";
 import FixedTasksAnalytics from "@/components/FixedTasksAnalytics";
+import { logActivity } from "@/lib/activityLogger";
 import {
   collection,
   getDocs,
@@ -1044,7 +1045,20 @@ const [selectedDate, setSelectedDate] = useState(new Date());
       // Remove fields that should not be duplicated
       delete duplicatedLead.id;
       // Add to Firestore
-      await addDoc(collection(db, "leads"), duplicatedLead);
+      const leadRef = await addDoc(collection(db, "leads"), duplicatedLead);
+
+      // Log activity for lead creation (duplication)
+      if (currentUser) {
+        await logActivity(
+          currentUser.uid,
+          alias || currentUser.email,
+          "create",
+          "lead",
+          leadRef.id,
+          { fullName: duplicatedLead.fullName, duplicatedFrom: leadToDuplicate.id }
+        );
+      }
+
       // No need to update local state, real-time listener will update leads
       toast({ title: "הליד שוכפל", description: "נוצר ליד חדש משוכפל." });
     } catch (error) {
@@ -2073,6 +2087,16 @@ useEffect(() => {
         updatedAt: serverTimestamp() // And this
       });
 
+      // Log activity for task completion
+      await logActivity(
+        currentUser.uid,
+        alias || currentUser.email,
+        "update",
+        "task",
+        taskId,
+        { action: "completed", title: task.title }
+      );
+
       console.log('Task completed and reply added successfully');
     } catch (error) {
       console.error('Error in Complete & Reply:', error);
@@ -2323,6 +2347,16 @@ useEffect(() => {
 
       await updateDoc(leadRef, updateData);
 
+      // Log activity for lead update
+      await logActivity(
+        currentUser.uid,
+        alias || currentUser.email,
+        "update",
+        "lead",
+        leadId,
+        { status: editLeadStatus, fullName: editLeadFullName }
+      );
+
       // Create appointment task if status changed to 'תור נקבע'
       if (originalLead.status !== 'תור נקבע' && editLeadStatus === 'תור נקבע' && appointmentDate) {
         const taskRef = doc(collection(db, "tasks"));
@@ -2350,6 +2384,16 @@ useEffect(() => {
         };
 
         await setDoc(taskRef, newTask);
+
+        // Log activity for task creation
+        await logActivity(
+          currentUser.uid,
+          alias || currentUser.email,
+          "create",
+          "task",
+          taskRef.id,
+          { title: newTask.title, leadId: leadId }
+        );
       }
 
       setEditingLeadId(null);
@@ -2417,7 +2461,7 @@ useEffect(() => {
     }
 
     try {
-        await addDoc(collection(db, "leads"), {
+        const leadRef = await addDoc(collection(db, "leads"), {
             createdAt: serverTimestamp(),
             fullName: newLeadFullName.trim(),
             phoneNumber: newLeadPhone.trim(),
@@ -2428,6 +2472,18 @@ useEffect(() => {
             isHot: newLeadIsHot,
             followUpCall: { active: false, count: 0 },
         });
+
+        // Log activity for lead creation
+        if (currentUser) {
+          await logActivity(
+            currentUser.uid,
+            alias || currentUser.email,
+            "create",
+            "lead",
+            leadRef.id,
+            { fullName: newLeadFullName.trim(), status: newLeadStatus }
+          );
+        }
 
         setNewLeadFullName("");
         setNewLeadPhone("");

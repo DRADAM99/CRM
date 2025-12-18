@@ -232,5 +232,27 @@ service cloud.firestore {
       allow read, write: if isAuthenticated();
     }
 
+    // ────────────────
+    // User Activity Collection
+    // ────────────────
+    match /userActivity/{activityId} {
+      // Allow authenticated users to create their own activity logs
+      allow create: if isAuthenticated() && 
+        request.resource.data.userId == request.auth.uid &&
+        request.resource.data.timestamp is timestamp &&
+        request.resource.data.action in ['create', 'update'] &&
+        request.resource.data.entity in ['lead', 'task', 'note', 'candidate'];
+      
+      // Allow users to read their own activity logs
+      allow read: if isAuthenticated() && 
+        resource.data.userId == request.auth.uid;
+      
+      // Allow admins to read all activity logs
+      allow read: if isAdmin();
+      
+      // No updates or deletes - activity logs are immutable
+      allow update, delete: if false;
+    }
+
   } // END documents
 } // END service 

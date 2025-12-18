@@ -28,6 +28,7 @@ import {
   collection, getDocs, getDoc, addDoc, updateDoc, onSnapshot, setDoc, doc, deleteDoc, serverTimestamp, arrayUnion, orderBy, query, Timestamp
 } from "firebase/firestore";
 import { TaskTabs } from "./TaskTabs";
+import { logActivity } from "@/lib/activityLogger";
 
 // Local utilities/constants duplicated to minimize risk during extraction
 const taskPriorities = ["דחוף", "רגיל", "נמוך"];
@@ -697,6 +698,18 @@ export default function TaskManager({ isTMFullView, setIsTMFullView, blockPositi
         completedAt: null,
         updatedAt: serverTimestamp(),
       });
+
+      // Log activity for task update
+      if (currentUser) {
+        await logActivity(
+          currentUser.uid,
+          alias || currentUser.email,
+          "update",
+          "task",
+          editingTaskId,
+          { title: editingTitle, category: editingCategory }
+        );
+      }
     } catch {}
     setTasks(prev => prev.map(t => t.id === editingTaskId ? {
       ...t,
