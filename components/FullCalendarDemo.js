@@ -248,7 +248,7 @@ export default function FullCalendarDemo({ isCalendarFullView, taskCategories: p
       
     setEvents([...taskEvents, ...leadEvents]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [allTasks, allLeads, normalizeDueDate]);
+  }, [allTasks, allLeads, normalizeDueDate, CATEGORY_COLORS]);
 
   // Detect touch device (iPad, etc.)
   useEffect(() => {
@@ -299,12 +299,14 @@ export default function FullCalendarDemo({ isCalendarFullView, taskCategories: p
       if (userFilterMulti.includes('all')) {
         // show all
       } else if (userFilterMulti.includes('mine')) {
-        if (!currentUser) return false;
+        // Don't filter while auth is still loading - show all tasks until currentUser is ready
+        if (!currentUser) return true;
         if (ev.assignTo !== currentUser.email && ev.assignTo !== currentUser.uid) return false;
       } else if (userFilterMulti.length > 0) {
         if (!userFilterMulti.some(email => ev.assignTo === email)) return false;
       }
-      if (!selectedCategories.includes(ev.category)) return false;
+      // Don't filter by category if selectedCategories is empty (still loading)
+      if (selectedCategories.length > 0 && !selectedCategories.includes(ev.category)) return false;
       if (searchTerm && !(
         (ev.title && ev.title.toLowerCase().includes(searchTerm.toLowerCase())) ||
         (ev.subtitle && ev.subtitle.toLowerCase().includes(searchTerm.toLowerCase()))

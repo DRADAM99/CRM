@@ -111,6 +111,15 @@ export default function LeadManager({ isFullView, setIsFullView, blockPosition, 
   const [pendingNewLead, setPendingNewLead] = useState(null);
   const [processingDuplicatesManually, setProcessingDuplicatesManually] = useState(false);
   const [userHasExplicitlyChangedPrefs, setUserHasExplicitlyChangedPrefs] = useState(false);
+  
+  // Task from lead state
+  const [taskFromLeadTitle, setTaskFromLeadTitle] = useState("");
+  const [taskFromLeadAssignTo, setTaskFromLeadAssignTo] = useState("");
+  const [taskFromLeadCategory, setTaskFromLeadCategory] = useState("להתקשר");
+  const [taskFromLeadDate, setTaskFromLeadDate] = useState("");
+  const [taskFromLeadTime, setTaskFromLeadTime] = useState("");
+  const [taskFromLeadId, setTaskFromLeadId] = useState(null); // Track which lead's form is being used
+  
   const alias = currentUserData?.alias || "";
   const role = currentUserData?.role || "";
 
@@ -288,6 +297,36 @@ export default function LeadManager({ isFullView, setIsFullView, blockPosition, 
 
   useEffect(() => { if (onCalendarDataChange) onCalendarDataChange({ events: leadAppointmentEvents }); }, [leadAppointmentEvents, onCalendarDataChange]);
 
+  // Helper function to format date for datetime-local input
+  const formatDateTimeLocal = useCallback((dateValue) => {
+    if (!dateValue) return "";
+    try {
+      let date;
+      if (typeof dateValue.toDate === 'function') {
+        date = dateValue.toDate();
+      } else if (dateValue instanceof Date) {
+        date = dateValue;
+      } else if (typeof dateValue === 'string') {
+        date = new Date(dateValue);
+      } else {
+        return "";
+      }
+      
+      if (isNaN(date.getTime())) return "";
+      
+      // Format as YYYY-MM-DDTHH:mm for datetime-local input
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      const hours = String(date.getHours()).padStart(2, '0');
+      const minutes = String(date.getMinutes()).padStart(2, '0');
+      
+      return `${year}-${month}-${day}T${hours}:${minutes}`;
+    } catch {
+      return "";
+    }
+  }, []);
+
   // Allow calendar to open a specific lead for editing
   useEffect(() => {
     function handleOpenLead(e) {
@@ -301,7 +340,7 @@ export default function LeadManager({ isFullView, setIsFullView, blockPosition, 
           setEditLeadMessage(lead.message);
           setEditLeadStatus(lead.status || "חדש");
           setEditLeadSource(lead.source || "");
-          setEditLeadAppointmentDateTime(lead.appointmentDateTime || "");
+          setEditLeadAppointmentDateTime(formatDateTimeLocal(lead.appointmentDateTime));
           setNewConversationText("");
           setEditLeadBranch(lead.branch || "");
           setEditLeadIsHot(lead.isHot || false);
@@ -311,7 +350,7 @@ export default function LeadManager({ isFullView, setIsFullView, blockPosition, 
     }
     window.addEventListener('open-lead', handleOpenLead);
     return () => window.removeEventListener('open-lead', handleOpenLead);
-  }, [leads]);
+  }, [leads, formatDateTimeLocal]);
 
   // Filters and sorting
   const isLeadInTimeRange = useCallback((lead) => {
@@ -358,11 +397,11 @@ export default function LeadManager({ isFullView, setIsFullView, blockPosition, 
     setEditLeadMessage(lead.message);
     setEditLeadStatus(lead.status || "חדש");
     setEditLeadSource(lead.source || "");
-    setEditLeadAppointmentDateTime(lead.appointmentDateTime || "");
+    setEditLeadAppointmentDateTime(formatDateTimeLocal(lead.appointmentDateTime));
     setNewConversationText("");
     setEditLeadBranch(lead.branch || "");
     setEditLeadIsHot(lead.isHot || false);
-  }, []);
+  }, [formatDateTimeLocal]);
 
   const handleSaveLead = useCallback(async (e, leadId) => {
     e.preventDefault(); if (!currentUser) return;
@@ -641,6 +680,87 @@ export default function LeadManager({ isFullView, setIsFullView, blockPosition, 
   const handleDuplicateLead = (lead) => {
     setLeadToDuplicate(lead);
     setShowDuplicateConfirm(true);
+  };
+
+  const handleCreateTaskFromLead = async (leadId) => {
+    if (!taskFromLeadTitle.trim() || !currentUser) {
+      alert("אנא מלא תיאור משימה");
+      return;
+    }
+
+    try {
+      // If no date/time provided, use current date/time
+      let dueDateTime;
+      if (taskFromLeadDate && taskFromLeadTime) {
+        dueDateTime = new Date(`${taskFromLeadDate}T${taskFromLeadTime}`).toISOString();
+      } else if (taskFromLeadDate) {
+        // Date provided but no time - use date with current time
+        const now = new Date();
+        dueDateTime = new Date(`${taskFromLeadDate}T${now.toTimeString().slice(0, 5)}`).toISOString();
+      } else {
+        // No date provided - use current date and time
+        dueDateTime = new Date().toISOString();
+      }
+
+      // Find the lead to get its details
+      const lead = leads.find(l => l.id === leadId);
+      const leadName = lead ? lead.fullName : "ליד";
+      
+      // Find the assignee
+      const assignedUser = assignableUsers.find(u => u.alias === taskFromLeadAssignTo || u.email === taskFromLeadAssignTo);
+      
+      const taskRef = doc(collection(db, "tasks"));
+      const newTask = {
+        id: taskRef.id,
+        userId: currentUser.uid,
+        creatorId: currentUser.uid,
+        title: taskFromLeadTitle,
+        subtitle: `מליד: ${leadName}`,
+        priority: "רגיל",
+        category: taskFromLeadCategory,
+        status: "פתוח",
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+        creatorAlias: alias || currentUser.email || "",
+        assignTo: assignedUser ? assignedUser.email : taskFromLeadAssignTo,
+        dueDate: dueDateTime,
+        replies: [],
+        isRead: false,
+        isArchived: false,
+        done: false,
+        completedBy: null,
+        completedAt: null,
+        branch: lead?.branch || "",
+        leadId: leadId, // Link task to lead
+      };
+      
+      await setDoc(taskRef, newTask);
+      
+      // Log activity
+      if (currentUser) {
+        await logActivity(
+          currentUser.uid,
+          alias || currentUser.email,
+          "create",
+          "task",
+          taskRef.id,
+          { title: taskFromLeadTitle, fromLead: leadId }
+        );
+      }
+      
+      // Clear form
+      setTaskFromLeadTitle("");
+      setTaskFromLeadAssignTo("");
+      setTaskFromLeadCategory("להתקשר");
+      setTaskFromLeadDate("");
+      setTaskFromLeadTime("");
+      setTaskFromLeadId(null);
+      
+      alert("משימה נוצרה בהצלחה!");
+    } catch (error) {
+      console.error("Error creating task from lead:", error);
+      alert("שגיאה ביצירת משימה. נסה שוב.");
+    }
   };
 
   const confirmDuplicateLead = async () => {
@@ -947,7 +1067,7 @@ export default function LeadManager({ isFullView, setIsFullView, blockPosition, 
                                   </Select>
                                 </Label>
                                 <Label className="block"><span className="text-gray-700 text-sm font-medium">{'מקור:'}</span><Input type="text" className="mt-1 h-8 text-sm" value={editLeadSource} onChange={(ev) => setEditLeadSource(ev.target.value)} /></Label>
-                                {editLeadStatus === 'תור נקבע' && (<Label className="block"><span className="text-gray-700 text-sm font-medium">{'תאריך ושעת פגישה:'}</span><Input type="datetime-local" className="mt-1 h-8 text-sm" value={editLeadAppointmentDateTime} onChange={(ev) => setEditLeadAppointmentDateTime(ev.target.value)} required /></Label>)}
+                                {editLeadStatus === 'תור נקבע' && (<Label className="block"><span className="text-gray-700 text-sm font-medium">{'תאריך ושעת פגישה:'}</span><Input type="datetime-local" className="mt-1 h-10 text-sm [&::-webkit-calendar-picker-indicator]:ml-auto [&::-webkit-calendar-picker-indicator]:cursor-pointer" value={editLeadAppointmentDateTime} onChange={(ev) => setEditLeadAppointmentDateTime(ev.target.value)} required /></Label>)}
                                 <Label className="block"><span className="text-gray-700 text-sm font-medium">{'סניף:'}</span>
                                   <Select value={editLeadBranch} onValueChange={setEditLeadBranch}>
                                     <SelectTrigger className="mt-1 h-8 text-sm"><SelectValue placeholder="בחר סניף..." /></SelectTrigger>
@@ -991,18 +1111,72 @@ export default function LeadManager({ isFullView, setIsFullView, blockPosition, 
                               <div className="border-t pt-3">
                                 <Label className="font-semibold text-sm block mb-1">{'הוסיפי משימה מהליד:'}</Label>
                                 <div className="flex flex-col md:flex-row gap-2">
-                                  <Input type="text" className="h-8 text-sm flex-1" placeholder="תיאור משימה..." />
-                                  <Select value={""}>
+                                  <Input 
+                                    type="text" 
+                                    className="h-8 text-sm flex-1" 
+                                    placeholder="תיאור משימה..." 
+                                    value={taskFromLeadId === lead.id ? taskFromLeadTitle : ""}
+                                    onChange={(e) => {
+                                      setTaskFromLeadId(lead.id);
+                                      setTaskFromLeadTitle(e.target.value);
+                                    }}
+                                  />
+                                  <Select 
+                                    value={taskFromLeadId === lead.id && taskFromLeadAssignTo ? taskFromLeadAssignTo : ""}
+                                    onValueChange={(val) => {
+                                      setTaskFromLeadId(lead.id);
+                                      setTaskFromLeadAssignTo(val);
+                                    }}
+                                  >
                                     <SelectTrigger className="h-8 text-sm w-32"><SelectValue placeholder="מוקצה ל..." /></SelectTrigger>
-                                    <SelectContent>{assignableUsers.map(user => (<SelectItem key={user.id} value={user.alias || user.email}>{user.alias || user.email}</SelectItem>))}</SelectContent>
+                                    <SelectContent>
+                                      {assignableUsers.map(user => (
+                                        <SelectItem key={user.id} value={user.alias || user.email}>
+                                          {user.alias || user.email}
+                                        </SelectItem>
+                                      ))}
+                                    </SelectContent>
                                   </Select>
-                                  <Select value={"להתקשר"}>
+                                  <Select 
+                                    value={taskFromLeadId === lead.id ? taskFromLeadCategory : "להתקשר"}
+                                    onValueChange={(val) => {
+                                      setTaskFromLeadId(lead.id);
+                                      setTaskFromLeadCategory(val);
+                                    }}
+                                  >
                                     <SelectTrigger className="h-8 text-sm w-32"><SelectValue placeholder="קטגוריה..." /></SelectTrigger>
-                                    <SelectContent>{taskCategories.map(cat => (<SelectItem key={cat} value={cat}>{cat}</SelectItem>))}</SelectContent>
+                                    <SelectContent>
+                                      {taskCategories.map(cat => (
+                                        <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                                      ))}
+                                    </SelectContent>
                                   </Select>
-                                  <input type="date" className="input-icon" />
-                                  <input type="time" className="input-icon" />
-                                  <Button type="button" size="sm" className="shrink-0">{'➕ משימה'}</Button>
+                                  <Input
+                                    type="date" 
+                                    className="h-10 text-sm w-36 [&::-webkit-calendar-picker-indicator]:ml-auto [&::-webkit-calendar-picker-indicator]:cursor-pointer"
+                                    value={taskFromLeadId === lead.id ? taskFromLeadDate : ""}
+                                    onChange={(e) => {
+                                      setTaskFromLeadId(lead.id);
+                                      setTaskFromLeadDate(e.target.value);
+                                    }}
+                                  />
+                                  <Input
+                                    type="time" 
+                                    className="h-10 text-sm w-28 [&::-webkit-calendar-picker-indicator]:ml-auto [&::-webkit-calendar-picker-indicator]:cursor-pointer"
+                                    value={taskFromLeadId === lead.id ? taskFromLeadTime : ""}
+                                    onChange={(e) => {
+                                      setTaskFromLeadId(lead.id);
+                                      setTaskFromLeadTime(e.target.value);
+                                    }}
+                                  />
+                                  <Button 
+                                    type="button" 
+                                    size="sm" 
+                                    className="shrink-0"
+                                    onClick={() => handleCreateTaskFromLead(lead.id)}
+                                  >
+                                    {'➕ משימה'}
+                                  </Button>
                                 </div>
                               </div>
                               <div className="flex gap-2 justify-end border-t pt-3 mt-4">
