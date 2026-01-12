@@ -139,6 +139,23 @@ export default function CandidatesBlock({ isFullView: parentIsFullView, setIsFul
   const [newLeadIsHot, setNewLeadIsHot] = useState(false);
   const [newLeadSourceOther, setNewLeadSourceOther] = useState("");
 
+  // Ensure current user is always in the assignable users list
+  const assignableUsersWithSelf = useMemo(() => {
+    if (!currentUser) return assignableUsers;
+    const isCurrentUserInList = assignableUsers.some(
+      u => u.id === currentUser.uid || u.email === currentUser.email
+    );
+    if (isCurrentUserInList) return assignableUsers;
+    const role = currentUserData?.role || "staff";
+    const alias = currentUserData?.alias || currentUser.email;
+    return [{
+      id: currentUser.uid,
+      email: currentUser.email,
+      alias: alias,
+      role: role
+    }, ...assignableUsers];
+  }, [assignableUsers, currentUser, currentUserData]);
+
   // Helper to mark that user has explicitly changed preferences
   const markPrefsChanged = useCallback(() => {
     console.log('🔔 CandidatesBlock: User explicitly changed preferences - enabling persistence');
@@ -343,12 +360,10 @@ export default function CandidatesBlock({ isFullView: parentIsFullView, setIsFul
       alert("לא הוגדרה שלוחה (EXT) למשתמש זה. פנה למנהל המערכת."); 
       return; 
     }
-    const apiUrl = "https://master.ippbx.co.il/ippbx_api/v1.4/api/info/click2call";
+    const apiUrl = "/api/click2call";
     const payload = {
-      token_id: "22K3TWfeifaCPUyA",
       phone_number: phoneNumber,
-      extension_number: String(userExt),
-      extension_password: "bdb307dc55bf1e679c296ee5c73215cb"
+      extension_number: String(userExt)
     };
     try {
       const response = await fetch(apiUrl, {
@@ -895,7 +910,7 @@ export default function CandidatesBlock({ isFullView: parentIsFullView, setIsFul
                                     <Select value={newTaskAssignTo} onValueChange={setNewTaskAssignTo}>
                                       <SelectTrigger className="h-8 text-sm w-32"><SelectValue placeholder="מוקצה ל..." /></SelectTrigger>
                                       <SelectContent>
-                                        {assignableUsers.map(user => (
+                                        {assignableUsersWithSelf.map(user => (
                                           <SelectItem key={user.id} value={user.alias || user.email}>{user.alias || user.email}</SelectItem>
                                         ))}
                                       </SelectContent>

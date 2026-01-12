@@ -1,4 +1,4 @@
-// Version 7.7.8 - Added call log dashboard with recording support and weekly analytics
+// Version 7.7.9 - Fixed click2call proxy, and self assignment taks
 "use client";
 
 // Utility functions for layout persistence
@@ -368,12 +368,10 @@ const handleClick2Call = async (phoneNumber) => {
     return;
   }
   
-  const apiUrl = "https://master.ippbx.co.il/ippbx_api/v1.4/api/info/click2call";
+  const apiUrl = "/api/click2call";
   const payload = {
-    token_id: "22K3TWfeifaCPUyA",
     phone_number: cleanNumber,
-    extension_number: userExt,
-    extension_password: "bdb307dc55bf1e679c296ee5c73215cb"
+    extension_number: userExt
   };
   try {
     const response = await fetch(apiUrl, {
@@ -2849,7 +2847,7 @@ const calculatedAnalytics = useMemo(() => {
   <div className="flex sm:hidden items-start justify-between px-2 py-1.5 relative">
     {/* Top Left - Version & Logout */}
     <div className="flex flex-col items-start text-[10px] text-gray-500">
-      <span className="leading-tight">v7.7.8</span>
+      <span className="leading-tight">v7.7.9</span>
       <button
         className="text-[10px] text-red-600 underline leading-tight"
         onClick={() => {
@@ -2928,7 +2926,7 @@ const calculatedAnalytics = useMemo(() => {
     </div>
 
     <div className="w-48 text-left text-sm text-gray-500 flex flex-col items-end">
-      <span>{'Version 7.7.8'}</span>
+      <span>{'Version 7.7.9'}</span>
       <button
         className="text-xs text-red-600 underline"
         onClick={() => {

@@ -174,6 +174,23 @@ export default function FullCalendarDemo({ isCalendarFullView, taskCategories: p
   const [modalEditDueTime, setModalEditDueTime] = useState("");
   const [modalEditAssignTo, setModalEditAssignTo] = useState("");
   const [taskCategories, setTaskCategories] = useState(propTaskCategories || []);
+
+  // Ensure current user is always in the users list
+  const usersWithSelf = useMemo(() => {
+    if (!currentUser) return users;
+    const isCurrentUserInList = users.some(
+      u => u.id === currentUser.uid || u.email === currentUser.email
+    );
+    if (isCurrentUserInList) return users;
+    const myAlias = alias || currentUser.email;
+    return [{
+      id: currentUser.uid,
+      email: currentUser.email,
+      alias: myAlias,
+      role: "staff"
+    }, ...users];
+  }, [users, currentUser, alias]);
+
   useEffect(() => {
     if (propTaskCategories) setTaskCategories(propTaskCategories);
   }, [propTaskCategories]);
@@ -935,7 +952,7 @@ export default function FullCalendarDemo({ isCalendarFullView, taskCategories: p
               <div style={{ flex: 1 }}>
                 <label style={{ fontWeight: 500 }}>מוקצה ל:</label>
                 <select value={editFields.assignTo} onChange={e => setEditFields(f => ({ ...f, assignTo: e.target.value }))} style={{ width: '100%', border: '1px solid #e0e0e0', borderRadius: 6, padding: 6, marginTop: 4, fontSize: 15 }}>
-                  {users.map(u => (
+                  {usersWithSelf.map(u => (
                     <option key={u.id} value={u.email}>{u.alias ? u.alias : u.email}</option>
                   ))}
                 </select>
@@ -1099,7 +1116,7 @@ export default function FullCalendarDemo({ isCalendarFullView, taskCategories: p
                 <div style={{ marginBottom: 10 }}>
                   <label style={{ fontWeight: 500 }}>מוקצה ל:</label>
                   <select value={modalEditAssignTo} onChange={e => setModalEditAssignTo(e.target.value)} style={{ width: '100%', border: '1px solid #e0e0e0', borderRadius: 6, padding: 6, marginTop: 4, fontSize: 15 }}>
-                    {users.map(u => (
+                    {usersWithSelf.map(u => (
                       <option key={u.id} value={u.email}>{u.alias || u.email}</option>
                     ))}
                   </select>
@@ -1153,8 +1170,7 @@ export default function FullCalendarDemo({ isCalendarFullView, taskCategories: p
               <div style={{ marginBottom: 10 }}>
                 <label style={{ fontWeight: 500 }}>מוקצה ל:</label>
                 <select value={newTaskAssignTo} onChange={e => setNewTaskAssignTo(e.target.value)} style={{ width: '100%', border: '1px solid #e0e0e0', borderRadius: 6, padding: 6, marginTop: 4, fontSize: 15 }}>
-                  <option value={currentUser?.email || ""}>{currentUser?.email || "עצמי"}</option>
-                  {users.filter(u => u.email !== currentUser?.email).map(u => (
+                  {usersWithSelf.map(u => (
                     <option key={u.id} value={u.email}>{u.alias || u.email}</option>
                   ))}
                 </select>

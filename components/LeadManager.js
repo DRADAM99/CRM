@@ -123,6 +123,21 @@ export default function LeadManager({ isFullView, setIsFullView, blockPosition, 
   const alias = currentUserData?.alias || "";
   const role = currentUserData?.role || "";
 
+  // Ensure current user is always in the assignable users list
+  const assignableUsersWithSelf = useMemo(() => {
+    if (!currentUser) return assignableUsers;
+    const isCurrentUserInList = assignableUsers.some(
+      u => u.id === currentUser.uid || u.email === currentUser.email
+    );
+    if (isCurrentUserInList) return assignableUsers;
+    return [{
+      id: currentUser.uid,
+      email: currentUser.email,
+      alias: alias || currentUser.email,
+      role: role || "staff"
+    }, ...assignableUsers];
+  }, [assignableUsers, currentUser, alias, role]);
+
   // Helper to mark that user has explicitly changed preferences
   const markPrefsChanged = useCallback(() => {
     console.log('🔔 LeadManager: User explicitly changed preferences - enabling persistence');
@@ -819,12 +834,10 @@ export default function LeadManager({ isFullView, setIsFullView, blockPosition, 
       alert("לא הוגדרה שלוחה (EXT) למשתמש זה. פנה למנהל המערכת."); 
       return; 
     }
-    const apiUrl = "https://master.ippbx.co.il/ippbx_api/v1.4/api/info/click2call";
+    const apiUrl = "/api/click2call";
     const payload = { 
-      token_id: "22K3TWfeifaCPUyA", 
       phone_number: phoneNumber, 
-      extension_number: String(userExt),
-      extension_password: "bdb307dc55bf1e679c296ee5c73215cb" 
+      extension_number: String(userExt)
     };
     try {
       const response = await fetch(apiUrl, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
@@ -902,7 +915,7 @@ export default function LeadManager({ isFullView, setIsFullView, blockPosition, 
                 size="sm"
                 variant="outline"
                 className="h-9 text-sm px-3"
-                onClick={() => { markPrefsChanged(); setSelectedLeadCategories(["חדש", "ממתין לתשובה של ד״ר וינטר"]); }}
+                onClick={() => { markPrefsChanged(); setSelectedLeadCategories(["חדש", "ממתין לתשובה של ד״ר וינטר", "נקבעה שיחה"]); }}
               >
                 ראשי
               </Button>
@@ -1130,7 +1143,7 @@ export default function LeadManager({ isFullView, setIsFullView, blockPosition, 
                                   >
                                     <SelectTrigger className="h-8 text-sm w-32"><SelectValue placeholder="מוקצה ל..." /></SelectTrigger>
                                     <SelectContent>
-                                      {assignableUsers.map(user => (
+                                      {assignableUsersWithSelf.map(user => (
                                         <SelectItem key={user.id} value={user.alias || user.email}>
                                           {user.alias || user.email}
                                         </SelectItem>

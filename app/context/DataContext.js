@@ -19,35 +19,24 @@ export function DataProvider({ children }) {
 
   // Fetch current user's full data including alias
   useEffect(() => {
-    const fetchCurrentUserData = async () => {
-      if (!currentUser) {
-        setCurrentUserData(null);
-        return;
-      }
-      try {
-        const userRef = doc(db, "users", currentUser.uid);
-        const userSnap = await getDoc(userRef);
-        if (userSnap.exists()) {
-          const data = userSnap.data();
-          setCurrentUserData({
-            uid: currentUser.uid,
-            email: currentUser.email,
-            alias: data.alias || currentUser.email || "",
-            role: data.role || "staff",
-            EXT: data.EXT || ""
-          });
-        } else {
-          // Fallback if no user document exists
-          setCurrentUserData({
-            uid: currentUser.uid,
-            email: currentUser.email,
-            alias: currentUser.email || "",
-            role: "staff",
-            EXT: ""
-          });
-        }
-      } catch (error) {
-        console.error("Error fetching current user data:", error);
+    if (!currentUser) {
+      setCurrentUserData(null);
+      return;
+    }
+
+    const userRef = doc(db, "users", currentUser.uid);
+    const unsubscribe = onSnapshot(userRef, (userSnap) => {
+      if (userSnap.exists()) {
+        const data = userSnap.data();
+        setCurrentUserData({
+          uid: currentUser.uid,
+          email: currentUser.email,
+          alias: data.alias || currentUser.email || "",
+          role: data.role || "staff",
+          EXT: data.EXT || ""
+        });
+      } else {
+        // Fallback if no user document exists
         setCurrentUserData({
           uid: currentUser.uid,
           email: currentUser.email,
@@ -56,30 +45,34 @@ export function DataProvider({ children }) {
           EXT: ""
         });
       }
-    };
-    fetchCurrentUserData();
+    }, (error) => {
+      console.error("Error listening to user data:", error);
+    });
+
+    return () => unsubscribe();
   }, [currentUser]);
 
   // Single users fetch
   useEffect(() => {
-    const fetchUsers = async () => {
-      if (!currentUser) return;
-      try {
-        const usersRef = collection(db, "users");
-        const usersSnap = await getDocs(usersRef);
-        const usersData = usersSnap.docs.map(doc => ({
-          id: doc.id,
-          email: doc.data().email || "",
-          alias: doc.data().alias || doc.data().email || "",
-          role: doc.data().role || "staff"
-        }));
-        setUsers(usersData);
-        setAssignableUsers(usersData);
-      } catch (error) {
-        console.error("Error fetching users:", error);
-      }
-    };
-    fetchUsers();
+    if (!currentUser) return;
+    
+    const usersRef = collection(db, "users");
+    const unsubscribe = onSnapshot(usersRef, (usersSnap) => {
+      const usersData = usersSnap.docs.map(doc => ({
+        id: doc.id,
+        email: doc.data().email || "",
+        alias: doc.data().alias || doc.data().email || "",
+        role: doc.data().role || "staff",
+        EXT: doc.data().EXT || ""
+      }));
+
+      setUsers(usersData);
+      setAssignableUsers(usersData);
+    }, (error) => {
+      console.error("Error listening to users:", error);
+    });
+
+    return () => unsubscribe();
   }, [currentUser]);
 
   // Single tasks listener
