@@ -374,8 +374,8 @@ export default function CandidatesBlock({ isFullView: parentIsFullView, setIsFul
       if (response.ok) {
         alert(`שיחה ל-${phoneNumber} הופעלה דרך המרכזיה.`);
       } else {
-        const errorText = await response.text();
-        alert(errorText || "לא ניתן היה להפעיל שיחה דרך המרכזיה.");
+        const errorData = await response.json();
+        alert(errorData.details || errorData.error || "לא ניתן היה להפעיל שיחה דרך המרכזיה.");
       }
     } catch (error) {
       alert(error.message || "לא ניתן היה להפעיל שיחה דרך המרכזיה.");

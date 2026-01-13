@@ -387,10 +387,10 @@ const handleClick2Call = async (phoneNumber) => {
         description: `שיחה ל-${cleanNumber} הופעלה דרך המרכזיה.`
       });
     } else {
-      const errorText = await response.text();
+      const errorData = await response.json();
       toast({
         title: "שגיאה בהפעלת שיחה",
-        description: errorText || "לא ניתן היה להפעיל שיחה דרך המרכזיה.",
+        description: errorData.details || errorData.error || "לא ניתן היה להפעיל שיחה דרך המרכזיה.",
         variant: "destructive"
       });
     }
