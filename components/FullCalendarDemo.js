@@ -255,7 +255,8 @@ export default function FullCalendarDemo({ isCalendarFullView, taskCategories: p
         return {
           id: `lead-${lead.id}`,
           type: 'lead',
-          title: `פגישה: ${lead.fullName}`,
+          title: lead.fullName,
+          subtitle: `טלפון: ${lead.phoneNumber}`,
           start,
           end: start ? new Date(start.getTime() + 20 * 60 * 1000) : null,
           color: '#b5ead7',

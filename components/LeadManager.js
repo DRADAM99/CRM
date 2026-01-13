@@ -444,7 +444,7 @@ export default function LeadManager({ isFullView, setIsFullView, blockPosition, 
       }
       if (originalLead.status !== 'תור נקבע' && editLeadStatus === 'תור נקבע' && appointmentDate) {
         const taskRef = doc(collection(db, "tasks"));
-        const newTask = { id: taskRef.id, userId: currentUser.uid, creatorId: currentUser.uid, creatorAlias: alias || currentUser.email || "", assignTo: currentUser.email, title: `פגישת ייעוץ - ${editLeadFullName}`, subtitle: `נקבעה פגישה מליד ${leadId}`, priority: "רגיל", category: "לקבוע סדרה", status: "פתוח", createdAt: serverTimestamp(), updatedAt: serverTimestamp(), dueDate: appointmentDate, replies: [], isRead: false, isArchived: false, done: false, completedBy: null, completedAt: null, branch: editLeadBranch };
+        const newTask = { id: taskRef.id, userId: currentUser.uid, creatorId: currentUser.uid, creatorAlias: alias || currentUser.email || "", assignTo: currentUser.email, title: editLeadFullName, subtitle: `פגישת ייעוץ | טלפון: ${editLeadPhone}`, priority: "רגיל", category: "לקבוע סדרה", status: "פתוח", createdAt: serverTimestamp(), updatedAt: serverTimestamp(), dueDate: appointmentDate, replies: [], isRead: false, isArchived: false, done: false, completedBy: null, completedAt: null, branch: editLeadBranch };
         await setDoc(taskRef, newTask);
       }
       setEditingLeadId(null); setEditLeadAppointmentDateTime("");
@@ -729,8 +729,8 @@ export default function LeadManager({ isFullView, setIsFullView, blockPosition, 
         id: taskRef.id,
         userId: currentUser.uid,
         creatorId: currentUser.uid,
-        title: taskFromLeadTitle,
-        subtitle: `מליד: ${leadName}`,
+        title: leadName,
+        subtitle: `${taskFromLeadTitle} | טלפון: ${lead?.phoneNumber || ""}`,
         priority: "רגיל",
         category: taskFromLeadCategory,
         status: "פתוח",

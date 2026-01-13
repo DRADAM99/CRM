@@ -535,8 +535,8 @@ export default function CandidatesBlock({ isFullView: parentIsFullView, setIsFul
         id: taskRef.id,
         userId: lead.id, // or current user if available
         creatorId: lead.id, // or current user if available
-        title: newTaskText,
-        subtitle: `נוצר מליד: ${lead.fullName}`,
+        title: lead.fullName,
+        subtitle: `${newTaskText} | טלפון: ${lead.phoneNumber}`,
         assignTo: assignedUser ? assignedUser.email : newTaskAssignTo,
         category: newTaskCategory,
         status: "פתוח",
@@ -579,7 +579,7 @@ export default function CandidatesBlock({ isFullView: parentIsFullView, setIsFul
         userId: lead.id,
         creatorId: user.uid,
         title: lead.fullName,
-        subtitle: `נוצר מליד: ${lead.fullName}`,
+        subtitle: `נוצר מליד: ${lead.fullName} | טלפון: ${lead.phoneNumber}`,
         assignTo: "dradamwinter@gmail.com",
         category: "תוכניות טיפול",
         status: "פתוח",
