@@ -154,7 +154,7 @@ export default function TaskManager({ isTMFullView, setIsTMFullView, blockPositi
   const [kanbanTaskCollapsed, setKanbanTaskCollapsed] = useState({});
   const defaultTaskCategories = ["תוכניות טיפול", "לקבוע סדרה", "תשלומים וזיכויים", "דוחות", "להתקשר", "אחר"];
   const [taskCategories, setTaskCategories] = useState(defaultTaskCategories);
-  const [taskFilter, setTaskFilter] = useState("הכל");
+  const [taskFilter, setTaskFilter] = useState("שלי");
   const [taskPriorityFilter, setTaskPriorityFilter] = useState("all");
   const [selectedTaskCategories, setSelectedTaskCategories] = useState(defaultTaskCategories);
   const [taskSearchTerm, setTaskSearchTerm] = useState("");

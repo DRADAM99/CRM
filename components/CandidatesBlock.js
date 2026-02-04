@@ -60,7 +60,7 @@ const branchColor = (branch) => {
 // Source options and icons
 const sourceOptions = ["אתר", "פייסבוק", "אינסטגרם", "פודקאסט", "המלצה", "אחר"];
 const getSourceIcon = (source) => {
-  switch(source) {
+  switch (source) {
     case "אתר": return <FaGlobe className="w-4 h-4" />;
     case "פייסבוק": return <FaFacebook className="w-4 h-4" />;
     case "אינסטגרם": return <FaInstagram className="w-4 h-4" />;
@@ -83,10 +83,11 @@ const formatDateTime = (date) => {
 
 // Restore getPref/savePref helpers for local persistence
 function savePref(key, value) {
-  try { localStorage.setItem(key, JSON.stringify(value)); } catch (e) {}
+  try { localStorage.setItem(key, JSON.stringify(value)); } catch (e) { }
 }
 function getPref(key, def) {
-  try { const v = localStorage.getItem(key); if (v !== null) return JSON.parse(v); } catch (e) {} return def; }
+  try { const v = localStorage.getItem(key); if (v !== null) return JSON.parse(v); } catch (e) { } return def;
+}
 
 export default function CandidatesBlock({ isFullView: parentIsFullView, setIsFullView: parentSetIsFullView }) {
   const { currentUser } = useAuth();
@@ -174,12 +175,12 @@ export default function CandidatesBlock({ isFullView: parentIsFullView, setIsFul
       try {
         // Small delay to ensure Firebase is fully initialized
         await new Promise(resolve => setTimeout(resolve, 100));
-        
+
         const userRef = doc(db, 'users', currentUser.uid);
         console.log('🔍 CandidatesBlock: Fetching user document for UID:', currentUser.uid);
         const snap = await getDoc(userRef);
         console.log('🔍 CandidatesBlock: Got snapshot, exists:', snap.exists(), 'fromCache:', snap.metadata.fromCache);
-        
+
         if (snap.exists()) {
           hasLoadedFromFirestore.current = true;
           const d = snap.data();
@@ -192,7 +193,7 @@ export default function CandidatesBlock({ isFullView: parentIsFullView, setIsFul
           if (d.candidates_sortDirection) setSortDirection(d.candidates_sortDirection);
           if (typeof d.candidates_searchTerm === 'string') setSearchTerm(d.candidates_searchTerm);
           if (typeof d.candidates_rowLimit === 'number') setRowLimit(d.candidates_rowLimit);
-          
+
           // Handle status selection properly - check if field exists explicitly
           if ('candidates_selectedStatuses' in d && Array.isArray(d.candidates_selectedStatuses)) {
             console.log('✅ CandidatesBlock: Setting statuses from Firestore:', d.candidates_selectedStatuses);
@@ -241,7 +242,7 @@ export default function CandidatesBlock({ isFullView: parentIsFullView, setIsFul
       console.log('💾 CandidatesBlock: Skipping persistence:', { currentUser: !!currentUser, prefsLoaded, persistenceReady, userHasExplicitlyChangedPrefs });
       return;
     }
-    
+
     // Only persist if:
     // 1. We successfully loaded existing preferences (persistenceReady), OR
     // 2. User has explicitly changed something (userHasExplicitlyChangedPrefs)
@@ -249,14 +250,14 @@ export default function CandidatesBlock({ isFullView: parentIsFullView, setIsFul
       console.log('💾 CandidatesBlock: Skipping persistence - no existing prefs loaded and no explicit changes yet');
       return;
     }
-    
+
     // Only persist if we've successfully loaded preferences from Firestore OR user has explicitly changed something
     // This prevents persisting defaults before we've tried to load
     if (!hasLoadedFromFirestore.current && !userHasExplicitlyChangedPrefs) {
       console.log('💾 CandidatesBlock: Skipping persistence - waiting for Firestore load');
       return;
     }
-    
+
     console.log('💾 CandidatesBlock: Persisting preferences:', {
       selectedStatuses,
       sortBy,
@@ -265,11 +266,11 @@ export default function CandidatesBlock({ isFullView: parentIsFullView, setIsFul
       rowLimit,
       uid: currentUser.uid
     });
-    
+
     // Update the ref to keep it in sync with current selection
     savedSelectedRef.current = selectedStatuses;
     const userRef = doc(db, 'users', currentUser.uid);
-    
+
     const dataToSave = {
       candidates_sortBy: sortBy,
       candidates_sortDirection: sortDirection,
@@ -278,9 +279,9 @@ export default function CandidatesBlock({ isFullView: parentIsFullView, setIsFul
       candidates_rowLimit: rowLimit,
       updatedAt: serverTimestamp(),
     };
-    
+
     console.log('💾 CandidatesBlock: Data to save:', dataToSave);
-    
+
     setDoc(userRef, dataToSave, { merge: true })
       .then(() => {
         console.log('✅ CandidatesBlock: Successfully wrote to Firestore!');
@@ -356,9 +357,9 @@ export default function CandidatesBlock({ isFullView: parentIsFullView, setIsFul
   // --- Click2Call cloud PBX logic ---
   const handleClick2Call = async (phoneNumber) => {
     const userExt = currentUserData?.EXT || "";
-    if (!userExt) { 
-      alert("לא הוגדרה שלוחה (EXT) למשתמש זה. פנה למנהל המערכת."); 
-      return; 
+    if (!userExt) {
+      alert("לא הוגדרה שלוחה (EXT) למשתמש זה. פנה למנהל המערכת.");
+      return;
     }
     const apiUrl = "/api/click2call";
     const payload = {
@@ -425,8 +426,12 @@ export default function CandidatesBlock({ isFullView: parentIsFullView, setIsFul
           id: leadId,
           fullName: editLeadFullName,
           branch: editLeadBranch,
+          phoneNumber: editLeadPhone,
         };
-        await createAutomatedTaskForTreatmentPlan(updatedLead, currentUser);
+        // Task 1: Treatment Plan for dradamwinter@gmail.com
+        await createAutomatedTask(updatedLead, currentUser, "dradamwinter@gmail.com", "תוכניות טיפול");
+        // Task 2: Notification for info@dradamwinter.com in "אחר" category
+        await createAutomatedTask(updatedLead, currentUser, "info@dradamwinter.com", "אחר");
       }
 
       setEditLeadBranch("");
@@ -563,8 +568,8 @@ export default function CandidatesBlock({ isFullView: parentIsFullView, setIsFul
     }
   };
 
-  // --- Automated task creation for treatment plan ---
-  const createAutomatedTaskForTreatmentPlan = async (lead, user) => {
+  // --- Automated task creation ---
+  const createAutomatedTask = async (lead, user, assignToEmail, category) => {
     if (!user) {
       console.error("Cannot create automated task without a user.");
       return;
@@ -580,8 +585,8 @@ export default function CandidatesBlock({ isFullView: parentIsFullView, setIsFul
         creatorId: user.uid,
         title: lead.fullName,
         subtitle: `נוצר מליד: ${lead.fullName} | טלפון: ${lead.phoneNumber}`,
-        assignTo: "dradamwinter@gmail.com",
-        category: "תוכניות טיפול",
+        assignTo: assignToEmail,
+        category: category,
         status: "פתוח",
         priority: "רגיל",
         branch: lead.branch || "",
@@ -596,10 +601,10 @@ export default function CandidatesBlock({ isFullView: parentIsFullView, setIsFul
         completedAt: null,
       };
 
-      console.log("Creating automated task with data:", newTask);
+      console.log(`Creating automated task for ${assignToEmail} in ${category}:`, newTask);
       await setDoc(taskRef, newTask);
-      
-      console.log(`Automated task created for lead: ${lead.fullName}`);
+
+      console.log(`Automated task created for lead: ${lead.fullName} assigned to ${assignToEmail}`);
     } catch (error) {
       console.error("Error creating automated task:", error);
       alert("שגיאה ביצירת משימה אוטומטית");
@@ -995,35 +1000,35 @@ export default function CandidatesBlock({ isFullView: parentIsFullView, setIsFul
           <div className="bg-white p-6 rounded-lg shadow-xl w-full max-w-lg" onClick={(e) => e.stopPropagation()}>
             <h2 className="text-lg font-semibold mb-4 text-right">{'הוספת מטופל חדש'}</h2>
             <form onSubmit={handleAddNewLead} className="space-y-4 text-right" dir="rtl">
-              
+
               <div>
                 <Label htmlFor="new-lead-name" className="block text-sm font-medium mb-1">שם מלא <span className="text-red-500">*</span></Label>
                 <Input
-                  id="new-lead-name" 
-                  type="text" 
+                  id="new-lead-name"
+                  type="text"
                   value={newLeadFullName}
-                  onChange={(e) => setNewLeadFullName(e.target.value)} 
+                  onChange={(e) => setNewLeadFullName(e.target.value)}
                   required
                 />
               </div>
-              
+
               <div>
                 <Label htmlFor="new-lead-phone" className="block text-sm font-medium mb-1">מספר טלפון <span className="text-red-500">*</span></Label>
                 <Input
-                  id="new-lead-phone" 
-                  type="tel" 
+                  id="new-lead-phone"
+                  type="tel"
                   value={newLeadPhone}
-                  onChange={(e) => setNewLeadPhone(e.target.value)} 
+                  onChange={(e) => setNewLeadPhone(e.target.value)}
                   required
                 />
               </div>
-              
+
               <div>
                 <Label htmlFor="new-lead-message" className="block text-sm font-medium mb-1">הודעה / הערה</Label>
                 <Textarea
-                  id="new-lead-message" 
+                  id="new-lead-message"
                   value={newLeadMessage}
-                  onChange={(e) => setNewLeadMessage(e.target.value)} 
+                  onChange={(e) => setNewLeadMessage(e.target.value)}
                   rows={3}
                   placeholder="פרטים ראשוניים, סיבת פניה..."
                 />
@@ -1039,7 +1044,7 @@ export default function CandidatesBlock({ isFullView: parentIsFullView, setIsFul
                 />
                 <Label htmlFor="new-lead-hot" className="text-sm font-medium cursor-pointer">ליד חם 🔥</Label>
               </div>
-              
+
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <Label htmlFor="new-lead-status" className="block text-sm font-medium mb-1">סטטוס</Label>
@@ -1093,7 +1098,7 @@ export default function CandidatesBlock({ isFullView: parentIsFullView, setIsFul
                   )}
                 </div>
               </div>
-              
+
               <div className="mt-6 flex flex-col items-center gap-3">
                 <Button type="submit" className="bg-green-600 hover:bg-green-700 text-white px-8">הוסיפי מטופל</Button>
                 <Button type="button" className="bg-red-600 hover:bg-red-700 text-white" onClick={() => setShowAddLeadModal(false)}>ביטול</Button>
