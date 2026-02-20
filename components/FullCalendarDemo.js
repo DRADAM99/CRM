@@ -12,6 +12,8 @@ import { collection, onSnapshot, doc, getDoc, updateDoc, serverTimestamp, arrayU
 import { ChevronDown } from 'lucide-react';
 import { getAuth, onAuthStateChanged } from 'firebase/auth';
 import { useData } from '@/app/context/DataContext';
+import { isAppointmentLeadStatus } from '@/lib/whatsappAutomation';
+import { getDefaultAvailability, WEEK_DAYS } from '@/lib/availability';
 
 // Use the same categories and priorities as the main app
 const taskPriorities = ["דחוף", "רגיל", "נמוך"];
@@ -174,6 +176,11 @@ export default function FullCalendarDemo({ isCalendarFullView, taskCategories: p
   const [modalEditDueTime, setModalEditDueTime] = useState("");
   const [modalEditAssignTo, setModalEditAssignTo] = useState("");
   const [taskCategories, setTaskCategories] = useState(propTaskCategories || []);
+  const [showAvailabilityPanel, setShowAvailabilityPanel] = useState(false);
+  const [availabilityLoading, setAvailabilityLoading] = useState(false);
+  const [availabilitySaving, setAvailabilitySaving] = useState(false);
+  const [availabilityStaffId, setAvailabilityStaffId] = useState("");
+  const [availabilitySettings, setAvailabilitySettings] = useState(getDefaultAvailability());
 
   // Ensure current user is always in the users list
   const usersWithSelf = useMemo(() => {
@@ -190,6 +197,142 @@ export default function FullCalendarDemo({ isCalendarFullView, taskCategories: p
       role: "staff"
     }, ...users];
   }, [users, currentUser, alias]);
+
+  const currentUserEntry = useMemo(() => {
+    if (!currentUser) return null;
+    return usersWithSelf.find(
+      (u) => u.id === currentUser.uid || u.email === currentUser.email
+    ) || null;
+  }, [usersWithSelf, currentUser]);
+
+  const availabilityAssignableUsers = useMemo(() => {
+    if (!currentUserEntry) return usersWithSelf;
+    if (currentUserEntry.role === "admin") return usersWithSelf;
+    // Non-admin users can manage only their own availability.
+    return [currentUserEntry];
+  }, [usersWithSelf, currentUserEntry]);
+
+  const loadAvailabilityForStaff = useCallback(async (staffId) => {
+    if (!staffId) return;
+    setAvailabilityLoading(true);
+    try {
+      const response = await fetch(`/api/staff-availability?staffId=${encodeURIComponent(staffId)}`);
+      const data = await response.json();
+      if (!response.ok) throw new Error(data?.error || "שגיאה בטעינת זמינות");
+      setAvailabilitySettings(data.availability || getDefaultAvailability());
+    } catch (error) {
+      alert(error.message || "לא ניתן היה לטעון זמינות");
+    } finally {
+      setAvailabilityLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!availabilityStaffId && availabilityAssignableUsers.length > 0) {
+      setAvailabilityStaffId(availabilityAssignableUsers[0].id);
+    }
+  }, [availabilityStaffId, availabilityAssignableUsers]);
+
+  useEffect(() => {
+    if (!availabilityStaffId) return;
+    if (!availabilityAssignableUsers.some((user) => user.id === availabilityStaffId)) {
+      setAvailabilityStaffId(availabilityAssignableUsers[0]?.id || "");
+    }
+  }, [availabilityStaffId, availabilityAssignableUsers]);
+
+  useEffect(() => {
+    if (availabilityStaffId) loadAvailabilityForStaff(availabilityStaffId);
+  }, [availabilityStaffId, loadAvailabilityForStaff]);
+
+  const handleAvailabilityDayChange = useCallback((dayKey, patch) => {
+    setAvailabilitySettings((current) => ({
+      ...current,
+      days: {
+        ...current.days,
+        [dayKey]: {
+          ...current.days?.[dayKey],
+          ...patch,
+        },
+      },
+    }));
+  }, []);
+
+  const updateDayWindow = useCallback((dayKey, windowIndex, patch) => {
+    setAvailabilitySettings((current) => {
+      const dayConfig = current.days?.[dayKey] || { enabled: false, windows: [{ start: "09:00", end: "18:00" }] };
+      const windows = Array.isArray(dayConfig.windows) ? [...dayConfig.windows] : [{ start: "09:00", end: "18:00" }];
+      windows[windowIndex] = { ...(windows[windowIndex] || { start: "09:00", end: "18:00" }), ...patch };
+      return {
+        ...current,
+        days: {
+          ...current.days,
+          [dayKey]: {
+            ...dayConfig,
+            windows,
+          },
+        },
+      };
+    });
+  }, []);
+
+  const addDayWindow = useCallback((dayKey) => {
+    setAvailabilitySettings((current) => {
+      const dayConfig = current.days?.[dayKey] || { enabled: true, windows: [] };
+      const windows = Array.isArray(dayConfig.windows) ? [...dayConfig.windows] : [];
+      windows.push({ start: "15:00", end: "18:00" });
+      return {
+        ...current,
+        days: {
+          ...current.days,
+          [dayKey]: {
+            ...dayConfig,
+            enabled: true,
+            windows,
+          },
+        },
+      };
+    });
+  }, []);
+
+  const removeDayWindow = useCallback((dayKey, windowIndex) => {
+    setAvailabilitySettings((current) => {
+      const dayConfig = current.days?.[dayKey] || { enabled: false, windows: [{ start: "09:00", end: "18:00" }] };
+      const windows = (Array.isArray(dayConfig.windows) ? dayConfig.windows : []).filter((_, index) => index !== windowIndex);
+      return {
+        ...current,
+        days: {
+          ...current.days,
+          [dayKey]: {
+            ...dayConfig,
+            windows: windows.length > 0 ? windows : [{ start: "09:00", end: "18:00" }],
+          },
+        },
+      };
+    });
+  }, []);
+
+  const handleSaveAvailability = useCallback(async () => {
+    if (!availabilityStaffId || !currentUser) return;
+    setAvailabilitySaving(true);
+    try {
+      const response = await fetch("/api/staff-availability", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          staffId: availabilityStaffId,
+          availability: availabilitySettings,
+          updatedBy: currentUser.uid,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data?.error || "שמירה נכשלה");
+      alert("הזמינות נשמרה בהצלחה");
+    } catch (error) {
+      alert(error.message || "לא ניתן היה לשמור זמינות");
+    } finally {
+      setAvailabilitySaving(false);
+    }
+  }, [availabilitySettings, availabilityStaffId, currentUser]);
 
   useEffect(() => {
     if (propTaskCategories) setTaskCategories(propTaskCategories);
@@ -248,7 +391,7 @@ export default function FullCalendarDemo({ isCalendarFullView, taskCategories: p
     });
     
     const leadEvents = allLeads
-      .filter(lead => lead.status === 'תור נקבע' && lead.appointmentDateTime)
+      .filter(lead => isAppointmentLeadStatus(lead.status) && lead.appointmentDateTime)
       .map(lead => {
         let start = lead.appointmentDateTime;
         if (typeof start?.toDate === 'function') start = start.toDate();
@@ -265,7 +408,6 @@ export default function FullCalendarDemo({ isCalendarFullView, taskCategories: p
       });
       
     setEvents([...taskEvents, ...leadEvents]);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [allTasks, allLeads, normalizeDueDate, CATEGORY_COLORS]);
 
   // Detect touch device (iPad, etc.)
@@ -837,6 +979,12 @@ export default function FullCalendarDemo({ isCalendarFullView, taskCategories: p
           />
           {/* User filter dropdown */}
           <button onClick={openUserFilterModal} style={{ border: '1px solid #e0e0e0', borderRadius: 6, padding: isTouch ? '16px 24px' : '12px 18px', fontSize: isTouch ? 20 : 17, background: '#fff', cursor: 'pointer', minWidth: 180, minHeight: isTouch ? 56 : 44 }}>סנן לפי משתמשים</button>
+          <button
+            onClick={() => setShowAvailabilityPanel((current) => !current)}
+            style={{ border: '1px solid #e0e0e0', borderRadius: 6, padding: isTouch ? '16px 24px' : '12px 18px', fontSize: isTouch ? 20 : 17, background: '#fff', cursor: 'pointer', minWidth: 180, minHeight: isTouch ? 56 : 44 }}
+          >
+            {showAvailabilityPanel ? "הסתר זמינות צוות" : "זמינות צוות"}
+          </button>
         </div>
       ) : (
         // Compact view: condensed layout
@@ -875,6 +1023,117 @@ export default function FullCalendarDemo({ isCalendarFullView, taskCategories: p
           />
           {/* User filter dropdown */}
           <button onClick={openUserFilterModal} style={{ border: '1px solid #e0e0e0', borderRadius: 6, padding: isTouch ? '16px 24px' : '12px 18px', fontSize: isTouch ? 20 : 17, background: '#fff', cursor: 'pointer', minWidth: 180, minHeight: isTouch ? 56 : 44 }}>סנן לפי משתמשים</button>
+          <button
+            onClick={() => setShowAvailabilityPanel((current) => !current)}
+            style={{ border: '1px solid #e0e0e0', borderRadius: 6, padding: isTouch ? '16px 24px' : '12px 18px', fontSize: isTouch ? 20 : 17, background: '#fff', cursor: 'pointer', minWidth: 180, minHeight: isTouch ? 56 : 44 }}
+          >
+            {showAvailabilityPanel ? "הסתר זמינות צוות" : "זמינות צוות"}
+          </button>
+        </div>
+      )}
+      {showAvailabilityPanel && (
+        <div style={{ marginBottom: 20, border: '1px solid #e0e0e0', borderRadius: 10, background: '#fff', padding: 14 }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+            <select
+              value={availabilityStaffId}
+              onChange={(e) => setAvailabilityStaffId(e.target.value)}
+              style={{ border: '1px solid #d0d0d0', borderRadius: 6, padding: '8px 10px', minWidth: 220 }}
+            >
+              {availabilityAssignableUsers.map((user) => (
+                <option key={user.id} value={user.id}>{user.alias || user.email}</option>
+              ))}
+            </select>
+            <input
+              type="number"
+              min={10}
+              max={90}
+              value={availabilitySettings.slotDurationMinutes}
+              onChange={(e) =>
+                setAvailabilitySettings((current) => ({
+                  ...current,
+                  slotDurationMinutes: Number(e.target.value) || 20,
+                }))
+              }
+              style={{ border: '1px solid #d0d0d0', borderRadius: 6, padding: '8px 10px', width: 120 }}
+            />
+            <input
+              type="number"
+              min={0}
+              max={30}
+              value={availabilitySettings.bufferMinutes}
+              onChange={(e) =>
+                setAvailabilitySettings((current) => ({
+                  ...current,
+                  bufferMinutes: Number(e.target.value) || 0,
+                }))
+              }
+              style={{ border: '1px solid #d0d0d0', borderRadius: 6, padding: '8px 10px', width: 120 }}
+            />
+            <button
+              onClick={handleSaveAvailability}
+              disabled={availabilityLoading || availabilitySaving}
+              style={{ background: '#2196f3', color: '#fff', border: 'none', borderRadius: 6, padding: '8px 12px', fontWeight: 600, cursor: 'pointer' }}
+              type="button"
+            >
+              {availabilitySaving ? "שומר..." : "שמירת זמינות"}
+            </button>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(330px, 1fr))', gap: 8 }}>
+            {WEEK_DAYS.map((day) => {
+              const dayValue = availabilitySettings.days?.[day.key] || { enabled: false, windows: [{ start: "09:00", end: "18:00" }] };
+              const windows = Array.isArray(dayValue.windows) ? dayValue.windows : [{ start: "09:00", end: "18:00" }];
+              return (
+                <div key={day.key} style={{ border: '1px solid #ececec', borderRadius: 8, padding: 8, background: '#fafafa' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 600 }}>
+                      <input
+                        type="checkbox"
+                        checked={!!dayValue.enabled}
+                        onChange={(e) => handleAvailabilityDayChange(day.key, { enabled: e.target.checked })}
+                      />
+                      {day.label}
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => addDayWindow(day.key)}
+                      style={{ border: '1px solid #ddd', borderRadius: 6, background: '#fff', padding: '4px 8px', cursor: 'pointer' }}
+                    >
+                      + חלון
+                    </button>
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    {windows.map((window, index) => (
+                      <div key={`${day.key}-${index}`} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <input
+                          type="time"
+                          value={window.start || "09:00"}
+                          onChange={(e) => updateDayWindow(day.key, index, { start: e.target.value })}
+                          disabled={!dayValue.enabled}
+                          style={{ border: '1px solid #ddd', borderRadius: 6, padding: '6px 8px' }}
+                        />
+                        <span>-</span>
+                        <input
+                          type="time"
+                          value={window.end || "18:00"}
+                          onChange={(e) => updateDayWindow(day.key, index, { end: e.target.value })}
+                          disabled={!dayValue.enabled}
+                          style={{ border: '1px solid #ddd', borderRadius: 6, padding: '6px 8px' }}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => removeDayWindow(day.key, index)}
+                          disabled={windows.length <= 1}
+                          style={{ border: '1px solid #ddd', borderRadius: 6, background: '#fff', padding: '6px 8px', cursor: 'pointer' }}
+                        >
+                          הסר
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
       <div style={{ marginBottom: 24, textAlign: 'center', display: 'flex', justifyContent: 'center', gap: 24, flexWrap: 'wrap' }}>

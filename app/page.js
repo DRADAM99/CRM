@@ -2289,7 +2289,7 @@ const q = query(
 
     try {
       let appointmentDate = null;
-      if (editLeadStatus === 'תור נקבע' && editLeadAppointmentDateTime) {
+      if (['תור נקבע', 'נקבעה שיחה'].includes(editLeadStatus) && editLeadAppointmentDateTime) {
         appointmentDate = new Date(editLeadAppointmentDateTime);
         if (isNaN(appointmentDate.getTime())) {
           alert("תאריך פגישה לא תקין.");
@@ -2311,7 +2311,7 @@ const q = query(
         status: editLeadStatus,
         source: editLeadSource,
         branch: editLeadBranch,
-        appointmentDateTime: editLeadStatus === 'תור נקבע' ? (appointmentDate || null) : null,
+        appointmentDateTime: ['תור נקבע', 'נקבעה שיחה'].includes(editLeadStatus) ? (appointmentDate || null) : null,
         updatedAt: serverTimestamp(),
         updatedBy: currentUser.uid
       };
@@ -2338,8 +2338,8 @@ const q = query(
         );
       }
 
-      // Create appointment task if status changed to 'תור נקבע'
-      if (originalLead.status !== 'תור נקבע' && editLeadStatus === 'תור נקבע' && appointmentDate) {
+      // Create appointment task if status changed to appointment status
+      if (!['תור נקבע', 'נקבעה שיחה'].includes(originalLead.status) && ['תור נקבע', 'נקבעה שיחה'].includes(editLeadStatus) && appointmentDate) {
         const taskRef = doc(collection(db, "tasks"));
         const newTask = {
           id: taskRef.id,
@@ -2734,7 +2734,7 @@ const q = query(
     const secondConversionRate = consultationLeads > 0 ? (scheduledLeads / consultationLeads) * 100 : 0;
 
     // Legacy conversion rate (for backward compatibility)
-    const convertedCount = filteredLeads.filter(l => l.status === 'תור נקבע' || l.status === 'בסדרת טיפול').length;
+    const convertedCount = filteredLeads.filter(l => ['תור נקבע', 'נקבעה שיחה', 'בסדרת טיפול'].includes(l.status)).length;
     const conversionRate = (convertedCount / totalLeads) * 100;
 
 

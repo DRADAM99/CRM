@@ -1,9 +1,10 @@
 "use client";
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { db } from '@/firebase';
-import { collection, onSnapshot, getDocs, query, orderBy, doc, getDoc, updateDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, onSnapshot, getDocs, query, where, orderBy, doc, getDoc, updateDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
 import { useAuth } from './AuthContext';
 import { normalizePhoneNumber } from '@/lib/phoneUtils';
+import { REENGAGEMENT_STATES } from '@/lib/whatsappAutomation';
 
 const DataContext = createContext();
 
@@ -117,6 +118,14 @@ export function DataProvider({ children }) {
 
   // Helper function to detect and handle duplicates
   const handleDuplicateLeads = async (allLeads) => {
+    const pickFirstDefined = (leadsList, field) => {
+      for (const lead of leadsList) {
+        const value = lead?.[field];
+        if (value !== undefined && value !== null && value !== '') return value;
+      }
+      return null;
+    };
+
     // Group leads by normalized phone number
     const phoneGroups = {};
     
@@ -165,6 +174,18 @@ export function DataProvider({ children }) {
             return timeB - timeA;
           });
 
+          // Preserve continuity metadata from duplicates (newest lead wins when values exist).
+          const mergeCandidates = [newestLead, ...olderLeads];
+          const mergedAutomationFields = {
+            reengagementState: pickFirstDefined(mergeCandidates, 'reengagementState') || REENGAGEMENT_STATES.idle,
+            waLastReply: pickFirstDefined(mergeCandidates, 'waLastReply'),
+            reengagementCampaignId: pickFirstDefined(mergeCandidates, 'reengagementCampaignId'),
+            appointmentDateTime: pickFirstDefined(mergeCandidates, 'appointmentDateTime'),
+            assignedStaffId: pickFirstDefined(mergeCandidates, 'assignedStaffId'),
+            bookingSource: pickFirstDefined(mergeCandidates, 'bookingSource'),
+            bookingConversationId: pickFirstDefined(mergeCandidates, 'bookingConversationId'),
+          };
+
           // Update the newest lead with duplicate marker and merged data
           const newestLeadRef = doc(db, 'leads', newestLead.id);
           await updateDoc(newestLeadRef, {
@@ -172,12 +193,22 @@ export function DataProvider({ children }) {
             duplicateCount: group.length,
             mergedFromLeadIds: mergedFromIds,
             conversationSummary: mergedConversations,
+            ...mergedAutomationFields,
             updatedAt: serverTimestamp()
           });
 
           // Delete older duplicate leads
           for (const oldLead of olderLeads) {
             try {
+              const linkedTasksSnapshot = await getDocs(
+                query(collection(db, 'tasks'), where('leadId', '==', oldLead.id))
+              );
+              for (const taskDoc of linkedTasksSnapshot.docs) {
+                await updateDoc(doc(db, 'tasks', taskDoc.id), {
+                  leadId: newestLead.id,
+                  updatedAt: serverTimestamp(),
+                });
+              }
               await deleteDoc(doc(db, 'leads', oldLead.id));
               console.log(`🗑️ Deleted duplicate lead: ${oldLead.id} (phone: ${oldLead.phoneNumber})`);
             } catch (error) {

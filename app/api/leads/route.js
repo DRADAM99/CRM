@@ -2,6 +2,8 @@
 
 import { db } from "@/firebase";
 import { collection, addDoc, serverTimestamp } from "firebase/firestore";
+import { getLeadAutomationDefaults } from "@/lib/whatsappAutomation";
+import { normalizePhoneNumber } from "@/lib/phoneUtils";
 
 // Helper function to create a response with CORS headers
 function createResponse(data, status = 200) {
@@ -49,7 +51,16 @@ export async function POST(req) {
     }
 
     // Clean phone number - remove spaces, dashes, etc.
-    const cleanPhone = data.phone.replace(/\D/g, '');
+    const cleanPhone = normalizePhoneNumber(String(data.phone || ""));
+    if (!cleanPhone) {
+      return createResponse(
+        {
+          error: "Invalid phone number",
+          details: "Could not normalize phone",
+        },
+        400
+      );
+    }
     
     // Create the lead document
     const leadData = {
@@ -61,6 +72,8 @@ export async function POST(req) {
       status: "חדש",
       createdAt: serverTimestamp(),
       conversationSummary: [],
+      followUpCall: { active: false, count: 0 },
+      ...getLeadAutomationDefaults(),
     };
 
     console.log("Attempting to save lead:", leadData);

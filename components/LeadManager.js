@@ -15,9 +15,15 @@ import { FaWhatsapp, FaCodeBranch, FaFacebook, FaInstagram, FaSpotify, FaGlobe, 
 import { BRANCHES, branchColor } from "@/lib/branches";
 import { leadStatusConfig, leadColorTab, leadPriorityValue } from "@/lib/leadStatus";
 import { normalizePhoneNumber } from "@/lib/phoneUtils";
+import {
+  getLeadAutomationDefaults,
+  isAppointmentLeadStatus,
+  isLeadStale,
+  REENGAGEMENT_STATES,
+} from "@/lib/whatsappAutomation";
 import { Search, ChevronDown } from "lucide-react";
 import { 
-  collection, onSnapshot, addDoc, updateDoc, doc, serverTimestamp, arrayUnion, setDoc, getDocs, getDoc, orderBy, query, deleteDoc, Timestamp
+  collection, onSnapshot, addDoc, updateDoc, doc, serverTimestamp, arrayUnion, setDoc, getDocs, getDoc, orderBy, query, where, deleteDoc, Timestamp
 } from "firebase/firestore";
 import { logActivity } from "@/lib/activityLogger";
 
@@ -111,6 +117,10 @@ export default function LeadManager({ isFullView, setIsFullView, blockPosition, 
   const [pendingNewLead, setPendingNewLead] = useState(null);
   const [processingDuplicatesManually, setProcessingDuplicatesManually] = useState(false);
   const [userHasExplicitlyChangedPrefs, setUserHasExplicitlyChangedPrefs] = useState(false);
+  const [selectedLeadIds, setSelectedLeadIds] = useState([]);
+  const [campaignStaleDays, setCampaignStaleDays] = useState(10);
+  const [sendingCampaign, setSendingCampaign] = useState(false);
+  const [campaignResult, setCampaignResult] = useState(null);
   
   // Task from lead state
   const [taskFromLeadTitle, setTaskFromLeadTitle] = useState("");
@@ -301,7 +311,7 @@ export default function LeadManager({ isFullView, setIsFullView, blockPosition, 
 
   // Calendar event bridge from leads
   const leadAppointmentEvents = useMemo(() => {
-    return leads.filter(lead => lead.status === 'תור נקבע' && lead.appointmentDateTime).map(lead => {
+    return leads.filter(lead => isAppointmentLeadStatus(lead.status) && lead.appointmentDateTime).map(lead => {
       try {
         const start = new Date(lead.appointmentDateTime); if (isNaN(start.getTime())) return null;
         const end = new Date(start.getTime() + 15 * 60 * 1000);
@@ -422,12 +432,17 @@ export default function LeadManager({ isFullView, setIsFullView, blockPosition, 
     e.preventDefault(); if (!currentUser) return;
     try {
       let appointmentDate = null;
-      if (editLeadStatus === 'תור נקבע' && editLeadAppointmentDateTime) {
+      if (isAppointmentLeadStatus(editLeadStatus) && editLeadAppointmentDateTime) {
         appointmentDate = new Date(editLeadAppointmentDateTime); if (isNaN(appointmentDate.getTime())) { alert("תאריך פגישה לא תקין."); return; }
+      }
+      const normalizedEditPhone = normalizePhoneNumber(editLeadPhone || "");
+      if (!normalizedEditPhone) {
+        alert("מספר הטלפון לא תקין.");
+        return;
       }
       const leadRef = doc(db, 'leads', leadId); const leadDoc = await getDoc(leadRef); if (!leadDoc.exists()) throw new Error('Lead not found');
       const originalLead = leadDoc.data();
-      const updateData = { fullName: editLeadFullName, phoneNumber: editLeadPhone, message: editLeadMessage, status: editLeadStatus, source: editLeadSource, branch: editLeadBranch, isHot: editLeadIsHot, appointmentDateTime: editLeadStatus === 'תור נקבע' ? (appointmentDate || null) : null, updatedAt: serverTimestamp(), updatedBy: currentUser.uid };
+      const updateData = { fullName: editLeadFullName, phoneNumber: normalizedEditPhone, message: editLeadMessage, status: editLeadStatus, source: editLeadSource, branch: editLeadBranch, isHot: editLeadIsHot, appointmentDateTime: isAppointmentLeadStatus(editLeadStatus) ? (appointmentDate || null) : null, updatedAt: serverTimestamp(), updatedBy: currentUser.uid };
       if (originalLead.status !== editLeadStatus) { updateData.followUpCall = { active: false, count: 0 }; }
       await updateDoc(leadRef, updateData);
       
@@ -442,9 +457,9 @@ export default function LeadManager({ isFullView, setIsFullView, blockPosition, 
           { fullName: editLeadFullName, status: editLeadStatus, statusChanged: originalLead.status !== editLeadStatus }
         );
       }
-      if (originalLead.status !== 'תור נקבע' && editLeadStatus === 'תור נקבע' && appointmentDate) {
+      if (!isAppointmentLeadStatus(originalLead.status) && isAppointmentLeadStatus(editLeadStatus) && appointmentDate) {
         const taskRef = doc(collection(db, "tasks"));
-        const newTask = { id: taskRef.id, userId: currentUser.uid, creatorId: currentUser.uid, creatorAlias: alias || currentUser.email || "", assignTo: currentUser.email, title: editLeadFullName, subtitle: `פגישת ייעוץ | טלפון: ${editLeadPhone}`, priority: "רגיל", category: "לקבוע סדרה", status: "פתוח", createdAt: serverTimestamp(), updatedAt: serverTimestamp(), dueDate: appointmentDate, replies: [], isRead: false, isArchived: false, done: false, completedBy: null, completedAt: null, branch: editLeadBranch };
+        const newTask = { id: taskRef.id, userId: currentUser.uid, creatorId: currentUser.uid, creatorAlias: alias || currentUser.email || "", assignTo: currentUser.email, title: editLeadFullName, subtitle: `פגישת ייעוץ | טלפון: ${normalizedEditPhone}`, priority: "רגיל", category: "לקבוע סדרה", status: "פתוח", createdAt: serverTimestamp(), updatedAt: serverTimestamp(), dueDate: appointmentDate, replies: [], isRead: false, isArchived: false, done: false, completedBy: null, completedAt: null, branch: editLeadBranch };
         await setDoc(taskRef, newTask);
       }
       setEditingLeadId(null); setEditLeadAppointmentDateTime("");
@@ -488,6 +503,10 @@ export default function LeadManager({ isFullView, setIsFullView, blockPosition, 
     
     // Check for duplicates
     const normalizedPhone = normalizePhoneNumber(newLeadPhone.trim());
+    if (!normalizedPhone) {
+      alert("מספר הטלפון לא תקין.");
+      return;
+    }
     const existingLead = leads.find(lead => {
       const leadNormalizedPhone = normalizePhoneNumber(lead.phoneNumber);
       return leadNormalizedPhone === normalizedPhone;
@@ -499,7 +518,7 @@ export default function LeadManager({ isFullView, setIsFullView, blockPosition, 
       const finalSource = newLeadSource === "אחר" ? newLeadSourceOther.trim() : newLeadSource;
       setPendingNewLead({
         fullName: newLeadFullName.trim(),
-        phoneNumber: newLeadPhone.trim(),
+        phoneNumber: normalizedPhone,
         message: newLeadMessage.trim(),
         status: newLeadStatus,
         source: finalSource,
@@ -515,13 +534,14 @@ export default function LeadManager({ isFullView, setIsFullView, blockPosition, 
       const leadRef = await addDoc(collection(db, "leads"), { 
         createdAt: serverTimestamp(), 
         fullName: newLeadFullName.trim(), 
-        phoneNumber: newLeadPhone.trim(), 
+        phoneNumber: normalizedPhone, 
         message: newLeadMessage.trim(), 
         status: newLeadStatus, 
         source: finalSource, 
         conversationSummary: [], 
         isHot: newLeadIsHot, 
-        followUpCall: { active: false, count: 0 } 
+        followUpCall: { active: false, count: 0 },
+        ...getLeadAutomationDefaults(),
       });
       
       // Log activity
@@ -561,7 +581,8 @@ export default function LeadManager({ isFullView, setIsFullView, blockPosition, 
         source: pendingNewLead.source,
         conversationSummary: [],
         isHot: pendingNewLead.isHot,
-        followUpCall: { active: false, count: 0 }
+        followUpCall: { active: false, count: 0 },
+        ...getLeadAutomationDefaults(),
       });
       
       // Log activity
@@ -598,6 +619,14 @@ export default function LeadManager({ isFullView, setIsFullView, blockPosition, 
     setProcessingDuplicatesManually(true);
     
     try {
+      const pickFirstDefined = (leadsList, field) => {
+        for (const lead of leadsList) {
+          const value = lead?.[field];
+          if (value !== undefined && value !== null && value !== '') return value;
+        }
+        return null;
+      };
+
       // Group leads by normalized phone number
       const phoneGroups = {};
       
@@ -645,6 +674,17 @@ export default function LeadManager({ isFullView, setIsFullView, blockPosition, 
               return timeB - timeA;
             });
 
+            const mergeCandidates = [newestLead, ...olderLeads];
+            const mergedAutomationFields = {
+              reengagementState: pickFirstDefined(mergeCandidates, 'reengagementState') || REENGAGEMENT_STATES.idle,
+              waLastReply: pickFirstDefined(mergeCandidates, 'waLastReply'),
+              reengagementCampaignId: pickFirstDefined(mergeCandidates, 'reengagementCampaignId'),
+              appointmentDateTime: pickFirstDefined(mergeCandidates, 'appointmentDateTime'),
+              assignedStaffId: pickFirstDefined(mergeCandidates, 'assignedStaffId'),
+              bookingSource: pickFirstDefined(mergeCandidates, 'bookingSource'),
+              bookingConversationId: pickFirstDefined(mergeCandidates, 'bookingConversationId'),
+            };
+
             // Update the newest lead with duplicate marker and merged data
             const newestLeadRef = doc(db, 'leads', newestLead.id);
             await updateDoc(newestLeadRef, {
@@ -652,12 +692,22 @@ export default function LeadManager({ isFullView, setIsFullView, blockPosition, 
               duplicateCount: group.length,
               mergedFromLeadIds: mergedFromIds,
               conversationSummary: mergedConversations,
+              ...mergedAutomationFields,
               updatedAt: serverTimestamp()
             });
 
             // Delete older duplicate leads
             for (const oldLead of olderLeads) {
               try {
+                const linkedTasksSnapshot = await getDocs(
+                  query(collection(db, "tasks"), where("leadId", "==", oldLead.id))
+                );
+                for (const taskDoc of linkedTasksSnapshot.docs) {
+                  await updateDoc(doc(db, "tasks", taskDoc.id), {
+                    leadId: newestLead.id,
+                    updatedAt: serverTimestamp(),
+                  });
+                }
                 await deleteDoc(doc(db, 'leads', oldLead.id));
                 console.log(`🗑️ Deleted duplicate lead: ${oldLead.id} (phone: ${oldLead.phoneNumber})`);
               } catch (error) {
@@ -785,7 +835,10 @@ export default function LeadManager({ isFullView, setIsFullView, blockPosition, 
         ...leadToDuplicate, 
         fullName: leadToDuplicate.fullName + " משוכפל", 
         createdAt: serverTimestamp(), 
-        isHot: true 
+        status: "חדש",
+        appointmentDateTime: null,
+        isHot: true,
+        ...getLeadAutomationDefaults(),
       }; 
       delete duplicatedLead.id; 
       const leadRef = await addDoc(collection(db, "leads"), duplicatedLead);
@@ -851,6 +904,91 @@ export default function LeadManager({ isFullView, setIsFullView, blockPosition, 
       alert(error.message || "לא ניתן היה להפעיל שיחה דרך המרכזיה."); 
     }
   };
+
+  const visibleLeads = useMemo(() => leadsSorted.slice(0, leadRowLimit), [leadsSorted, leadRowLimit]);
+  const visibleLeadIds = useMemo(() => visibleLeads.map((lead) => lead.id), [visibleLeads]);
+  const allVisibleSelected = visibleLeadIds.length > 0 && visibleLeadIds.every((id) => selectedLeadIds.includes(id));
+
+  const toggleLeadSelection = useCallback((leadId) => {
+    setSelectedLeadIds((current) =>
+      current.includes(leadId) ? current.filter((id) => id !== leadId) : [...current, leadId]
+    );
+  }, []);
+
+  const toggleSelectAllVisible = useCallback(() => {
+    setSelectedLeadIds((current) => {
+      if (allVisibleSelected) {
+        return current.filter((id) => !visibleLeadIds.includes(id));
+      }
+      const merged = new Set([...current, ...visibleLeadIds]);
+      return Array.from(merged);
+    });
+  }, [allVisibleSelected, visibleLeadIds]);
+
+  const syncLeadSelectionWithFilters = useCallback(() => {
+    setSelectedLeadIds((current) => current.filter((id) => visibleLeadIds.includes(id)));
+  }, [visibleLeadIds]);
+
+  useEffect(() => {
+    syncLeadSelectionWithFilters();
+  }, [syncLeadSelectionWithFilters]);
+
+  const handleSendWhatsappCampaign = useCallback(async ({ selectedOnly }) => {
+    setSendingCampaign(true);
+    setCampaignResult(null);
+    try {
+      const leadPool = selectedOnly
+        ? leads.filter((lead) => selectedLeadIds.includes(lead.id))
+        : leads.filter((lead) => isLeadStale(lead, Number(campaignStaleDays) || 10));
+
+      if (leadPool.length === 0) {
+        alert(selectedOnly ? "לא נבחרו לידים לשליחה" : "לא נמצאו לידים ממתינים לפי הסינון");
+        return;
+      }
+
+      const payload = {
+        staleDays: Number(campaignStaleDays) || 10,
+        targets: leadPool.map((lead) => ({
+          leadId: lead.id,
+          phoneNumber: lead.phoneNumber,
+          waOptOut: !!lead.waOptOut,
+        })),
+      };
+      if (selectedOnly) payload.leadIds = selectedLeadIds;
+
+      const response = await fetch("/api/whatsapp/campaign/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data?.details || data?.error || "שליחת קמפיין נכשלה");
+
+      // Keep metadata updates on the authenticated client side when server query mode is restricted by rules.
+      const successfulLeadIds = (data.results || [])
+        .filter((item) => item.success && item.leadId)
+        .map((item) => item.leadId);
+      await Promise.all(
+        successfulLeadIds.map((leadId) =>
+          updateDoc(doc(db, "leads", leadId), {
+            lastOutboundTemplateAt: serverTimestamp(),
+            lastOutboundTemplateName: data.templateName || "oldleads",
+            reengagementCampaignId: data.campaignId || null,
+            reengagementState: REENGAGEMENT_STATES.pending,
+            updatedAt: serverTimestamp(),
+          }).catch(() => null)
+        )
+      );
+
+      setCampaignResult(data);
+      if (selectedOnly) setSelectedLeadIds([]);
+      alert(`הקמפיין נשלח: ${data.sent} מתוך ${data.requested}`);
+    } catch (error) {
+      alert(error.message || "שליחת קמפיין נכשלה");
+    } finally {
+      setSendingCampaign(false);
+    }
+  }, [campaignStaleDays, selectedLeadIds, leads]);
 
   // Derived analytics (shortened summary for now)
   const calculatedAnalytics = useMemo(() => {
@@ -959,7 +1097,38 @@ export default function LeadManager({ isFullView, setIsFullView, blockPosition, 
                 <Search className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
                 <Input type="search" placeholder="חפש לידים..." className="h-9 text-sm pl-8 w-[200px]" value={leadSearchTerm} onChange={(e) => { markPrefsChanged(); setLeadSearchTerm(e.target.value); }} />
               </div>
+              <Input
+                type="number"
+                min={1}
+                max={90}
+                value={campaignStaleDays}
+                onChange={(e) => setCampaignStaleDays(Number(e.target.value) || 10)}
+                className="h-9 text-sm w-[90px]"
+                placeholder="ימים"
+              />
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-9 text-sm"
+                disabled={sendingCampaign || selectedLeadIds.length === 0}
+                onClick={() => handleSendWhatsappCampaign({ selectedOnly: true })}
+              >
+                {sendingCampaign ? "שולח..." : `וואטסאפ לנבחרים (${selectedLeadIds.length})`}
+              </Button>
+              <Button
+                size="sm"
+                className="h-9 text-sm bg-green-600 hover:bg-green-700"
+                disabled={sendingCampaign}
+                onClick={() => handleSendWhatsappCampaign({ selectedOnly: false })}
+              >
+                {sendingCampaign ? "שולח..." : "וואטסאפ ללידים ממתינים"}
+              </Button>
             </div>
+            {campaignResult && (
+              <div className="mt-2 text-xs text-green-700 bg-green-50 border border-green-200 rounded px-2 py-1">
+                קמפיין {campaignResult.campaignId} נשלח: {campaignResult.sent} מתוך {campaignResult.requested}
+              </div>
+            )}
           </div>
         ) : (
           <div className="flex flex-col gap-2">
@@ -996,6 +1165,9 @@ export default function LeadManager({ isFullView, setIsFullView, blockPosition, 
             <table className="w-full table-fixed text-sm border-collapse">
               <thead className="sticky top-0 bg-gray-100 z-10">
                 <tr>
+                  <th className="px-1 py-2 text-center font-semibold w-8">
+                    <input type="checkbox" checked={allVisibleSelected} onChange={toggleSelectAllVisible} />
+                  </th>
                   <th className="px-1 py-2 text-right font-semibold w-12"></th>
                   <th className="px-1 py-2 text-right font-semibold w-28">{'תאריך'}</th>
                   <th className="px-1 py-2 text-right font-semibold w-36">{'שם מלא'}</th>
@@ -1006,12 +1178,19 @@ export default function LeadManager({ isFullView, setIsFullView, blockPosition, 
                 </tr>
               </thead>
               <tbody>
-                {leadsSorted.length === 0 && (<tr><td colSpan={7} className="text-center text-gray-500 py-6">{'אין לידים להצגה'}</td></tr>)}
-                {leadsSorted.slice(0, leadRowLimit).map((lead) => {
+                {leadsSorted.length === 0 && (<tr><td colSpan={8} className="text-center text-gray-500 py-6">{'אין לידים להצגה'}</td></tr>)}
+                {visibleLeads.map((lead) => {
                   const colorTab = leadColorTab(lead.status);
                   return (
                     <React.Fragment key={`lead-rows-${lead.id}`}>
                       <tr className="border-b hover:bg-gray-50 group">
+                        <td className="px-1 py-2 align-top text-center">
+                          <input
+                            type="checkbox"
+                            checked={selectedLeadIds.includes(lead.id)}
+                            onChange={() => toggleLeadSelection(lead.id)}
+                          />
+                        </td>
                         <td className="px-1 py-2 align-top"><div className={`w-4 h-8 ${colorTab} rounded mx-auto`} /></td>
                         <td className="px-1 py-2 align-top">
                           <div className="text-xs leading-tight">{formatDate(lead.createdAt)}</div>
@@ -1035,6 +1214,14 @@ export default function LeadManager({ isFullView, setIsFullView, blockPosition, 
                             </Tooltip>
                           )}
                           {lead.fullName}
+                          {lead.reengagementState && lead.reengagementState !== REENGAGEMENT_STATES.idle && (
+                            <div className="text-[10px] text-gray-500 mt-1">
+                              מצב אוטומציה: {lead.reengagementState}
+                            </div>
+                          )}
+                          {lead.waLastReply && (
+                            <div className="text-[10px] text-gray-500">מענה אחרון: {formatDateTime(lead.waLastReply?.toDate ? lead.waLastReply.toDate() : lead.waLastReply)}</div>
+                          )}
                         </td>
                         <td className="px-1 py-2 align-top whitespace-nowrap text-xs">{lead.phoneNumber}</td>
                         <td className="px-1 py-2 align-top truncate text-xs" title={lead.message}>{lead.message}</td>
@@ -1060,7 +1247,7 @@ export default function LeadManager({ isFullView, setIsFullView, blockPosition, 
                       </tr>
                       {lead.id === expandedLeadId && (
                         <tr key={`expanded-${lead.id}`} className="border-b bg-blue-50">
-                          <td colSpan={7} className="p-4">
+                          <td colSpan={8} className="p-4">
                             <form onSubmit={(e) => handleSaveLead(e, lead.id)} className="space-y-4">
                               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                                 <Label className="block"><span className="text-gray-700 text-sm font-medium">{'שם מלא:'}</span><Input type="text" className="mt-1 h-8 text-sm" value={editLeadFullName} onChange={(ev) => setEditLeadFullName(ev.target.value)} required /></Label>
@@ -1080,7 +1267,7 @@ export default function LeadManager({ isFullView, setIsFullView, blockPosition, 
                                   </Select>
                                 </Label>
                                 <Label className="block"><span className="text-gray-700 text-sm font-medium">{'מקור:'}</span><Input type="text" className="mt-1 h-8 text-sm" value={editLeadSource} onChange={(ev) => setEditLeadSource(ev.target.value)} /></Label>
-                                {editLeadStatus === 'תור נקבע' && (<Label className="block"><span className="text-gray-700 text-sm font-medium">{'תאריך ושעת פגישה:'}</span><Input type="datetime-local" className="mt-1 h-10 text-sm [&::-webkit-calendar-picker-indicator]:ml-auto [&::-webkit-calendar-picker-indicator]:cursor-pointer" value={editLeadAppointmentDateTime} onChange={(ev) => setEditLeadAppointmentDateTime(ev.target.value)} required /></Label>)}
+                                {isAppointmentLeadStatus(editLeadStatus) && (<Label className="block"><span className="text-gray-700 text-sm font-medium">{'תאריך ושעת פגישה:'}</span><Input type="datetime-local" className="mt-1 h-10 text-sm [&::-webkit-calendar-picker-indicator]:ml-auto [&::-webkit-calendar-picker-indicator]:cursor-pointer" value={editLeadAppointmentDateTime} onChange={(ev) => setEditLeadAppointmentDateTime(ev.target.value)} required /></Label>)}
                                 <Label className="block"><span className="text-gray-700 text-sm font-medium">{'סניף:'}</span>
                                   <Select value={editLeadBranch} onValueChange={setEditLeadBranch}>
                                     <SelectTrigger className="mt-1 h-8 text-sm"><SelectValue placeholder="בחר סניף..." /></SelectTrigger>

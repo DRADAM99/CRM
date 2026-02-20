@@ -123,6 +123,13 @@ service cloud.firestore {
     }
 
     // ────────────────
+    // Staff Availability Collection
+    // ────────────────
+    match /staffAvailability/{staffId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    // ────────────────
     // Notifications Collection
     // ────────────────
     match /notifications/{notificationId} {
