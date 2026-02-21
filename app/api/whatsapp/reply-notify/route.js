@@ -10,9 +10,19 @@ import { normalizePhoneNumber } from "@/lib/phoneUtils";
 
 export async function POST(req) {
   try {
-    const { phone, reply, leadId, chatfuelUserId } = await req.json();
+    const body = await req.json();
+    const { phone, reply, leadId, chatfuelUserId } = body;
     const replyCode = String(reply || "").toUpperCase();
     const normalizedPhone = normalizePhoneNumber(phone || "");
+
+    // Always log the raw request so we can diagnose what Chatfuel is sending
+    await writeAutomationEvent("chatfuel_notify_received", {
+      raw_phone: phone || "(empty)",
+      normalizedPhone: normalizedPhone || "(empty)",
+      reply: reply || "(empty)",
+      leadId: leadId || "(empty)",
+      chatfuelUserId: chatfuelUserId || "(empty)",
+    });
 
     if (!normalizedPhone && !leadId) {
       return NextResponse.json(
