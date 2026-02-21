@@ -77,12 +77,14 @@ async function notifyChatfuel({ lead, fromPhone }) {
     });
     return;
   }
+  // Always prefer the stored Chatfuel internal user ID when available
   const userId =
-    strategy === "chatfuel_user_id"
-      ? lead.chatfuelUserId || fallbackPhone
+    lead.chatfuelUserId ||
+    (strategy === "chatfuel_user_id"
+      ? fallbackPhone
       : strategy === "phone"
         ? normalizePhoneForWhatsapp(lead.phoneNumber) || fallbackPhone
-        : fromPhone || fallbackPhone;
+        : fromPhone || fallbackPhone);
 
   if (!botId || !chatfuelToken || !userId) {
     await writeAutomationEvent("chatfuel_handoff_skipped", {

@@ -10,7 +10,7 @@ import { normalizePhoneNumber } from "@/lib/phoneUtils";
 
 export async function POST(req) {
   try {
-    const { phone, reply, leadId } = await req.json();
+    const { phone, reply, leadId, chatfuelUserId } = await req.json();
     const replyCode = String(reply || "").toUpperCase();
     const normalizedPhone = normalizePhoneNumber(phone || "");
 
@@ -44,6 +44,11 @@ export async function POST(req) {
       waLastReply: adminServerTimestamp(),
       updatedAt: adminServerTimestamp(),
     };
+
+    // Store Chatfuel's internal user ID so Broadcasting API calls can use it
+    if (chatfuelUserId && String(chatfuelUserId).trim()) {
+      updates.chatfuelUserId = String(chatfuelUserId).trim();
+    }
 
     let eventType = "chatfuel_notify_unknown";
 
