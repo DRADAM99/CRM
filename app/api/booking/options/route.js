@@ -85,8 +85,12 @@ export async function GET(req) {
     const conflicts = collectConflicts(tasks, [], effectiveStaffId);
     const timeZone = availability.timezone || "Asia/Jerusalem";
 
-    const options = [];
+    // Build flat top-level keys for Chatfuel attribute mapping
+    // (Chatfuel's JSON API block doesn't reliably support array[0].field notation)
+    const flat = {};
     const now = new Date();
+    let flatIndex = 1;
+
     for (let i = 0; i < days; i += 1) {
       const d = new Date(now.getTime() + i * 24 * 60 * 60 * 1000);
       const date = toDateKey(d, timeZone);
@@ -96,26 +100,30 @@ export async function GET(req) {
         durationMinutes: duration,
         conflicts,
       }).slice(0, maxSlotsPerDay);
-      options.push({
-        index: i,
-        date,
-        label: dayLabel(i, date, timeZone),
-        hasSlots: generated.length > 0,
-        slots: generated.map((slot) => ({
-          label: slotLabel(slot.startAt, timeZone),
-          startAt: slot.startAt,
-          endAt: slot.endAt,
-        })),
-      });
+
+      if (generated.length === 0) continue; // skip days with no availability
+
+      const label = dayLabel(i, date, timeZone);
+      const n = flatIndex;
+      flat[`day${n}Label`] = label;
+      flat[`day${n}Date`] = date;
+      flat[`day${n}Slots`] = generated.map((s) => slotLabel(s.startAt, timeZone)).join(", ");
+      flatIndex += 1;
+      if (flatIndex > 7) break;
+    }
+
+    // Fill empty slots so Chatfuel always gets consistent keys
+    for (let n = flatIndex; n <= Math.min(days, 7); n += 1) {
+      flat[`day${n}Label`] = "";
+      flat[`day${n}Date`] = "";
+      flat[`day${n}Slots`] = "";
     }
 
     return NextResponse.json({
-      staffId: effectiveStaffId,
-      staffEmail: resolvedStaff.email || null,
       staffAlias: resolvedStaff.alias || null,
       durationMinutes: duration,
       timezone: timeZone,
-      options,
+      ...flat,
     });
   } catch (error) {
     const details = error.message || "Unknown error";
