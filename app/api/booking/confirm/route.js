@@ -6,6 +6,7 @@ import {
   REENGAGEMENT_STATES,
 } from "@/lib/whatsappAutomation";
 import {
+  findLeadByPhone,
   hasProcessedIdempotencyKey,
   markIdempotencyKey,
   resolveStaffUser,
@@ -32,7 +33,6 @@ export async function POST(req) {
       staffId: staffIdParam,
       staffEmail,
       staffAlias,
-      phoneNumber,
       startAt,
       duration = 20,
       chatSessionId = null,
@@ -40,13 +40,17 @@ export async function POST(req) {
       createTask = true,
     } = body || {};
 
-    if (!leadId || !startAt) {
+    // Accept phone/phoneNumber interchangeably (Chatfuel sends "phone")
+    const phoneNumber = body.phoneNumber || body.phone || "";
+
+    if (!startAt || (!leadId && !phoneNumber)) {
       await writeAutomationEvent("booking_confirm_invalid_payload", {
         leadId: leadId || null,
+        hasPhone: Boolean(phoneNumber),
         hasStartAt: Boolean(startAt),
       });
       return NextResponse.json(
-        { error: "leadId and startAt are required" },
+        { error: "startAt and either leadId or phone are required" },
         { status: 400 }
       );
     }
@@ -83,36 +87,37 @@ export async function POST(req) {
     }
     const effectiveStaffId = resolvedStaff.id;
 
-    const [leadDoc, tasksDocs, leadsDocs, staffDoc] = await Promise.all([
-      db.collection("leads").doc(leadId).get(),
-      db.collection("tasks").get(),
-      db.collection("leads").get(),
-      Promise.resolve(resolvedStaff),
-    ]);
+    // Lead lookup: prefer leadId, fall back to phone
+    let resolvedLeadId = leadId || null;
+    let leadDoc = null;
 
-    if (!leadDoc.exists) {
+    if (resolvedLeadId) {
+      leadDoc = await db.collection("leads").doc(resolvedLeadId).get();
+      if (!leadDoc.exists) leadDoc = null;
+    }
+    if (!leadDoc && phoneNumber) {
+      const found = await findLeadByPhone(normalizePhoneNumber(String(phoneNumber)));
+      if (found) {
+        resolvedLeadId = found.id;
+        leadDoc = await db.collection("leads").doc(resolvedLeadId).get();
+      }
+    }
+    if (!leadDoc || !leadDoc.exists) {
+      await writeAutomationEvent("booking_confirm_lead_not_found", {
+        leadId: resolvedLeadId || null,
+        phone: phoneNumber || null,
+      });
       return NextResponse.json({ error: "Lead not found" }, { status: 404 });
     }
 
     const leadData = leadDoc.data();
-    const requestPhone = normalizePhoneNumber(String(phoneNumber || ""));
-    const leadPhone = normalizePhoneNumber(String(leadData.phoneNumber || ""));
-    if (requestPhone && leadPhone && requestPhone !== leadPhone) {
-      await writeAutomationEvent("booking_confirm_phone_conflict", {
-        leadId,
-        requestPhone,
-        leadPhone,
-      });
-      return NextResponse.json(
-        { error: "Phone does not match leadId" },
-        { status: 409 }
-      );
-    }
+
+    // Conflict check — use only this staff member's tasks for speed
+    const [tasksDocs] = await Promise.all([
+      db.collection("tasks").where("assignedTo", "==", effectiveStaffId).limit(50).get(),
+    ]);
     const tasks = tasksDocs.docs.map((entry) => ({ id: entry.id, ...entry.data() }));
-    const leads = leadsDocs.docs
-      .filter((entry) => entry.id !== leadId)
-      .map((entry) => ({ id: entry.id, ...entry.data() }));
-    const conflicts = collectConflicts(tasks, leads, effectiveStaffId);
+    const conflicts = collectConflicts(tasks, [], effectiveStaffId);
     const hasConflict = conflicts.some((conflict) =>
       overlaps(appointmentStart, appointmentEnd, conflict.start, conflict.end)
     );
@@ -123,7 +128,7 @@ export async function POST(req) {
       );
     }
 
-    await db.collection("leads").doc(leadId).update({
+    await db.collection("leads").doc(resolvedLeadId).update({
       status: LEAD_STATUS_CALL_BOOKED,
       appointmentDateTime: appointmentStart,
       meetingDurationMinutes: durationMinutes,
@@ -135,6 +140,7 @@ export async function POST(req) {
     });
 
     if (createTask) {
+      const displayPhone = normalizePhoneNumber(leadData.phoneNumber || "") || leadData.phoneNumber || "";
       const taskRef = db.collection("tasks").doc();
       await taskRef.set({
         id: taskRef.id,
@@ -143,7 +149,7 @@ export async function POST(req) {
         creatorAlias: staffDoc?.alias || staffDoc?.email || "Chatfuel",
         assignTo: staffDoc?.alias || staffDoc?.email || effectiveStaffId,
         title: leadData.fullName || "פגישת ייעוץ",
-        subtitle: `פגישת ייעוץ | טלפון: ${leadData.phoneNumber || ""}`,
+        subtitle: `פגישת ייעוץ | טלפון: ${displayPhone}`,
         priority: "רגיל",
         category: "לקבוע סדרה",
         status: "פתוח",
@@ -151,7 +157,7 @@ export async function POST(req) {
         updatedAt: adminServerTimestamp(),
         dueDate: appointmentStart,
         durationMinutes,
-        leadId,
+        leadId: resolvedLeadId,
         branch: leadData.branch || "",
         bookingSource: "whatsapp_chatfuel",
         done: false,
@@ -159,7 +165,7 @@ export async function POST(req) {
     }
 
     await db.collection("bookingAuditLogs").add({
-      leadId,
+      leadId: resolvedLeadId,
       staffId: effectiveStaffId,
       startAt: appointmentStart,
       durationMinutes,
@@ -168,16 +174,16 @@ export async function POST(req) {
     });
 
     await writeAutomationEvent("booking_confirmed", {
-      leadId,
+      leadId: resolvedLeadId,
       staffId: effectiveStaffId,
       chatSessionId,
       durationMinutes,
     });
-    await markIdempotencyKey(idempotencyKey, "booking_confirm", { leadId, staffId: effectiveStaffId });
+    await markIdempotencyKey(idempotencyKey, "booking_confirm", { leadId: resolvedLeadId, staffId: effectiveStaffId });
 
     return NextResponse.json({
       success: true,
-      leadId,
+      leadId: resolvedLeadId,
       status: LEAD_STATUS_CALL_BOOKED,
     });
   } catch (error) {

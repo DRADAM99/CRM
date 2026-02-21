@@ -159,6 +159,7 @@ export default function FullCalendarDemo({ isCalendarFullView, taskCategories: p
   const [showEventModal, setShowEventModal] = useState(false);
   const [modalEvent, setModalEvent] = useState(null);
   const [modalUpdating, setModalUpdating] = useState(false);
+  const [overlayLead, setOverlayLead] = useState(null);
   const [showTaskModal, setShowTaskModal] = useState(false);
   const [newTaskTitle, setNewTaskTitle] = useState("");
   const [newTaskSubtitle, setNewTaskSubtitle] = useState("");
@@ -1327,7 +1328,10 @@ export default function FullCalendarDemo({ isCalendarFullView, taskCategories: p
                 </div>
                 {modalEvent && modalEvent.leadId && (
                   <button
-                    onClick={() => window.dispatchEvent(new CustomEvent('open-lead', { detail: { leadId: modalEvent.leadId } }))}
+                    onClick={() => {
+                      const lead = allLeads.find(l => l.id === modalEvent.leadId);
+                      if (lead) setOverlayLead(lead);
+                    }}
                     style={{ background: '#bee4e5', color: '#222', border: 'none', borderRadius: 6, padding: '8px 18px', fontWeight: 600, fontSize: 16, cursor: 'pointer', marginTop: 12, marginBottom: 12 }}
                   >
                     פתח ליד
@@ -1387,6 +1391,57 @@ export default function FullCalendarDemo({ isCalendarFullView, taskCategories: p
                 </div>
               </form>
             )}
+          </div>
+        </div>
+      )}
+      {overlayLead && (
+        <div
+          style={{ position: 'fixed', inset: 0, zIndex: 1100, background: '#0007', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+          onClick={() => setOverlayLead(null)}
+        >
+          <div
+            style={{ background: '#fff', borderRadius: 12, padding: 28, minWidth: 320, maxWidth: 460, width: '92vw', boxShadow: '0 4px 24px #0003', direction: 'rtl' }}
+            onClick={e => e.stopPropagation()}
+          >
+            <h3 style={{ marginBottom: 14, fontWeight: 700, fontSize: 20 }}>{overlayLead.fullName}</h3>
+            {overlayLead.phoneNumber && (
+              <div style={{ marginBottom: 8 }}><b>טלפון:</b> {overlayLead.phoneNumber}</div>
+            )}
+            <div style={{ marginBottom: 8 }}><b>סטטוס:</b> {overlayLead.status || '—'}</div>
+            {overlayLead.source && (
+              <div style={{ marginBottom: 8 }}><b>מקור:</b> {overlayLead.source}</div>
+            )}
+            {overlayLead.branch && (
+              <div style={{ marginBottom: 8 }}><b>סניף:</b> {overlayLead.branch}</div>
+            )}
+            {overlayLead.message && (
+              <div style={{ marginBottom: 8 }}><b>הערות:</b> {overlayLead.message}</div>
+            )}
+            {overlayLead.appointmentDateTime && (
+              <div style={{ marginBottom: 8 }}>
+                <b>תאריך פגישה:</b>{' '}
+                {new Date(typeof overlayLead.appointmentDateTime?.toDate === 'function'
+                  ? overlayLead.appointmentDateTime.toDate()
+                  : overlayLead.appointmentDateTime).toLocaleString('he-IL')}
+              </div>
+            )}
+            <div style={{ display: 'flex', gap: 10, marginTop: 20, justifyContent: 'flex-end' }}>
+              <button
+                onClick={() => {
+                  setOverlayLead(null);
+                  window.dispatchEvent(new CustomEvent('open-lead', { detail: { leadId: overlayLead.id } }));
+                }}
+                style={{ background: '#2196f3', color: '#fff', border: 'none', borderRadius: 6, padding: '8px 20px', fontWeight: 600, fontSize: 15, cursor: 'pointer' }}
+              >
+                ערוך ליד
+              </button>
+              <button
+                onClick={() => setOverlayLead(null)}
+                style={{ background: '#eee', color: '#222', border: 'none', borderRadius: 6, padding: '8px 20px', fontWeight: 600, fontSize: 15, cursor: 'pointer' }}
+              >
+                סגור
+              </button>
+            </div>
           </div>
         </div>
       )}
