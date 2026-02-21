@@ -25,10 +25,10 @@ function extractReplySignal(message) {
     .filter(Boolean)
     .map((value) => String(value).trim().toLowerCase());
 
-  if (candidates.some((value) => value === "a" || value.includes("כן נשמח לדבר") || (value.includes("כן") && value.includes("לדבר")) || value.includes("interested") || value.includes("yes_talk"))) {
+  if (candidates.some((value) => value === "a" || value === "1" || value.includes("כן נשמח לדבר") || (value.includes("כן") && value.includes("לדבר")) || value.includes("interested") || value.includes("yes_talk"))) {
     return "A";
   }
-  if (candidates.some((value) => value === "b" || value.includes("כבר לא רלוונטי") || value.includes("לא רלוונטי") || value.includes("not_relevant") || value.includes("not_interested"))) {
+  if (candidates.some((value) => value === "b" || value === "2" || value.includes("כבר לא רלוונטי") || value.includes("לא רלוונטי") || value.includes("not_relevant") || value.includes("not_interested"))) {
     return "B";
   }
   return candidates[0] ? String(candidates[0]).toUpperCase() : null;
