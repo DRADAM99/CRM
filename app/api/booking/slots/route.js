@@ -42,10 +42,13 @@ export async function GET(req) {
     }
     const effectiveStaffId = resolvedStaff.id;
 
-    const [availabilityDoc, taskDocs, leadDocs] = await Promise.all([
+    // Only fetch this staff member's tasks — skip full leads scan for speed
+    const [availabilityDoc, taskDocs] = await Promise.all([
       db.collection("staffAvailability").doc(effectiveStaffId).get(),
-      db.collection("tasks").get(),
-      db.collection("leads").get(),
+      db.collection("tasks")
+        .where("assignedTo", "==", effectiveStaffId)
+        .limit(50)
+        .get(),
     ]);
 
     const availability = availabilityDoc.exists
@@ -53,8 +56,7 @@ export async function GET(req) {
       : getDefaultAvailability();
 
     const tasks = taskDocs.docs.map((entry) => ({ id: entry.id, ...entry.data() }));
-    const leads = leadDocs.docs.map((entry) => ({ id: entry.id, ...entry.data() }));
-    const conflicts = collectConflicts(tasks, leads, effectiveStaffId);
+    const conflicts = collectConflicts(tasks, [], effectiveStaffId);
     const slots = generateSlotsForDate({
       date,
       availability,
@@ -62,14 +64,26 @@ export async function GET(req) {
       conflicts,
     });
 
+    // Return flat keys so Chatfuel attribute mapping works without array indexing
+    const flat = {};
+    slots.forEach((slot, i) => {
+      const n = i + 1;
+      flat[`slot${n}Label`] = slot.label ||
+        new Intl.DateTimeFormat("he-IL", {
+          timeZone: availability.timezone || "Asia/Jerusalem",
+          hour: "2-digit",
+          minute: "2-digit",
+          hour12: false,
+        }).format(new Date(slot.startAt));
+      flat[`slot${n}StartAt`] = slot.startAt;
+    });
+
     return NextResponse.json({
-      staffId: effectiveStaffId,
-      staffEmail: resolvedStaff.email || null,
-      staffAlias: resolvedStaff.alias || null,
       date,
       durationMinutes: duration,
       timezone: availability.timezone,
-      slots,
+      totalSlots: slots.length,
+      ...flat,
     });
   } catch (error) {
     const details = error.message || "Unknown error";
