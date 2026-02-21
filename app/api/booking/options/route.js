@@ -68,18 +68,21 @@ export async function GET(req) {
     }
     const effectiveStaffId = resolvedStaff.id;
 
-    const [availabilityDoc, taskDocs, leadDocs] = await Promise.all([
+    // Only fetch tasks for this specific staff member (single-field query, no index needed)
+    // Skipping full leads scan to keep response under Chatfuel's 10s timeout
+    const [availabilityDoc, taskDocs] = await Promise.all([
       db.collection("staffAvailability").doc(effectiveStaffId).get(),
-      db.collection("tasks").get(),
-      db.collection("leads").get(),
+      db.collection("tasks")
+        .where("assignedTo", "==", effectiveStaffId)
+        .limit(50)
+        .get(),
     ]);
 
     const availability = availabilityDoc.exists
       ? normalizeAvailability(availabilityDoc.data()?.availability)
       : getDefaultAvailability();
     const tasks = taskDocs.docs.map((entry) => ({ id: entry.id, ...entry.data() }));
-    const leads = leadDocs.docs.map((entry) => ({ id: entry.id, ...entry.data() }));
-    const conflicts = collectConflicts(tasks, leads, effectiveStaffId);
+    const conflicts = collectConflicts(tasks, [], effectiveStaffId);
     const timeZone = availability.timezone || "Asia/Jerusalem";
 
     const options = [];
